@@ -1,21 +1,17 @@
 [package]
-name = "archaea"
+name = "graphembed"
 version = "0.0.1"
 authors = ["jeanpierre.both@gmail.com"]
 #repository = "https://gitlab.com/jpboth/archaea"
-keywords = ["hnsw", "probminhash", "bacteria"]
-edition = "2018"
+keywords = ["graph", "embedding", "hash"]
+edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "probminhash hnsw archaea"
+description = "graph embedding"
 
 
 [features]
 
 
-[[bin]]
-
-name= "graphembed"
-path= "src/bin/embed.rs"
 
 
 
@@ -29,6 +25,7 @@ path = "src/lib.rs"
 # cargo doc --no-deps avoid dependencies doc generation
 #
 petgraph = {version = "0.6"}
+
 serde= {version = "1.0", features = ["derive"] }
 serde_json= {version = "1.0"}
 
