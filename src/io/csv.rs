@@ -68,8 +68,9 @@ fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
 /// N and E in Grap<N,E,Ty,Ix are data (weights) associated to node and edge respectively>
 /// instantiate with UnDirected for undirected graph
 /// 
-pub fn directed_from_csv<N>(filepath : &Path) -> anyhow::Result<GraphMap<N, (), Directed>> 
-    where  N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display {
+pub fn directed_unweighted_from_csv<N, Ty>(filepath : &Path, delim : u8) -> anyhow::Result<GraphMap<N, (), Ty>> 
+    where   N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display ,
+            Ty : EdgeType {
     //
     // first get number of header lines
     let nb_headers_line = get_header_size(&filepath)?;
@@ -98,10 +99,10 @@ pub fn directed_from_csv<N>(filepath : &Path) -> anyhow::Result<GraphMap<N, (), 
     }
     // now we can parse records and construct a parser from current position of file
     // we already skipped headers
-    let mut rdr = ReaderBuilder::new().flexible(false).has_headers(false).from_reader(file);
+    let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(file);
     //
     let nb_nodes_guess = 10_000;   // to pass as function argument
-    let mut graph = GraphMap::<N, (), Directed>::with_capacity(nb_nodes_guess, 100_000);
+    let mut graph = GraphMap::<N, (), Ty>::with_capacity(nb_nodes_guess, 100_000);
     //
     let mut nb_record = 0;
     let mut nb_fields = 0;
@@ -109,6 +110,10 @@ pub fn directed_from_csv<N>(filepath : &Path) -> anyhow::Result<GraphMap<N, (), 
     let mut node2 : N;
     for result in rdr.records() {
         let record = result?;
+        if log::log_enabled!(Level::Info) && nb_record <= 5 {
+            log::info!("{:?}", record);
+        }
+        //
         if nb_record == 0 {
             nb_fields = record.len();
         }
@@ -152,6 +157,8 @@ pub fn directed_from_csv<N>(filepath : &Path) -> anyhow::Result<GraphMap<N, (), 
 } // end of from_csv
 
 
+//========================================================================================
+
 #[cfg(test)]
 
 mod tests {
@@ -183,7 +190,11 @@ fn test_directed_unweighted_from_csv() {
     assert_eq!(header_size.unwrap(),4);
     println!("\n\n test_directed_unweighted_from_csv data : {:?}", path);
     // we must have 28979 edges as we have 28979 records.
-    let graph = directed_from_csv::<u32>(&path);
+    let graph = directed_unweighted_from_csv::<u32, Directed>(&path, b'\t');
+    if let Err(err) = &graph {
+        eprintln!("ERROR: {}", err);
+    }
+    assert!(graph.is_ok());
 
 } // end test test_directed_unweightedfrom_csv
 
@@ -191,7 +202,7 @@ fn test_directed_unweighted_from_csv() {
 
 
 #[test]
-fn test_undirected_weighted_from_csv() {
+fn test_directed_weighted_from_csv() {
     // We load moreno_lesmis/out.moreno_lesmis_lesmis. It is in Data directory of the crate.
     println!("\n\n test_undirected_weighted_from_csv");
     log_init_test();
