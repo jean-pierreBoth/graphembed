@@ -150,21 +150,27 @@ impl  <'a, F> GSvdApprox<'a, F>
             let mut alpha = Vec::<f32>::with_capacity(a_nbcol);
             let mut beta = Vec::<f32>::with_capacity(a_nbcol);
             let mut u= Array2::<f32>::zeros((a_nbrow, a_nbrow));
-            let v= Array2::<f32>::zeros((b_dim.0, b_dim.0));
+            let mut v= Array2::<f32>::zeros((b_dim.0, b_dim.0));
             let mut q = Vec::<f32>::new();
             ires = unsafe {
-                lapacke::sggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
+                // we must cast a and b to f32 slices!! unsafe but we know our types with TypeId
+                let mut af32 = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f32 , a.len());
+                let mut bf32 = std::slice::from_raw_parts_mut(b.as_slice_mut().unwrap().as_ptr() as * mut f32 , b.len());
+                let ires = lapacke::sggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
                         //nb row of m , nb columns , nb row of n
                         a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b.dim().0.try_into().unwrap(),
                         &mut k, &mut l,
-                        a.as_slice_mut().unwrap(), lda,
-                        b.as_slice_mut().unwrap(), ldb,
+                        &mut af32, lda,
+                        &mut bf32, ldb,
                         alpha.as_mut_slice(),beta.as_mut_slice(),
                         u.as_slice_mut().unwrap(), ldu,
                         v.as_slice_mut().unwrap(), ldv,
                         q.as_mut_slice(), ldq,
-                        iwork.as_mut_slice())
-            };
+                        iwork.as_mut_slice());
+                // but now we must find a way to transform u,v, alpha and beta from f32 to F
+                //
+                ires
+            }; // end of unsafe block
         };
         //
         Err(anyhow!("not yet implemented"))
