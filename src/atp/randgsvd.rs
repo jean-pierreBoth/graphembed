@@ -25,6 +25,9 @@ use num_traits::cast::FromPrimitive;
 use ndarray::{Array1, Array2};
 
 use ndarray_linalg::{Scalar, Lapack};
+use std::any::TypeId;
+
+use lapacke::{cggsvd3, Layout};
 
 // this module provides svdapproximation tools à la Hlako-Tropp
 use annembed::tools::svdapprox::*;
@@ -77,6 +80,9 @@ impl  <'a, F> GSvdApprox<'a, F>
     // We have to :
     //   - do a range approximation of the 2 matrices in problem definition
     //   - do a (full) gsvd of the 2 reduced matrices 
+    //   - lapck rust interface requires we pass matrix as slices so they must be in row order!
+    //     but for our application we must pass transposed version of Mg and Ml as we must compute inverse(Mg) * Ml
+    //     with a = Mg and b = Ml. So it seems we cannot avoid copying when construction the GSvdApprox
 
     /// 
     pub fn do_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
@@ -100,15 +106,15 @@ impl  <'a, F> GSvdApprox<'a, F>
         // With Halko-Tropp (or Wei-Zhang and al.) conventions, we have mat1 = (m1,n), mat2 = (m2,n)
         // we get  approx1_res = (m1, l1)  and (m2, l2).
         // We must now construct reduced matrix approximating mat1 and mat2 i.e t(approx1_res)* mat1 
-        // and t(approx2_res)* mat2
-        let mut m = match self.mat1.get_data() {
+        // and t(approx2_res)* mat2 and get matrices (l1,n) and (l2,n)
+        let mut a = match self.mat1.get_data() {
             MatMode::FULL(mat) => { approx1_res.t().dot(mat)},
             MatMode::CSR(mat)  => { 
                                     log::trace!("direct_svd got csr matrix");
                                     small_transpose_dense_mult_csr(&approx1_res, mat)
                                 },
         };
-        let mut n = match self.mat2.get_data() {
+        let mut b = match self.mat2.get_data() {
             MatMode::FULL(mat) => { approx2_res.t().dot(mat)},
             MatMode::CSR(mat)  => { 
                                     log::trace!("direct_svd got csr matrix");
@@ -117,10 +123,55 @@ impl  <'a, F> GSvdApprox<'a, F>
         };
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n
         // We are at step iv) of algo 2.4 of Wei and al.
-
+        // See rust doc https://docs.rs/lapacke/latest/lapacke/fn.cggsvd3_work.html and
+        // fortran https://www.netlib.org/lapack/lug/node36.html#1815 but new function is cggsvd3
+        // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+        //
+        let (a_nbrow, a_nbcol) = a.dim();
+        let jobu = b'U';
+        let jobv = b'V';
+        let jobq = b'N'; // Q is large we do not need it, we do not compute it
+        assert_eq!(a_nbcol, b.dim().1); // check m and n have the same number of columns.
+        let mut k : i32 = 0;
+        let mut l : i32 = 0;
+        // Caution our matrix are C (row) ordered so lda si 1. but we want to send the transpose (!) so lda is 
+        let lda : i32 = a_nbcol as i32;
+        let b_dim = b.dim();
+        // caution 
+        let ldb : i32 = b_dim.1 as i32;
+        let ires: i32;
+        let ldu = a_nbrow;  // as we compute U , ldu must be greater than nb rows of A
+        let ldu = a_nbrow as i32;
+        let ldv = a_nbrow as i32;
+        //
+        let ldq = 0;
+        let mut iwork = Vec::<i32>::with_capacity(a_nbcol);
+        if TypeId::of::<F>() == TypeId::of::<f32>() {
+            let mut alpha = Vec::<f32>::with_capacity(a_nbcol);
+            let mut beta = Vec::<f32>::with_capacity(a_nbcol);
+            let mut u= Array2::<f32>::zeros((a_nbrow, a_nbrow));
+            let v= Array2::<f32>::zeros((b_dim.0, b_dim.0));
+            let mut q = Vec::<f32>::new();
+            ires = unsafe {
+                lapacke::sggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
+                        //nb row of m , nb columns , nb row of n
+                        a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b.dim().0.try_into().unwrap(),
+                        &mut k, &mut l,
+                        a.as_slice_mut().unwrap(), lda,
+                        b.as_slice_mut().unwrap(), ldb,
+                        alpha.as_mut_slice(),beta.as_mut_slice(),
+                        u.as_slice_mut().unwrap(), ldu,
+                        v.as_slice_mut().unwrap(), ldv,
+                        q.as_mut_slice(), ldq,
+                        iwork.as_mut_slice())
+            };
+        };
         //
         Err(anyhow!("not yet implemented"))
 
     }  // end of do_svd
+
+
+
 
 } // end of impl block for 
