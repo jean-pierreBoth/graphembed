@@ -22,7 +22,7 @@ use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
 use num_traits::cast::FromPrimitive;
 
 
-use ndarray::{Array1, Array2};
+use ndarray::{Array1, Array2, ViewRepr, Ix1, Ix2};
 
 use ndarray_linalg::{Scalar, Lapack};
 use std::any::TypeId;
@@ -85,7 +85,7 @@ impl  <'a, F> GSvdApprox<'a, F>
     //     with a = Mg and b = Ml. So it seems we cannot avoid copying when construction the GSvdApprox
 
     /// 
-    pub fn do_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
+    pub fn do_approx_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
         // We construct an approximation first for mat1 and then for mat2 and with the same precision 
         // criterion
         let r_approx1 = RangeApprox::new(self.mat1, self.precision);
@@ -134,24 +134,32 @@ impl  <'a, F> GSvdApprox<'a, F>
         assert_eq!(a_nbcol, b.dim().1); // check m and n have the same number of columns.
         let mut k : i32 = 0;
         let mut l : i32 = 0;
-        // Caution our matrix are C (row) ordered so lda si 1. but we want to send the transpose (!) so lda is 
+        // TODO check lda ...
+        // Caution our matrix are C (row) ordered so lda si 1. but we want to send the transpose (!) so lda is a_nbrow
         let lda : i32 = a_nbcol as i32;
         let b_dim = b.dim();
-        // caution 
-        let ldb : i32 = b_dim.1 as i32;
+        // caution our matrix are C (row) ordered so lda si 1. but we want to send the transpose (!) so lda is a_nbrow
+        let ldb : i32 = b_dim.0 as i32;
         let ires: i32;
         let ldu = a_nbrow;  // as we compute U , ldu must be greater than nb rows of A
         let ldu = a_nbrow as i32;
         let ldv = a_nbrow as i32;
         //
+
+        //
         let ldq = 0;
         let mut iwork = Vec::<i32>::with_capacity(a_nbcol);
+        let u : Array2::<F>;
+        let v : Array2::<F>;
+        let alpha : Array1::<F>;
+        let beta : Array1::<F>;
+
         if TypeId::of::<F>() == TypeId::of::<f32>() {
-            let mut alpha = Vec::<f32>::with_capacity(a_nbcol);
-            let mut beta = Vec::<f32>::with_capacity(a_nbcol);
-            let mut u= Array2::<f32>::zeros((a_nbrow, a_nbrow));
-            let mut v= Array2::<f32>::zeros((b_dim.0, b_dim.0));
-            let mut q = Vec::<f32>::new();
+            let mut alpha_f32 = Vec::<f32>::with_capacity(a_nbcol);
+            let mut beta_f32 = Vec::<f32>::with_capacity(a_nbcol);
+            let mut u_f32= Array2::<f32>::zeros((a_nbrow, a_nbrow));
+            let mut v_f32= Array2::<f32>::zeros((b_dim.0, b_dim.0));
+            let mut q_f32 = Vec::<f32>::new();
             ires = unsafe {
                 // we must cast a and b to f32 slices!! unsafe but we know our types with TypeId
                 let mut af32 = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f32 , a.len());
@@ -162,20 +170,28 @@ impl  <'a, F> GSvdApprox<'a, F>
                         &mut k, &mut l,
                         &mut af32, lda,
                         &mut bf32, ldb,
-                        alpha.as_mut_slice(),beta.as_mut_slice(),
-                        u.as_slice_mut().unwrap(), ldu,
-                        v.as_slice_mut().unwrap(), ldv,
-                        q.as_mut_slice(), ldq,
+                        alpha_f32.as_mut_slice(),beta_f32.as_mut_slice(),
+                        u_f32.as_slice_mut().unwrap(), ldu,
+                        v_f32.as_slice_mut().unwrap(), ldv,
+                        q_f32.as_mut_slice(), ldq,
                         iwork.as_mut_slice());
                 // but now we must find a way to transform u,v, alpha and beta from f32 to F
+                u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f32.dim(), u_f32.as_ptr() as *const F).into_owned();
+                v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f32.dim(), v_f32.as_ptr() as *const F).into_owned();
+                alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f32.len()),alpha_f32.as_ptr() as *const F).into_owned();
+                beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f32.len()),beta_f32.as_ptr() as *const F).into_owned();
                 //
                 ires
             }; // end of unsafe block
-        };
+        }
+        else {
+            log::error!("do_approx_gsvd only implemented for f32 just now!");
+            panic!();
+        }
         //
         Err(anyhow!("not yet implemented"))
 
-    }  // end of do_svd
+    }  // end of do_approx_gsvd
 
 
 

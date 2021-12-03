@@ -19,13 +19,16 @@ use num_traits::cast::FromPrimitive;
 use sprs::prod;
 use sprs::{CsMat};
 
-struct Hope {
-
+use annembed::tools::svdapprox::{MatRepr};
+/// Structure for asymetric embedding with approximate random generalized svd.
+pub struct Hope<F> {
+    /// the grap as a matrix
+    mat : MatRepr<F>,
 }
 
 
 
-impl Hope {
+impl <F> Hope<F> {
 
     // return (I - β A, β A). We must check that beta is less than the spectral radius of adjacency matrix So the first term is inversible.
     // This ensure that the gsvd returned by lapack can be converted to the ATP paper. 
