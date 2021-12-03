@@ -7,7 +7,7 @@
 
 
 
-use ndarray::{Dim, Array, Array1, Array2 , Ix1, Ix2};
+use ndarray::{Dim, Array1, Array2};
 
 use ndarray_linalg::{Scalar, Lapack};
 
@@ -56,14 +56,25 @@ fn estimate_spectral_radius_csmat<F>(mat : &CsMat<F>) -> f64
     let dims = mat.shape();
     let init = F::from_f64(1./(dims.0 as f64).sqrt()).unwrap();
     let mut v1 = Array1::<F>::from_elem(dims.0, init);
-    let mut v2 = v1.clone();
+    let mut v2: Array1::<F> = v1.clone();
     let mut iter = 0;
     let mut radius: F;
     let epsil = F::from_f64(1.0E-5).unwrap();
     loop {
-
+        let v2_slice = v2.as_slice_mut().unwrap();
+        prod::mul_acc_mat_vec_csr(mat.view(), v1.as_slice().unwrap(), v2_slice);
+        radius = Scalar::sqrt(v2.dot(&v2));
+        v2 = v2 * F::one()/ radius;
+        let w = &v1 - &v2;
+        let delta = Scalar::sqrt(w.dot(&w));
+        iter += 1;
+        if iter >= 100 || delta < epsil {
+            log::debug!(" estimated radius at iter {} {}", iter, radius.to_f64().unwrap());
+            break;
+        }
+        v1.assign(&v2);
     }
-    return 0.;
+    return radius.to_f64().unwrap();
 }   // end of estimate_spectral_radius_csmat
 
 
@@ -93,3 +104,36 @@ fn estimate_spectral_radius_fullmat<F>(mat : &Array2<F>) -> f64
     //
     return radius.to_f64().unwrap();
 } // end of estimate_spectral_radius_fullmat
+
+
+//========================================================================================
+
+
+mod tests {
+
+use super::*;
+
+
+#[allow(dead_code)]
+fn log_init_test() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}  
+
+
+#[test]
+fn test_spectral_radius_full() {
+    log_init_test();
+    log::info!("in test_spectral_radius_full");
+    //
+    let mat = ndarray::arr2(&[ [9., -1., 2.],
+                                                                [-2., 8., 4.],
+                                                                [1., 1., 8.]  ]);
+    let radius = estimate_spectral_radius_fullmat(&mat);
+    log::info!("estimate_spectral_radius_fullmat radius : {}", radius);
+    //
+    assert!((radius-10.).abs() < 1.0E-4);
+} // end of test_spectral_radius_full
+
+
+
+}  // end of mod test
