@@ -14,12 +14,12 @@ use ndarray_linalg::{Scalar, Lapack};
 
 
 use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
-use num_traits::cast::FromPrimitive;
+// use num_traits::cast::FromPrimitive;
 
 use sprs::prod;
 use sprs::{CsMat};
 
-use annembed::tools::svdapprox::{MatRepr};
+use annembed::tools::svdapprox::{MatRepr, MatMode};
 /// Structure for asymetric embedding with approximate random generalized svd.
 pub struct Hope<F> {
     /// the grap as a matrix
@@ -28,21 +28,38 @@ pub struct Hope<F> {
 
 
 
-impl <F> Hope<F> {
+impl <F> Hope<F>  where
+    F: Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
 
-    // return (I - β A, β A). We must check that beta is less than the spectral radius of adjacency matrix So the first term is inversible.
-    // This ensure that the gsvd returned by lapack can be converted to the ATP paper. 
-    fn make_katz_pair(&self, beta : f64) {
+    pub fn from_ndarray(mat : Array2<F>) -> Self {
+        let mat = MatRepr::from_array2(mat);
+        Hope::<F> {mat}
+    }
 
+    //
+    // Noting A the adjacency matrix we return (M_g, M_l ) = (I - β A, β A). 
+    // We must check that beta is less than the spectral radius of adjacency matrix so that M_g is inversible.
+    fn make_katz_pair(&self, factor : f64) {
+        let radius = match self.mat.get_data() {
+            MatMode::FULL(mat) =>  { estimate_spectral_radius_fullmat(&mat) },
+            MatMode::CSR(csmat) =>  { estimate_spectral_radius_csmat(&csmat)},
+        };        
+        //  defining beta ensures that the matrix (Mg) in Hope paper is inversible.
+        let beta = factor / radius;
+        
     } // end of make_katz_pair
 
- 
+    /// 
+    fn make_rooted_pagerank(&self) {
 
-    ///
-    fn compute_embedding(&self) {
-        // get spectral radius to decide on beta
+    }
 
-        //  make katz pair 
+    /// computes the embedding.
+    /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
+    ///     factor must be between 0. and 1.
+    /// 
+    pub fn compute_embedding(&self) {
+    
 
         // transpose and formulate gsvd problem. 
         // We can now define a GSvdApprox structure
