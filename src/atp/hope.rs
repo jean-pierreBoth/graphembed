@@ -2,7 +2,7 @@
 //! Based on the paper:
 //!     Asymetric Transitivity Preserving Graph Embedding 
 //!     Ou, Cui Pei, Zhang, Zhu   in KDD 2016
-//!  See  https://www.kdd.org/kdd2016/papers/files/rfp0184-ouA.pdf
+//!  See  [atp](https://www.kdd.org/kdd2016/papers/files/rfp0184-ouA.pdf)
 //! 
 
 
@@ -19,10 +19,14 @@ use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
 use sprs::prod;
 use sprs::{CsMat};
 
-use annembed::tools::svdapprox::{MatRepr, MatMode};
-/// Structure for asymetric embedding with approximate random generalized svd.
+use annembed::tools::svdapprox::{MatRepr, MatMode, RangePrecision};
+
+use super::randgsvd::{GSvdOptParams, GSvdApprox};
+/// Structure for graph asymetric embedding with approximate random generalized svd to get an estimate of rank necessary
+/// to get a required precision in the SVD. 
+/// The structure stores the adjacency matrix in a full (ndarray) or compressed row storage format (using crate sprs).
 pub struct Hope<F> {
-    /// the grap as a matrix
+    /// the graph as a matrix
     mat : MatRepr<F>,
 }
 
@@ -31,26 +35,67 @@ pub struct Hope<F> {
 impl <F> Hope<F>  where
     F: Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
 
+    /// instantiate a Hope problem with the adjacency matrix
     pub fn from_ndarray(mat : Array2<F>) -> Self {
         let mat = MatRepr::from_array2(mat);
         Hope::<F> {mat}
     }
 
-    //
-    // Noting A the adjacency matrix we return (M_g, M_l ) = (I - β A, β A). 
+
+    // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β A, β A). 
     // We must check that beta is less than the spectral radius of adjacency matrix so that M_g is inversible.
-    fn make_katz_pair(&self, factor : f64) {
+    // In fact we go to the Gsvd with the pair (transpose(β A), transpose(I - β A))
+
+    /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
+    ///     factor must be between 0. and 1.
+    fn make_katz_problem(&self, factor : f64) {
+        // enforce rule on factor
+
+        //
         let radius = match self.mat.get_data() {
             MatMode::FULL(mat) =>  { estimate_spectral_radius_fullmat(&mat) },
             MatMode::CSR(csmat) =>  { estimate_spectral_radius_csmat(&csmat)},
         };        
         //  defining beta ensures that the matrix (Mg) in Hope paper is inversible.
         let beta = factor / radius;
-        
+        // now we can define a GSvdApprox problem
+        let epsil = 0.1;
+        let rank_increment = 20;
+        let max_rank = 300;
+        let rangeprecision = RangePrecision::new(epsil, rank_increment, max_rank);
+        // We must now define mat1 and mat2 (or A and B  in Wei-Zhang paper)
+        // mat1 is easy: it is beta * transpose(self.mat), so we define mat1 by &self.mat and adjust optional parameters
+        // accordingly.
+        // For mat2 it is I - beta * &self.mat, we need to reallocate a matrix
+        let mat1 = &self.mat;
+        // TODO compute mat2
+        let opt_params = GSvdOptParams::new(beta, true, 1. , true);
+        let gsvdapprox = GSvdApprox::new(mat1, mat2 , rangeprecision, Some(opt_params));
+        // now we can solve svd problem
+
     } // end of make_katz_pair
 
+
+    fn compute_1_minus_beta_mat(mat : &MatRepr<F>, beta : f64) -> MatRepr<F> {
+        let mut a = match mat.get_data() {
+            MatMode::FULL(mat) => {
+                let new_mat = *mat * F::from_f64(beta).unwrap();
+                return MatRepr::from_array2(new_mat);
+            },
+            MatMode::CSR(mat)  => { 
+                log::trace!("compute_1_minus_beta_mat");
+                assert_eq!(mat.rows(), mat.cols());
+                let new_mat = CsMat::eye(mat.rows());
+                // take into account - β mat
+                return MatRepr::from_csrmat(new_mat);
+            },
+        };
+
+    } // end of compute_1_minus_beta_mat
+
+
     /// 
-    fn make_rooted_pagerank(&self) {
+    fn make_rooted_pagerank_problem(&self) {
 
     }
 

@@ -38,19 +38,64 @@ use annembed::tools::svdapprox::*;
 // this one can be done with Sparse Matrix. Moreover it help determine the rank
 
 
-/// We searh a generalized svd for the pair of matrix mat_1 (m,n) and mat_2 
-/// i.e we search 2 orthogonal matrices V_1 and V_2 and one non singular patrix such that
-/// Most often the Matrix Representation will be CSR and the precision approximation mode will
-/// be used. But for Small graph we can consider the approximation with given target rank
-
+#[cfg_attr(doc, katexit::katexit)]
+/// We searh a generalized svd for the pair of matrix mat_1 (m,n) and mat_2 (p,n)
+/// i.e we search 2 orthogonal matrices V_1 and V_2 , 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$
+/// and one non singular matrix X such that:
+/// $$ V_{1} * mat1 * X = \Sigma_{1} \space and \space
+///     V_{2} * mat2 * X = \Sigma_{2} $$
+///  
+/// The optional parameters can be used to modify (by multiplication or transposition) the 2 matrices mat1 and mat2.  
+/// This avoids some matrix reallocations befote entering lapack.  
+/// They are described in the GSvdOptParams documentation.
+/// 
+/// Most often the matrix representation will be CSR and the precision approximation mode will
+/// be used. But for small graph we can consider the approximation with given target rank
+/// 
 pub struct GSvdApprox<'a, F: Scalar> {
-    // matrix we want to approximate range of
+    /// first matrix we want to approximate range of
     mat1 : &'a MatRepr<F>,
-    //
+    /// second matrix
     mat2 : &'a MatRepr<F>,
-    //
+    /// optional parameters
+    opt_params : Option<GSvdOptParams>,
+    /// approximation mode
     precision : RangeApproxMode,
 }   // end of struct GsvdApprox
+
+
+#[derive(Copy, Clone, Debug)]
+/// This structure describes optionam parameters used to specify the Gsvd approximation to do by GSvdApprox
+/// It can be useful to keep the two matrices mat1 and mat2 stored in GSvdApprox in one order but to solve the problem for their transpose
+/// (as is the case in the Hope algorithm).  
+/// In this case the transpose flags are used to send to lapack the matrices with a transpose flag.
+/// For the multplication factor (also useful in the Hope algorithm they are applied in a later stage of the algorithm) 
+pub struct GSvdOptParams {
+    /// multiplication factor to use for mat1. default to 1.
+    alpha_1 : f64, 
+    /// transposition to apply to mat1. default to no
+    transpose_1 : bool,
+    /// multiplication factor to use for mat2. default to 1.
+    alpha_2 : f64, 
+    /// transposition to apply to mat2? default to no
+    transpose_2 : bool,    
+}  // end of struct GSvdOptParams
+
+
+impl GSvdOptParams {
+    pub fn new(alpha_1 : f64,  transpose_1 : bool,  alpha_2 : f64 , transpose_2 : bool) -> Self {
+        GSvdOptParams {alpha_1, transpose_1, alpha_2, transpose_2}   
+    } // end of new GSvdOptParams
+
+    pub fn get_alpha_1(&self) -> f64 { self. alpha_1}
+
+    pub fn get_alpha_2(&self) -> f64 { self. alpha_2}
+
+    pub fn get_transpose_1(&self) -> bool { self.transpose_1}
+
+    pub fn get_transpose_2(&self) -> bool { self.transpose_2}
+
+} // end of impl GSvdOptParams
 
 
 
@@ -72,10 +117,17 @@ pub struct GSvdResult<F> {
 impl  <'a, F> GSvdApprox<'a, F>  
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
     /// We impose the RangePrecision mode for now.
-    pub fn new(mat1 : &'a MatRepr<F>, mat2 : &'a MatRepr<F>, precision : RangePrecision) -> Self {
+    pub fn new(mat1 : &'a MatRepr<F>, mat2 : &'a MatRepr<F>, precision : RangePrecision, opt_params : Option<GSvdOptParams>) -> Self {
         // TODO check for dimensions constraints, and type representation
-        return GSvdApprox{mat1, mat2, precision : RangeApproxMode::EPSIL(precision)};
+
+        return GSvdApprox{mat1, mat2, opt_params, precision : RangeApproxMode::EPSIL(precision)};
     } // end of new
+
+    /// return optional paramertes if any
+    pub fn get_parameters(&mut self,  alpha_1 : f64,  transpose_1 : bool,  alpha_2 : f64 , transpose_2 : bool) -> &Option<GSvdOptParams> {
+        &self.opt_params
+    } // end of set_parameters
+
 
     // We have to :
     //   - do a range approximation of the 2 matrices in problem definition
