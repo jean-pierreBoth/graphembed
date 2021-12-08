@@ -17,7 +17,7 @@ use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
 // use num_traits::cast::FromPrimitive;
 
 use sprs::prod;
-use sprs::{CsMat};
+use sprs::{CsMat, TriMatBase};
 
 use annembed::tools::svdapprox::{MatRepr, MatMode, RangePrecision};
 
@@ -48,6 +48,7 @@ impl <F> Hope<F>  where
 
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
     ///     factor must be between 0. and 1.
+    #[allow(unused)]
     fn make_katz_problem(&self, factor : f64) {
         // enforce rule on factor
 
@@ -69,35 +70,19 @@ impl <F> Hope<F>  where
         // For mat2 it is I - beta * &self.mat, we need to reallocate a matrix
         let mat1 = &self.mat;
         // TODO compute mat2
-        let opt_params = GSvdOptParams::new(beta, true, 1. , true);
-        let gsvdapprox = GSvdApprox::new(mat1, mat2 , rangeprecision, Some(opt_params));
+        let opt_params = GSvdOptParams::new(beta, true, 1., true);
+        let mat2 = compute_1_minus_beta_mat(&self.mat, beta);
+        let gsvdapprox = GSvdApprox::new(mat1, &mat2 , rangeprecision, Some(opt_params));
         // now we can solve svd problem
-
+        let _gsvd_res = gsvdapprox.do_approx_gsvd();
     } // end of make_katz_pair
 
 
-    fn compute_1_minus_beta_mat(mat : &MatRepr<F>, beta : f64) -> MatRepr<F> {
-        let mut a = match mat.get_data() {
-            MatMode::FULL(mat) => {
-                let new_mat = *mat * F::from_f64(beta).unwrap();
-                return MatRepr::from_array2(new_mat);
-            },
-            MatMode::CSR(mat)  => { 
-                log::trace!("compute_1_minus_beta_mat");
-                assert_eq!(mat.rows(), mat.cols());
-                let new_mat = CsMat::eye(mat.rows());
-                // take into account - β mat
-                return MatRepr::from_csrmat(new_mat);
-            },
-        };
-
-    } // end of compute_1_minus_beta_mat
-
-
     /// 
+    #[allow(unused)]
     fn make_rooted_pagerank_problem(&self) {
-
-    }
+        panic!("make_rooted_pagerank_problem: not yet implemented");
+    } // end of make_rooted_pagerank_problem
 
     /// computes the embedding.
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
@@ -170,6 +155,54 @@ fn estimate_spectral_radius_fullmat<F>(mat : &Array2<F>) -> f64
     //
     return radius.to_f64().unwrap();
 } // end of estimate_spectral_radius_fullmat
+
+
+fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64) -> MatRepr<F> 
+        where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
+            //
+    match mat.get_data() {
+        MatMode::FULL(mat) => {
+            let new_mat = mat * F::from_f64(beta).unwrap();
+            return MatRepr::from_array2(new_mat);
+        },
+        // TODO can we do better ?
+        MatMode::CSR(mat)  => { 
+            log::trace!("compute_1_minus_beta_mat");
+            assert_eq!(mat.rows(), mat.cols());
+            let n = mat.rows();
+            let nnz = mat.nnz();
+            // get an iter on triplets, construct a new trimatb
+            let mut rows = Vec::<usize>::with_capacity(nnz+ n);
+            let mut cols = Vec::<usize>::with_capacity(nnz+n);
+            let mut values = Vec::<F>::with_capacity(nnz+n);
+            let mut already_diag = Array1::<u8>::zeros(n);
+            let mut iter = mat.iter();
+            let beta_f = F::from_f64(beta).unwrap();
+            while let Some((val, (row, col))) = iter.next() {
+                if row != col {
+                    rows.push(row);
+                    cols.push(col);
+                    values.push(- beta_f * *val);
+
+                } else {
+                    values.push(F::one() - beta_f * *val);
+                    already_diag[row] = 1;
+                }
+            };
+            // fill values in diag not already initialized
+            for i in 0..n {
+                if already_diag[i] == 0 {
+                    rows.push(i);
+                    cols.push(i);
+                    values.push(F::one()); 
+                }                   
+            }
+            let trimat = TriMatBase::<Vec<usize>, Vec<F>>::from_triplets((4,5),rows, cols, values);
+            let csr_mat : CsMat<F> = trimat.to_csr();
+            return MatRepr::from_csrmat(csr_mat);
+        },
+    }  // end of match
+} // end of compute_1_minus_beta_mat
 
 
 //========================================================================================
