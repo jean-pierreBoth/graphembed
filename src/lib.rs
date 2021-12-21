@@ -24,4 +24,6 @@ pub mod io;
 
 pub mod atp;
 
+pub mod sketching;
+
 // pub mod sketching;
