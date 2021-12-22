@@ -40,10 +40,11 @@ use annembed::tools::svdapprox::*;
 
 #[cfg_attr(doc, katexit::katexit)]
 /// We searh a generalized svd for the pair of matrix mat_1 (m,n) and mat_2 (p,n)
-/// i.e we search 2 orthogonal matrices V_1 and V_2 , 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$
+/// i.e we search 2 orthogonal matrices $V_1$ and $V_2$ , 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$
 /// and one non singular matrix X such that:
-/// $$ V_{1} * mat1 * X = \Sigma_{1} \space and \space
-///     V_{2} * mat2 * X = \Sigma_{2} $$
+/// $$ V_{1}^{t} * mat1 * X = \Sigma_{1} \space and \space
+/// 
+///     V_{2}^{t} * mat2 * X = \Sigma_{2} $$
 ///  
 /// The optional parameters can be used to modify (by multiplication or transposition) the 2 matrices mat1 and mat2.  
 /// This avoids some matrix reallocations befote entering lapack.  
@@ -98,19 +99,43 @@ impl GSvdOptParams {
 } // end of impl GSvdOptParams
 
 
-
+#[cfg_attr(doc, katexit::katexit)]
+/// For a problem described in GSvdApprox by the pair of matrix mat_1 (m,n) and mat_2 (p,n)
+/// we get:  
+/// 
+///  - 2 orthogonal matrices  $V_{1}$  and  $V_{2}$
+///       
+///  - 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$  
+/// 
+///  - one non singular matrix X such that:
+/// $$ V_{1}^{t} * mat1 * X = \Sigma_{1} \space and \space
+///    V_{2}^{t} * mat2 * X = \Sigma_{2} $$
+/// 
 pub struct GSvdResult<F> {
     /// eigenvalues
-    pub  v1 : Option<Array2<F>>,
+    pub(crate)  v1 : Option<Array2<F>>,
     /// left eigenvectors. (m,r) matrix where r is rank asked for and m the number of data.
-    pub  v2 : Option<Array2<F>>,
+    pub(crate)  v2 : Option<Array2<F>>,
     /// first (diagonal matrix) eigenvalues
-    pub  s1 : Option<Array1<F>>,
-    /// first (diagonal matrix) eigenvalues
-    pub  s2 : Option<Array1<F>>,
+    pub(crate)  s1 : Option<Array1<F>>,
+    /// second (diagonal matrix) eigenvalues
+    pub(crate)  s2 : Option<Array1<F>>,
     /// common right term of mat1 and mat2 factorization
-    pub commonx : Option<Array2<F>>
+    pub(crate) commonx : Option<Array2<F>>
 } // end of struct SvdResult<F> 
+
+
+impl <F> GSvdResult<F> {
+
+    pub(crate) fn new() -> Self {
+        GSvdResult{v1 :None, v2 : None, s1 : None, s2 : None, commonx :None}
+    }
+
+    // reconstruct result from the out parameters of lapack. For us u and v are always asked for
+    pub(crate) fn init_from_lapack(&mut self, u : Array2<F>, v : Array2<F>, k : i32 ,l : i32 , alpha : Array1<F>, beta : Array1<F>) {
+        panic!("not yet implemented");
+    }
+} // end of impl block for GSvdResult
 
 
 
@@ -176,8 +201,13 @@ impl  <'a, F> GSvdApprox<'a, F>
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n
         // We are at step iv) of algo 2.4 of Wei and al.
         // See rust doc https://docs.rs/lapacke/latest/lapacke/fn.cggsvd3_work.html and
-        // fortran https://www.netlib.org/lapack/lug/node36.html#1815 but new function is cggsvd3
+        // fortran https://www.netlib.org/lapack/lug/node36.html#1815 but new function is (s|d)ggsvd3
+        //
+        // Lapack definition of GSVD is in the following link:
         // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+        //
+        //  Lapack GSVD(A,B) for A=(m,n) and B=(p,n) 
+        //  gives U**T*A*Q = D1*( 0 R ),    V**T*B*Q = D2*( 0 R )   with  U , V and Q orthogonals
         //
         let (a_nbrow, a_nbcol) = a.dim();
         let jobu = b'U';
@@ -197,15 +227,14 @@ impl  <'a, F> GSvdApprox<'a, F>
         let ldu = a_nbrow as i32;
         let ldv = a_nbrow as i32;
         //
-
-        //
         let ldq = 0;
         let mut iwork = Vec::<i32>::with_capacity(a_nbcol);
         let u : Array2::<F>;
         let v : Array2::<F>;
         let alpha : Array1::<F>;
         let beta : Array1::<F>;
-
+        let mut gsvdres = GSvdResult::<F>::new();
+        //
         if TypeId::of::<F>() == TypeId::of::<f32>() {
             let mut alpha_f32 = Vec::<f32>::with_capacity(a_nbcol);
             let mut beta_f32 = Vec::<f32>::with_capacity(a_nbcol);
@@ -227,25 +256,131 @@ impl  <'a, F> GSvdApprox<'a, F>
                         v_f32.as_slice_mut().unwrap(), ldv,
                         q_f32.as_mut_slice(), ldq,
                         iwork.as_mut_slice());
-                // but now we must find a way to transform u,v, alpha and beta from f32 to F
-                u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f32.dim(), u_f32.as_ptr() as *const F).into_owned();
-                v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f32.dim(), v_f32.as_ptr() as *const F).into_owned();
-                alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f32.len()),alpha_f32.as_ptr() as *const F).into_owned();
-                beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f32.len()),beta_f32.as_ptr() as *const F).into_owned();
+                if ires == 0 {
+                    // but now we must  transform u,v, alpha and beta from f32 to F
+                    u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f32.dim(), u_f32.as_ptr() as *const F).into_owned();
+                    v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f32.dim(), v_f32.as_ptr() as *const F).into_owned();
+                    alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f32.len()),alpha_f32.as_ptr() as *const F).into_owned();
+                    beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f32.len()),beta_f32.as_ptr() as *const F).into_owned();
+                    // TODO fill in gsvdres
+                    gsvdres.init_from_lapack(u, v, k, l , alpha , beta);
+                }
+                else if ires == 1 {
+                    return Err(anyhow!("lapack failed to converge"));
+                }
+                else if ires < 0 {
+                    return Err(anyhow!("argument {} had an illegal value", -ires));
+                }
                 //
                 ires
             }; // end of unsafe block
-        }
+            // test ires
+        }  // end case f32
+        else if TypeId::of::<F>() == TypeId::of::<f64>() {
+            let mut alpha_f64 = Vec::<f64>::with_capacity(a_nbcol);
+            let mut beta_f64 = Vec::<f64>::with_capacity(a_nbcol);
+            let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
+            let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
+            let mut q_f64 = Vec::<f64>::new(); 
+            ires = unsafe {
+                let mut af64 = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f64 , a.len());
+                let mut bf64 = std::slice::from_raw_parts_mut(b.as_slice_mut().unwrap().as_ptr() as * mut f64 , b.len()); 
+                let ires = lapacke::dggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
+                    //nb row of m , nb columns , nb row of n
+                    a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b.dim().0.try_into().unwrap(),
+                    &mut k, &mut l,
+                    &mut af64, lda,
+                    &mut bf64, ldb,
+                    alpha_f64.as_mut_slice(),beta_f64.as_mut_slice(),
+                    u_f64.as_slice_mut().unwrap(), ldu,
+                    v_f64.as_slice_mut().unwrap(), ldv,
+                    q_f64.as_mut_slice(), ldq,
+                    iwork.as_mut_slice());
+                // but now we must transform u,v, alpha and beta from f64 to F
+                if ires == 0 {
+                    u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f64.dim(), u_f64.as_ptr() as *const F).into_owned();
+                    v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f64.dim(), v_f64.as_ptr() as *const F).into_owned();
+                    alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f64.len()),alpha_f64.as_ptr() as *const F).into_owned();
+                    beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f64.len()),beta_f64.as_ptr() as *const F).into_owned();
+                    gsvdres.init_from_lapack(u, v, k, l , alpha , beta);
+                }
+                else if ires == 1 {
+                    return Err(anyhow!("lapack failed to converge"));
+                }
+                else if ires < 0 {
+                    return Err(anyhow!("argument {} had an illegal value", -ires));
+                }                
+                ires
+            }           
+        }  // end case f64
         else {
             log::error!("do_approx_gsvd only implemented for f32 just now!");
             panic!();
         }
-        //
+        // Ok(())
         Err(anyhow!("not yet implemented"))
-
     }  // end of do_approx_gsvd
 
+} // end of impl block for GSvdApprox
 
 
 
-} // end of impl block for 
+
+mod tests {
+
+#[allow(unused)]
+use super::*;
+
+#[allow(unused)]
+use sprs::{CsMat, TriMatBase};
+
+#[allow(dead_code)]
+fn log_init_test() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}  
+
+
+#[test]
+// small example from https://fr.mathworks.com/help/matlab/ref/gsvd.html
+// with more rows than columns. run in precision mode
+
+fn test_lapack() {
+    log_init_test();
+    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    // convert in csr modde !!
+
+}
+
+
+fn test_gsvd_full_precision_1() {
+    log_init_test();
+    //
+    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    // convert in csr modde !!
+
+} // end of test_gsv_full_1
+
+// The smae test as test_gsvd_full_1 but with matrix described in csr mode, run in precision mode
+fn test_gsvd_csr_precision_1() {
+    log_init_test();
+    //
+    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    // convert in csr modde !!
+
+}
+
+// we h ve fumm matrix we can test in rank mode
+fn test_gsvd_full_rank_1() {
+    log_init_test();
+    //
+    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+
+    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+
+} // end of test_gsvd_full_rank_1
+
+} // end of mod tests    
+

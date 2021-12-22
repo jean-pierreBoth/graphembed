@@ -1,9 +1,9 @@
 //! this file implements the nodesketch algorithm 
-//! described [nodesketch)[https://dl.acm.org/doi/10.1145/3292500.3330951]
+//! described (nodesketch)<https://dl.acm.org/doi/10.1145/3292500.3330951>
 //! 
 
 
-
+#![allow(unused)]
 
 use ndarray::{Array2, Array1};
 use sprs::{TriMatI, CsMatI};
@@ -14,11 +14,13 @@ use probminhash::probminhasher::*;
 
 
 /// Compute the sketch of node proximity for a graph.
+/// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
+/// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
 pub struct NodeSketch {
     /// size of the skecth
     sketch_size: usize,
 
-    /// Row compressed matrix representing self loop augmented graph.
+    /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
     /// exponential decay coefficient for reducing weight of 
     decay : f64,
@@ -40,46 +42,62 @@ impl NodeSketch {
     }
     
     /// sketch of a row of initial self loop augmented matrix. Returns a vector of size self.sketch_size
-    fn sketch_rowsla(&mut self, row : usize) -> Array1<usize> {
+    fn sketch_slamatrix(&mut self) {
         // We use probminhash3a, allocate a Hash structure
-        let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.sketch_size, 0);
-        for j in 0..self.csrmat.cols() {
-            let w = self.csrmat.get_outer_inner(row,j).unwrap();
-            probminhash3.hash_item(j,*w);
+        for i in 0..self.csrmat.rows() {
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.sketch_size, 0);
+            for j in 0..self.csrmat.cols() {
+                let w = self.csrmat.get_outer_inner(i,j).unwrap();
+                probminhash3.hash_item(j,*w);
+            }
+            let sketch = Array1::from_vec(probminhash3.get_signature().clone());
+            sketch.move_into(self.previous_sketches.row_mut(i));
         }
-        let sketch = Array1::from_vec(probminhash3.get_signature().clone());
-        sketch
-    } // end of sketch_row
+    } // end of sketch_slamatrix
 
 
-    /// sketch a row of matrix of sketch. A row here has length sketch size with possible repetions of indexes
-    /// so we need to use a Hashmap to get an association node -> weight
-    /// We return a new vectors of usize length sketch_size
-    fn sketch_rowsketch(&mut self, sketches : &Array2<usize> , row : usize, sketch_size : usize) {
-        // We use probminhash3a, allocate a Hash structure
-        let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(sketch_size, 0);
-    } // end of sketch_rowsketch
+
+    fn iterate(&mut self,  nb_iter:usize) {
+        // first iteration, we fill previous sketches
+        self.sketch_slamatrix();    
+        for _ in 0..nb_iter {
+            self.iteration();  
+        }    
+    }  // end of iterate
 
 
     // do initialization of sketches
     fn iteration(&mut self) {
-        // first iteration, we fill sketches
-        for i in 0..self.csrmat.rows() {
-            let rowsketch = self.sketch_rowsla(i);
-            rowsketch.move_into(self.sketches.row_mut(i));
-        }
         // now we repeatedly merge csrmat (loop augmented matrix) with sketches
         for (row, row_vec) in self.csrmat.outer_iterator().enumerate() {
+            // new neighbourhood for current iteration 
+            let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
+            let weight = self.decay/self.sketch_size as f64;
             // get an iterator on neighbours of node corresponding to row 
             let mut row_iter = row_vec.iter();
             while let Some(neighbour) = row_iter.next() {
+                match v_k.get_mut(&neighbour.0) {
+                    Some(val) => { *val = *val + weight * *neighbour.1; }
+                    None              => { v_k.insert(neighbour.0, *neighbour.1).unwrap(); }
+                };
                 // get sketch of neighbour
-                let neighbour_sketch = self.sketches.row(neighbour.0);
-                // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
-
+                let neighbour_sketch = self.previous_sketches.row(neighbour.0);
+                for n in neighbour_sketch {
+                    match v_k.get_mut(&neighbour.0) {
+                        // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
+                        Some(val)   => { *val = *val + weight; }
+                        None                => { v_k.insert(*n, weight).unwrap(); }
+                    };                    
+                }
             }
-        }
-        
+            // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
+            // as we possibly got more.
+            let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.sketch_size, 0);
+            probminhash3a.hash_weigthed_hashmap(&v_k);
+            let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
+            // save sketches into previous sketch
+            sketch.move_into(self.sketches.row_mut(row));
+        }  // end of for on row
     } // end of iteration
 
 
@@ -101,3 +119,22 @@ fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, weight : f64) -> 
 } // end of diagonal_augmentation
 
 
+//=====================================================================================================
+
+mod tests {
+ 
+use log::*;
+
+
+
+#[allow(dead_code)]
+fn log_init_test() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
+use super::*; 
+
+
+
+
+}  // end of mod tests
