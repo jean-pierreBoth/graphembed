@@ -132,7 +132,23 @@ impl <F> GSvdResult<F> {
     }
 
     // reconstruct result from the out parameters of lapack. For us u and v are always asked for
-    pub(crate) fn init_from_lapack(&mut self, u : Array2<F>, v : Array2<F>, k : i32 ,l : i32 , alpha : Array1<F>, beta : Array1<F>) {
+    pub(crate) fn init_from_lapack(&mut self, m : i64, n : i64, p : i64, u : Array2<F>, v : Array2<F>, k : i64 ,l : i64 , 
+                alpha : Array1<F>, beta : Array1<F>, permuta : Vec<i32>) {
+        self.v1 = Some(u);
+        self.v2 = Some(v);
+        // now we must decode depending upon k and l values, we use the lapack doc at :
+        // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+        //
+        if m-k-l >= 0 {
+            // s1 is alpha[k .. k+l-1]   s2 is beta[k .. k+l-1]
+
+            // check s1**2 + s2**2 = 1
+
+            // check how s1 and s2 are sorted. s1 should be decresing and s2 increasing
+        }
+        else {
+
+        }
         panic!("not yet implemented");
     }
 } // end of impl block for GSvdResult
@@ -262,8 +278,9 @@ impl  <'a, F> GSvdApprox<'a, F>
                     v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f32.dim(), v_f32.as_ptr() as *const F).into_owned();
                     alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f32.len()),alpha_f32.as_ptr() as *const F).into_owned();
                     beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f32.len()),beta_f32.as_ptr() as *const F).into_owned();
-                    // TODO fill in gsvdres
-                    gsvdres.init_from_lapack(u, v, k, l , alpha , beta);
+                    // convert usize to i64 as matrix sizes surely permits that
+                    gsvdres.init_from_lapack(a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap() , b_dim.0.try_into().unwrap(), 
+                                u, v, k as i64, l as i64 , alpha , beta, iwork);
                 }
                 else if ires == 1 {
                     return Err(anyhow!("lapack failed to converge"));
@@ -302,7 +319,8 @@ impl  <'a, F> GSvdApprox<'a, F>
                     v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f64.dim(), v_f64.as_ptr() as *const F).into_owned();
                     alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f64.len()),alpha_f64.as_ptr() as *const F).into_owned();
                     beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f64.len()),beta_f64.as_ptr() as *const F).into_owned();
-                    gsvdres.init_from_lapack(u, v, k, l , alpha , beta);
+                    gsvdres.init_from_lapack(a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap() , b_dim.0.try_into().unwrap(), 
+                            u, v, k as i64, l as i64 , alpha , beta, iwork);
                 }
                 else if ires == 1 {
                     return Err(anyhow!("lapack failed to converge"));

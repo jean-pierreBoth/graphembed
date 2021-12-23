@@ -4,16 +4,16 @@
 ## Methods
 
 We use two strategies for graph embedding.
-The first is based on the paper : 
+1. The first is based on the paper : 
 
-*NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.
-     D.Yang, P. Rosso Bin Li ans P. Cudre-Mauroux.
-    [nodesketch]<https://dl.acm.org/doi/10.1145/3292500.3330951>
+*NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  (<https://dl.acm.org/doi/10.1145/3292500.3330951>)  
+    D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux. 
 
 It is based on multi hop neighbourhood identification via sensitive hashing. But instead of using **ICWS** for hashing we use the more recent **probminhash**.
 
-The second is based on the paper:
-*Asymetric Transitivity Preserving Graph Embedding 2016*
+1. The second is based on the paper:
+   
+*Asymetric Transitivity Preserving Graph Embedding 2016*  
     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
 
 The main idea of the paper is to preserve multi-hop proximity and constructing an asymetric graph embedding. 
@@ -34,11 +34,11 @@ as described in
     citation network 23166 neoeuds 91500 aretes  no loop  dout max 104 d in max = 376 (weighted)
 
 
-1. asymetric graphs
+2. Asymetric graphs
    
-* CA-GrQc.txt       https://snap.stanford.edu/data/ca-GrQc.html
-*   wiki-vote       https://snap.stanford.edu/data/wiki-Vote.html
-*   soc-epinions    https://snap.stanford.edu/data/soc-Epinions1.html
+* CA-GrQc.txt       <https://snap.stanford.edu/data/ca-GrQc.html>
+*   wiki-vote       <https://snap.stanford.edu/data/wiki-Vote.html>
+*   soc-epinions    <https://snap.stanford.edu/data/soc-Epinions1.html>
    
 ## References
 
