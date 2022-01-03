@@ -210,7 +210,7 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64) -> MatRepr<F>
 
 mod tests {
 
-    #[allow(unused)]
+#[allow(unused)]
 use super::*;
 
 #[allow(unused)]
@@ -221,7 +221,7 @@ fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }  
 
-
+// example from https://en.wikipedia.org/wiki/Spectral_radius
 #[test]
 fn test_spectral_radius_full() {
     log_init_test();

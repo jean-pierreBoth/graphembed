@@ -27,7 +27,7 @@ use ndarray::{s,Array1, Array2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
 use ndarray_linalg::{Scalar, Lapack};
 use std::any::TypeId;
 
-use lapacke::{cggsvd3, Layout};
+use lapacke::{dggsvd3, Layout};
 
 // this module provides svdapproximation tools à la Hlako-Tropp
 use annembed::tools::svdapprox::*;
@@ -66,7 +66,7 @@ pub struct GSvdApprox<'a, F: Scalar> {
 
 
 #[derive(Copy, Clone, Debug)]
-/// This structure describes optionam parameters used to specify the Gsvd approximation to do by GSvdApprox
+/// This structure describes optional parameters used to specify the Gsvd approximation to do by GSvdApprox
 /// It can be useful to keep the two matrices mat1 and mat2 stored in GSvdApprox in one order but to solve the problem for their transpose
 /// (as is the case in the Hope algorithm).  
 /// In this case the transpose flags are used to send to lapack the matrices with a transpose flag.
@@ -225,7 +225,7 @@ impl  <'a, F> GSvdApprox<'a, F>
         }
         let approx2_res = approx2_res.unwrap();
         // We must not check for the ranks of approx1_res and approx2_res.
-        // We want the 2 matrix to have the same weights but if we ran in precision mode we must
+        // We want the 2 matrices to have the same weights but if we ran in precision mode we must
         // enforce that.
         // With Halko-Tropp (or Wei-Zhang and al.) conventions, we have mat1 = (m1,n), mat2 = (m2,n)
         // we get  approx1_res = (m1, l1)  and (m2, l2).
@@ -270,11 +270,10 @@ impl  <'a, F> GSvdApprox<'a, F>
         // caution our matrix are C (row) ordered so lda si 1. but we want to send the transpose (!) so lda is a_nbrow
         let ldb : i32 = b_dim.0 as i32;
         let ires: i32;
-        let ldu = a_nbrow;  // as we compute U , ldu must be greater than nb rows of A
-        let ldu = a_nbrow as i32;
+        let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A
         let ldv = a_nbrow as i32;
         //
-        let ldq = 0;
+        let ldq = 0;  // as we do not ask for Q
         let mut iwork = Vec::<i32>::with_capacity(a_nbcol);
         let u : Array2::<F>;
         let v : Array2::<F>;
@@ -360,10 +359,10 @@ impl  <'a, F> GSvdApprox<'a, F>
                     return Err(anyhow!("argument {} had an illegal value", -ires));
                 }                
                 ires
-            }           
+            }  // end unsafe         
         }  // end case f64
         else {
-            log::error!("do_approx_gsvd only implemented for f32 just now!");
+            log::error!("do_approx_gsvd only implemented for f32 and f64");
             panic!();
         }
         // Ok(())
@@ -373,41 +372,99 @@ impl  <'a, F> GSvdApprox<'a, F>
 } // end of impl block for GSvdApprox
 
 
-
+//=========================================================================================================
 
 mod tests {
 
 #[allow(unused)]
 use super::*;
 
-#[allow(unused)]
-use sprs::{CsMat, TriMatBase};
+use ndarray::{array};
 
-#[allow(dead_code)]
+use sprs::{CsMat, TriMat};
+
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }  
 
+// to convert a small matrix into a csr storage
+fn smallmat_to_csr(a : &Array2<f64>) -> CsMat<f64> {
+    let dim = a.dim();
+    // fill the TriMat
+    let mut trim = TriMat::new(a.dim());
+    for (idx, val) in a.indexed_iter() {
+        trim.add_triplet(idx.0, idx.1, *val);
+    }
+    // convert
+    trim.to_csr()
+}
+
+
+// small example from https://fr.mathworks.com/help/matlab/ref/gsvd.html
+// with more rows than columns.run in precision mode
+
 
 #[test]
-// small example from https://fr.mathworks.com/help/matlab/ref/gsvd.html
-// with more rows than columns. run in precision mode
-
-fn test_lapack() {
+// a test to check rust lapack interface
+fn test_lapack_array() {
     log_init_test();
-    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
-    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
-    // convert in csr modde !!
+    //
+    let mut a = array![ [1., 6., 11.], [2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mut b = array![ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    // run with Array
+    let (a_nbrow, a_nbcol) = a.dim();
+    let jobu = b'U';   // we compute U
+    let jobv = b'V';   // we compute V
+    let jobq = b'N';   // Q is large we do not need it, we do not compute it
+    assert_eq!(a_nbcol, b.dim().1); // check m and n have the same number of columns.
+    let mut k : i32 = 0;
+    let mut l : i32 = 0;
+    let lda : i32 = 1i32;  // our matrix are row ordered!
+    let ldb : i32 = 1;     // our matrix are row ordered!
+    let b_dim = b.dim();
+    let mut alpha_f64 = Vec::<f64>::with_capacity(a_nbcol);
+    let mut beta_f64 = Vec::<f64>::with_capacity(a_nbcol);
+    let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
+    let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
+    let mut q_f64 = Vec::<f64>::new(); 
+    let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A
+    let ldv = a_nbrow as i32;
+    //
+    let ldq = 0;    // as we do not ask for Q
+    let mut iwork = Vec::<i32>::with_capacity(a_nbcol);
+    //
+    let ires = unsafe {
+        let mut a_slice = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f64 , a.len());
+        let mut b_slice = std::slice::from_raw_parts_mut(b.as_slice_mut().unwrap().as_ptr() as * mut f64 , b.len()); 
+        dggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
+                //nb row of m , nb columns , nb row of n
+                a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b.dim().0.try_into().unwrap(),
+                &mut k, &mut l,
+                a_slice, lda, b_slice, ldb,
+                alpha_f64.as_mut_slice(),beta_f64.as_mut_slice(),
+                u_f64.as_slice_mut().unwrap(), ldu,
+                v_f64.as_slice_mut().unwrap(), ldv,
+                q_f64.as_mut_slice(), ldq,
+                iwork.as_mut_slice()
+        )
+    };
+    // 
+    if ires != 0 {
+        log::error!("dggsvd3 returned {}", ires);
+        assert!(1==0);
+    }
+    // dump results
+} // end of test_lapack_array
 
-}
+
 
 
 fn test_gsvd_full_precision_1() {
     log_init_test();
     //
-    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
-    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
-    // convert in csr modde !!
+    let mat_a = array![ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mat_b = array![ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    // 
 
 } // end of test_gsv_full_1
 
@@ -415,21 +472,32 @@ fn test_gsvd_full_precision_1() {
 fn test_gsvd_csr_precision_1() {
     log_init_test();
     //
-    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
-    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
-    // convert in csr modde !!
+    let mat_a = array![ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mat_b = array![ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    // convert in csr mode !!
+    let csr_a = smallmat_to_csr(&mat_a);
+    let csr_b = smallmat_to_csr(&mat_b);
+    let a = MatRepr::from_csrmat(csr_a);
+    let b = MatRepr::from_csrmat(csr_b);
 
-}
+}  // end of test_gsvd_csr_precision_1
 
-// we h ve fumm matrix we can test in rank mode
+
+
+
+// we have full matrix we can test in rank mode
 fn test_gsvd_full_rank_1() {
     log_init_test();
     //
-    let mat_a = [ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mat_a = array![ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
 
-    let mat_b = [ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    let mat_b = array![[8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
 
 } // end of test_gsvd_full_rank_1
+
+
+
+
 
 } // end of mod tests    
 
