@@ -22,7 +22,7 @@ use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
 use num_traits::cast::FromPrimitive;
 
 
-use ndarray::{Array1, Array2, ViewRepr, Ix1, Ix2};
+use ndarray::{s,Array1, Array2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
 
 use ndarray_linalg::{Scalar, Lapack};
 use std::any::TypeId;
@@ -111,7 +111,7 @@ impl GSvdOptParams {
 /// $$ V_{1}^{t} * mat1 * X = \Sigma_{1} \space and \space
 ///    V_{2}^{t} * mat2 * X = \Sigma_{2} $$
 /// 
-pub struct GSvdResult<F> {
+pub struct GSvdResult<F: Float + Scalar> {
     /// eigenvalues
     pub(crate)  v1 : Option<Array2<F>>,
     /// left eigenvectors. (m,r) matrix where r is rank asked for and m the number of data.
@@ -125,7 +125,7 @@ pub struct GSvdResult<F> {
 } // end of struct SvdResult<F> 
 
 
-impl <F> GSvdResult<F> {
+impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOperand + sprs::MulAcc  {
 
     pub(crate) fn new() -> Self {
         GSvdResult{v1 :None, v2 : None, s1 : None, s2 : None, commonx :None}
@@ -139,18 +139,49 @@ impl <F> GSvdResult<F> {
         // now we must decode depending upon k and l values, we use the lapack doc at :
         // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
         //
+        assert!(m >= 0);
+        assert!(l >= 0);
+        assert!(k >= 0);
+        //
+        let s1_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
+        let s2_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
         if m-k-l >= 0 {
-            // s1 is alpha[k .. k+l-1]   s2 is beta[k .. k+l-1]
-
-            // check s1**2 + s2**2 = 1
-
-            // check how s1 and s2 are sorted. s1 should be decresing and s2 increasing
+            // s1 is alpha[k .. k+l-1] and   s2 is beta[k .. k+l-1]
+            assert!(l > 0);
+            assert!(k >= 0);
+            s1_v = alpha.slice(s![k as usize ..(k+l) as usize]);
+            s2_v = beta.slice(s![k as usize ..(k+l) as usize]);
         }
         else {
-
+            // s1 is alpha[k..m]  and s2 is beta[k..m]
+            assert!(k >= 0);           
+            assert!(m > k);
+            s1_v = alpha.slice(s![k as usize..(m as usize)]);
+            s2_v = beta.slice(s![k as usize..(m as usize)]);
         }
+        // some checks
+        let check  = s1_v.iter().zip(s2_v.iter()).fold(F::zero(), | acc, x | acc+ *x.0 * *x.0 + *x.1 * *x.1);
+        let check : f64 = check.to_f64().unwrap();
+        // check s1**2 + s2**2 = 1
+        assert!( (1.0 - check).abs() < 1.0E-5 );
+        let s = m.min(k+l) as usize;
+        // we clone
+        let s1 = s1_v.to_owned();
+        let s2 = s2_v.to_owned();
+        // TODO monotonicity check.  before clone ??
+        let mut alpha_sorted = alpha.clone();
+        for i in 0..n as usize {
+            alpha_sorted.swap(i, permuta[i] as usize);
+        } 
+        for i in 1..n as usize {
+            if alpha_sorted[i] < alpha_sorted[i-1] {
+                log::error!("alpha_sorted non decreasing at i : {}  {}  {}", i, alpha_sorted[i], alpha_sorted[i-1]);
+                panic!("non sorted alpha");
+            }
+        }
+        // now we must fill v1, v2 and commonx
         panic!("not yet implemented");
-    }
+    }  // end of GSvdResult::init_from_lapack
 } // end of impl block for GSvdResult
 
 

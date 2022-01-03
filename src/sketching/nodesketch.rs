@@ -12,8 +12,9 @@ use ahash::{AHasher};
 use std::collections::HashMap;
 use probminhash::probminhasher::*;
 
+use super::sla::*;
 
-/// Compute the sketch of node proximity for a graph.
+/// Compute the sketch of node proximity for a (undirected) graph.
 /// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
 /// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
 pub struct NodeSketch {
@@ -66,7 +67,7 @@ impl NodeSketch {
     }  // end of iterate
 
 
-    // do initialization of sketches
+    // do iteration on sketches
     fn iteration(&mut self) {
         // now we repeatedly merge csrmat (loop augmented matrix) with sketches
         for (row, row_vec) in self.csrmat.outer_iterator().enumerate() {
@@ -105,18 +106,6 @@ impl NodeSketch {
 } // end of impl NodeSketch
 
 
-
-// takes a matrix in a triplet form augment it by diagonal
-fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, weight : f64) -> CsMatI<f64, usize> {
-    let shape = graphtrip.shape();
-    assert_eq!(shape.0, shape.1);
-    //
-    for i in 0..shape.0 {
-        graphtrip.add_triplet(i,i, weight);
-    }
-    //
-    graphtrip.to_csr()
-} // end of diagonal_augmentation
 
 
 //=====================================================================================================

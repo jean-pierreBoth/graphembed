@@ -6,12 +6,13 @@
 We use two strategies for graph embedding.
 1. The first is based on the paper : 
 
-*NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  (<https://dl.acm.org/doi/10.1145/3292500.3330951>)  
+*NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  [https://dl.acm.org/doi/10.1145/3292500.3330951]  
     D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux. 
 
-It is based on multi hop neighbourhood identification via sensitive hashing. But instead of using **ICWS** for hashing we use the more recent **probminhash**.
+It is based on multi hop neighbourhood identification via sensitive hashing. But instead of using **ICWS** for hashing we use the more recent **probminhash** See [probminhash](https://arxiv.org/abs/1911.00675)
+An extension of the paper is also implemented to get asymetric embedding for directed graph.
 
-1. The second is based on the paper:
+2. The second is based on the paper:
    
 *Asymetric Transitivity Preserving Graph Embedding 2016*  
     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
