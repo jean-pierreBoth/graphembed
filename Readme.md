@@ -1,6 +1,6 @@
 # GraphEmbed
 
-
+**work in progress...**
 ## Methods
 
 We use two strategies for graph embedding.
@@ -41,8 +41,3 @@ as described in
 *   wiki-vote       <https://snap.stanford.edu/data/wiki-Vote.html>
 *   soc-epinions    <https://snap.stanford.edu/data/soc-Epinions1.html>
    
-## References
-
-*Improved Consistent Weighted Sampling Revisited*
-Wu,Li, Chen, Zhang, Yu. (Wu-arxiv-2017)[https://arxiv.org/abs/1706.01172] or 
-(Wu-ieee-2019)[https://ieeexplore.ieee.org/document/8493289IEEE].
