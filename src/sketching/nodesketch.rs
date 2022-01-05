@@ -20,7 +20,6 @@ use super::sla::*;
 pub struct NodeSketch {
     /// size of the skecth
     sketch_size: usize,
-
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
     /// exponential decay coefficient for reducing weight of 

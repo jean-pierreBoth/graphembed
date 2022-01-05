@@ -15,6 +15,9 @@
 
 // ndarray::ScalarOperand provides array * F
 // ndarray_linalg::Scalar provides Exp notation + Display + Debug + Serialize and sum on iterators
+use log::Level::Debug;
+use log::{debug, log_enabled};
+
 
 use anyhow::{Error, anyhow};
 
@@ -112,7 +115,7 @@ impl GSvdOptParams {
 ///    V_{2}^{t} * mat2 * X = \Sigma_{2} $$
 /// 
 pub struct GSvdResult<F: Float + Scalar> {
-    /// eigenvalues
+    /// left eigenvectors for first matrix. U
     pub(crate)  v1 : Option<Array2<F>>,
     /// left eigenvectors. (m,r) matrix where r is rank asked for and m the number of data.
     pub(crate)  v2 : Option<Array2<F>>,
@@ -132,56 +135,99 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     }
 
     // reconstruct result from the out parameters of lapack. For us u and v are always asked for
+    // (m,n) is dimension of A. p is number of rows of B. k and l oare lapack output  
     pub(crate) fn init_from_lapack(&mut self, m : i64, n : i64, p : i64, u : Array2<F>, v : Array2<F>, k : i64 ,l : i64 , 
-                alpha : Array1<F>, beta : Array1<F>, permuta : Vec<i32>) {
+                alpha : Array1<F>, beta : Array1<F>, permuta : Array1<i32>) {
         self.v1 = Some(u);
         self.v2 = Some(v);
         // now we must decode depending upon k and l values, we use the lapack doc at :
         // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
         //
+        log::debug!("m : {}, n : {}, k : {}, l : {} ", m, n, k, l);
         assert!(m >= 0);
         assert!(l >= 0);
         assert!(k >= 0);
         //
         let s1_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
         let s2_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
+        // on 0..k  alpha = 1. beta = 0.
         if m-k-l >= 0 {
-            // s1 is alpha[k .. k+l-1] and   s2 is beta[k .. k+l-1]
+            // s1 is alpha[k .. k+l-1] and   s2 is beta[k .. k+l-1], 
             assert!(l > 0);
             assert!(k >= 0);
             s1_v = alpha.slice(s![k as usize ..(k+l) as usize]);
             s2_v = beta.slice(s![k as usize ..(k+l) as usize]);
         }
         else {
-            // s1 is alpha[k..m]  and s2 is beta[k..m]
+            // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(k >= 0);           
             assert!(m > k);
             s1_v = alpha.slice(s![k as usize..(m as usize)]);
             s2_v = beta.slice(s![k as usize..(m as usize)]);
         }
+        // a dump if log Debug enabled we dump C and S
+        if log_enabled!(Debug) {
+            for i in 0..s1_v.len() {
+                log::debug!(" i {}, S[i] {},  C[i] {}", i, s1_v[i], s2_v[i]);
+            }
+        }
         // some checks
-        let check  = s1_v.iter().zip(s2_v.iter()).fold(F::zero(), | acc, x | acc+ *x.0 * *x.0 + *x.1 * *x.1);
-        let check : f64 = check.to_f64().unwrap();
-        // check s1**2 + s2**2 = 1
-        assert!( (1.0 - check).abs() < 1.0E-5 );
-        let s = m.min(k+l) as usize;
+        let check : Vec<F> = s1_v.iter().zip(s2_v.iter()).map(| x |  *x.0 * *x.0 + *x.1 * *x.1).collect();
+        for v in check {
+            let epsil = (1. - v.to_f64().unwrap()).abs();
+            log::debug!(" epsil = {}", epsil);
+            assert!(epsil < 1.0E-5 );
+        }
         // we clone
         let s1 = s1_v.to_owned();
         let s2 = s2_v.to_owned();
-        // TODO monotonicity check.  before clone ??
+        // TODO monotonicity check.  before clone ?? It seems alpha is sorted.
         let mut alpha_sorted = alpha.clone();
-        for i in 0..n as usize {
+        let s = m.min(k+l) as usize;
+        let k_1 = k as usize;
+ /*        for i in k_1..s {
+            log::debug!("i {} , permuta[i] {}", i , permuta[i]);
             alpha_sorted.swap(i, permuta[i] as usize);
-        } 
-        for i in 1..n as usize {
-            if alpha_sorted[i] < alpha_sorted[i-1] {
-                log::error!("alpha_sorted non decreasing at i : {}  {}  {}", i, alpha_sorted[i], alpha_sorted[i-1]);
+        }  */
+        for i in k_1+1..s {
+            if alpha[i] > alpha[i-1] {
+                log::error!("alpha non decreasing at i : {}  {}  {}", i, alpha[i], alpha[i-1]);
                 panic!("non sorted alpha");
             }
         }
-        // now we must fill v1, v2 and commonx
-        panic!("not yet implemented");
+        // possibly commonx (or Q in Lapack docs) but here we do not keep it
     }  // end of GSvdResult::init_from_lapack
+
+    // debug utility for tests!
+    fn dump_u(&self) {
+        if self.v1.is_none() {
+            return;
+        }
+        let u = self.v1.as_ref().unwrap();
+        println!("dumping U");
+        for i in 0..u.dim().0 {
+            println!();
+            for j in 0..u.dim().1 {
+                print!("{:.3e} ", u[[i,j]]);
+            }
+        }
+    }  // end of dump_u
+
+    fn check_u_orthogonal(&self) {
+        if self.v1.is_none() {
+            return;
+        }
+        let u = self.v1.as_ref().unwrap();
+        let id : Array2<F> = u * &u.t();       
+        println!("dumping tu*u");
+        for i in 0..id.dim().0 {
+            println!();
+            for j in 0..id.dim().1 {
+                print!("{:.3e} ", id[[i,j]]);
+            }
+        }
+    }  // end of check_u_orthogonal
+
 } // end of impl block for GSvdResult
 
 
@@ -247,7 +293,7 @@ impl  <'a, F> GSvdApprox<'a, F>
         };
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n
         // We are at step iv) of algo 2.4 of Wei and al.
-        // See rust doc https://docs.rs/lapacke/latest/lapacke/fn.cggsvd3_work.html and
+        // See rust doc https://docs.rs/lapacke/latest/lapacke/fn.dggsvd3.html and
         // fortran https://www.netlib.org/lapack/lug/node36.html#1815 but new function is (s|d)ggsvd3
         //
         // Lapack definition of GSVD is in the following link:
@@ -259,22 +305,22 @@ impl  <'a, F> GSvdApprox<'a, F>
         let (a_nbrow, a_nbcol) = a.dim();
         let jobu = b'U';
         let jobv = b'V';
-        let jobq = b'N'; // Q is large we do not need it, we do not compute it
+        let jobq = b'N';        // Q is large we do not need it, we do not compute it
         assert_eq!(a_nbcol, b.dim().1); // check m and n have the same number of columns.
         let mut k : i32 = 0;
         let mut l : i32 = 0;
-        // TODO check lda ...
-        // Caution our matrix are C (row) ordered so lda si 1. but we want to send the transpose (!) so lda is a_nbrow
-        let lda : i32 = a_nbcol as i32;
+        // for lda  see lapacke interface  : http://www.netlib.org/lapack/lapacke.html#_array_arguments
+        // Caution our matrix are C (row) ordered so lda is nbcol. but we want to send the transpose (!) so lda is a_nbrow
+        let lda : i32 = a_nbrow as i32;
         let b_dim = b.dim();
-        // caution our matrix are C (row) ordered so lda si 1. but we want to send the transpose (!) so lda is a_nbrow
+        // caution our matrix are C (row) ordered so lda is nbcol. but we want to send the transpose (!) so lda is a_nbrow
         let ldb : i32 = b_dim.0 as i32;
         let ires: i32;
-        let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A
-        let ldv = a_nbrow as i32;
+        let ldu = lda;  // TODO check that : as we compute U , ldu must be greater than nb rows of A
+        let ldv = ldb;
         //
-        let ldq = 0;  // as we do not ask for Q
-        let mut iwork = Vec::<i32>::with_capacity(a_nbcol);
+        let ldq : i32 = a_nbcol as i32;  // as we do not ask for Q but test test_lapack_array showed we cannot set to 1!
+        let mut iwork = Array1::<i32>::zeros(a_nbcol);
         let u : Array2::<F>;
         let v : Array2::<F>;
         let alpha : Array1::<F>;
@@ -301,7 +347,7 @@ impl  <'a, F> GSvdApprox<'a, F>
                         u_f32.as_slice_mut().unwrap(), ldu,
                         v_f32.as_slice_mut().unwrap(), ldv,
                         q_f32.as_mut_slice(), ldq,
-                        iwork.as_mut_slice());
+                        iwork.as_slice_mut().unwrap());
                 if ires == 0 {
                     // but now we must  transform u,v, alpha and beta from f32 to F
                     u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f32.dim(), u_f32.as_ptr() as *const F).into_owned();
@@ -321,7 +367,6 @@ impl  <'a, F> GSvdApprox<'a, F>
                 //
                 ires
             }; // end of unsafe block
-            // test ires
         }  // end case f32
         else if TypeId::of::<F>() == TypeId::of::<f64>() {
             let mut alpha_f64 = Vec::<f64>::with_capacity(a_nbcol);
@@ -342,7 +387,7 @@ impl  <'a, F> GSvdApprox<'a, F>
                     u_f64.as_slice_mut().unwrap(), ldu,
                     v_f64.as_slice_mut().unwrap(), ldv,
                     q_f64.as_mut_slice(), ldq,
-                    iwork.as_mut_slice());
+                    iwork.as_slice_mut().unwrap());
                 // but now we must transform u,v, alpha and beta from f64 to F
                 if ires == 0 {
                     u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f64.dim(), u_f64.as_ptr() as *const F).into_owned();
@@ -365,8 +410,7 @@ impl  <'a, F> GSvdApprox<'a, F>
             log::error!("do_approx_gsvd only implemented for f32 and f64");
             panic!();
         }
-        // Ok(())
-        Err(anyhow!("not yet implemented"))
+        Ok(gsvdres)
     }  // end of do_approx_gsvd
 
 } // end of impl block for GSvdApprox
@@ -413,26 +457,26 @@ fn test_lapack_array() {
     let mut b = array![ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
     // run with Array
     let (a_nbrow, a_nbcol) = a.dim();
-    let jobu = b'U';   // we compute U
+    let jobu = 'U' as u8;   // we compute U
     let jobv = b'V';   // we compute V
-    let jobq = b'N';   // Q is large we do not need it, we do not compute it
+    let jobq = 'N' as u8;   // Q is large we do not need it, we do not compute it
     assert_eq!(a_nbcol, b.dim().1); // check m and n have the same number of columns.
     let mut k : i32 = 0;
     let mut l : i32 = 0;
-    let lda : i32 = 1i32;  // our matrix are row ordered!
-    let ldb : i32 = 1;     // our matrix are row ordered!
+    let lda : i32 = a_nbcol as i32;  // our matrix are row ordered and see https://www.netlib.org/lapack/lapacke.html
     let b_dim = b.dim();
-    let mut alpha_f64 = Vec::<f64>::with_capacity(a_nbcol);
-    let mut beta_f64 = Vec::<f64>::with_capacity(a_nbcol);
+    let ldb : i32 = b_dim.1 as i32;     // our matrix are row ordered!
+    let mut alpha_f64 = Array1::<f64>::zeros(a_nbcol);
+    let mut beta_f64 = Array1::<f64>::zeros(a_nbcol);
     let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
     let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
     let mut q_f64 = Vec::<f64>::new(); 
     let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A
     let ldv = a_nbrow as i32;
-    //
-    let ldq = 0;    // as we do not ask for Q
-    let mut iwork = Vec::<i32>::with_capacity(a_nbcol);
-    //
+    // The following deviates from doc http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+    let ldq = a_nbcol as i32;    // we do not ask for Q but ldq must be >= a_nbcol (error msg from LAPACKE_dggsvd3_work)
+    let mut iwork = Array1::<i32>::zeros(a_nbcol);
+    // lda parameter 11, ldv parameter 19  in dggsvd3 and 
     let ires = unsafe {
         let mut a_slice = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f64 , a.len());
         let mut b_slice = std::slice::from_raw_parts_mut(b.as_slice_mut().unwrap().as_ptr() as * mut f64 , b.len()); 
@@ -441,19 +485,27 @@ fn test_lapack_array() {
                 a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b.dim().0.try_into().unwrap(),
                 &mut k, &mut l,
                 a_slice, lda, b_slice, ldb,
-                alpha_f64.as_mut_slice(),beta_f64.as_mut_slice(),
+                alpha_f64.as_slice_mut().unwrap(),beta_f64.as_slice_mut().unwrap(),
                 u_f64.as_slice_mut().unwrap(), ldu,
                 v_f64.as_slice_mut().unwrap(), ldv,
                 q_f64.as_mut_slice(), ldq,
-                iwork.as_mut_slice()
+                iwork.as_slice_mut().unwrap()
         )
     };
     // 
     if ires != 0 {
+        println!("ggsvd3 returned {}", ires);
         log::error!("dggsvd3 returned {}", ires);
         assert!(1==0);
     }
+    log::debug!("dggsvd3 passed");
+    // allocate result
+    let mut gsvdres = GSvdResult::<f64>::new();
+    gsvdres.init_from_lapack(a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b_dim.0.try_into().unwrap(), 
+            u_f64, v_f64, k.into(), l.into(), alpha_f64, beta_f64, iwork);
     // dump results
+    gsvdres.dump_u();
+    gsvdres.check_u_orthogonal();
 } // end of test_lapack_array
 
 
