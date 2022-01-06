@@ -167,10 +167,16 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
             s1_v = alpha.slice(s![k as usize..(m as usize)]);
             s2_v = beta.slice(s![k as usize..(m as usize)]);
         }
-        // a dump if log Debug enabled we dump C and S
+        // a dump if log Debug enabled we dump alpha, beta and C and S in the middle range of alpha and beta
         if log_enabled!(Debug) {
+            for i in 0..k as usize {
+                log::debug!(" i {}, alpha[i] {},  beta[i] {}", i, alpha[i], beta[i]);
+            }
             for i in 0..s1_v.len() {
-                log::debug!(" i {}, S[i] {},  C[i] {}", i, s1_v[i], s2_v[i]);
+                log::debug!(" i {}, C[i] {},  S[i] {}", i, s1_v[i], s2_v[i]);
+            }
+            for i in (k+l).min(m) as usize..n as usize {
+                log::debug!(" i {}, alpha[i] {},  beta[i] {}", i, alpha[i], beta[i]);
             }
         }
         // some checks
@@ -204,7 +210,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     fn dump_u(&self) {
         if self.v1.is_some() {
             let u = self.v1.as_ref().unwrap();
-            println!("dumping U");
+            println!("\n dumping U");
             dump::<F>(&u.view());
         }
     }  // end of dump_u
@@ -218,7 +224,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         }
         if self.v2.is_some() {
             let v = self.v2.as_ref().unwrap();
-            println!("dumping v");
+            println!("\n\n dumping v");
             dump::<F>(&v.view());
             let id : Array2<F> = v.dot(&v.t());       
             println!("\n\n dumping v*tv");
@@ -456,6 +462,7 @@ fn smallmat_to_csr(a : &Array2<f64>) -> CsMat<f64> {
 fn small_lapack_gsvd(a: &mut Array2<f64>, b : &mut Array2<f64>) -> GSvdResult::<f64> {
     //
     let (a_nbrow, a_nbcol) = a.dim();
+    log::debug!("a dims : ({}, {})", a_nbrow, a_nbcol);
     let jobu = 'U' as u8;   // we compute U
     let jobv = b'V';   // we compute V
     let jobq = 'N' as u8;   // Q is large we do not need it, we do not compute it
@@ -464,13 +471,14 @@ fn small_lapack_gsvd(a: &mut Array2<f64>, b : &mut Array2<f64>) -> GSvdResult::<
     let mut l : i32 = 0;
     let lda : i32 = a_nbcol as i32;  // our matrix are row ordered and see https://www.netlib.org/lapack/lapacke.html
     let b_dim = b.dim();
+    log::debug!("b dims : ({}, {})", b_dim.0, b_dim.1);
     let ldb : i32 = b_dim.1 as i32;     // our matrix are row ordered!
     let mut alpha_f64 = Array1::<f64>::zeros(a_nbcol);
     let mut beta_f64 = Array1::<f64>::zeros(a_nbcol);
     let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
     let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
     let mut q_f64 = Vec::<f64>::new(); 
-    let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A
+    let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A lapack doc
     let ldv = b_dim.1 as i32;
     // The following deviates from doc http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
     let ldq = a_nbcol as i32;    // we do not ask for Q but ldq must be >= a_nbcol (error msg from LAPACKE_dggsvd3_work)
@@ -527,7 +535,7 @@ fn test_lapack_gsvd_array_1() {
 
 
 
-
+// test with more columns than rows
 // taken from https://rdrr.io/cran/geigen/man/gsvd.html
 #[test]
 fn test_lapack_gsvd_array_2() {
