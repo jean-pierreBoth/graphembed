@@ -25,7 +25,7 @@ use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
 use num_traits::cast::FromPrimitive;
 
 
-use ndarray::{s,Array1, Array2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
+use ndarray::{s,Array1, Array2, ArrayView2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
 
 use ndarray_linalg::{Scalar, Lapack};
 use std::any::TypeId;
@@ -152,6 +152,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         let s2_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
         // on 0..k  alpha = 1. beta = 0.
         if m-k-l >= 0 {
+            log::debug!("m-k-l >= 0");
             // s1 is alpha[k .. k+l-1] and   s2 is beta[k .. k+l-1], 
             assert!(l > 0);
             assert!(k >= 0);
@@ -159,9 +160,10 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
             s2_v = beta.slice(s![k as usize ..(k+l) as usize]);
         }
         else {
+            log::debug!("m-k-l < 0");
             // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(k >= 0);           
-            assert!(m > k);
+            assert!(m >= k);
             s1_v = alpha.slice(s![k as usize..(m as usize)]);
             s2_v = beta.slice(s![k as usize..(m as usize)]);
         }
@@ -200,37 +202,41 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
 
     // debug utility for tests!
     fn dump_u(&self) {
-        if self.v1.is_none() {
-            return;
-        }
-        let u = self.v1.as_ref().unwrap();
-        println!("dumping U");
-        for i in 0..u.dim().0 {
-            println!();
-            for j in 0..u.dim().1 {
-                print!("{:.3e} ", u[[i,j]]);
-            }
+        if self.v1.is_some() {
+            let u = self.v1.as_ref().unwrap();
+            println!("dumping U");
+            dump::<F>(&u.view());
         }
     }  // end of dump_u
 
-    fn check_u_orthogonal(&self) {
-        if self.v1.is_none() {
-            return;
+    fn check_uv_orthogonal(&self) {
+        if self.v1.is_some() {
+            let u = self.v1.as_ref().unwrap();
+            let id : Array2<F> = u.dot(&u.t());       
+            println!("\n\n dumping u*tu");
+            dump(&id.view());
         }
-        let u = self.v1.as_ref().unwrap();
-        let id : Array2<F> = u * &u.t();       
-        println!("dumping tu*u");
-        for i in 0..id.dim().0 {
-            println!();
-            for j in 0..id.dim().1 {
-                print!("{:.3e} ", id[[i,j]]);
-            }
+        if self.v2.is_some() {
+            let v = self.v2.as_ref().unwrap();
+            println!("dumping v");
+            dump::<F>(&v.view());
+            let id : Array2<F> = v.dot(&v.t());       
+            println!("\n\n dumping v*tv");
+            dump(&id.view());
         }
     }  // end of check_u_orthogonal
 
 } // end of impl block for GSvdResult
 
 
+fn dump<F>(a : &ArrayView2<F>) where F : Float + Lapack + Scalar {
+    for i in 0..a.dim().0 {
+        println!();
+        for j in 0..a.dim().1 {
+            print!("{:.3e} ", a[[i,j]]);
+        }
+    }
+} // end of dump
 
 impl  <'a, F> GSvdApprox<'a, F>  
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
@@ -444,18 +450,11 @@ fn smallmat_to_csr(a : &Array2<f64>) -> CsMat<f64> {
 }
 
 
-// small example from https://fr.mathworks.com/help/matlab/ref/gsvd.html
 // with more rows than columns.run in precision mode
 
 
-#[test]
-// a test to check rust lapack interface
-fn test_lapack_array() {
-    log_init_test();
+fn small_lapack_gsvd(a: &mut Array2<f64>, b : &mut Array2<f64>) -> GSvdResult::<f64> {
     //
-    let mut a = array![ [1., 6., 11.], [2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
-    let mut b = array![ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
-    // run with Array
     let (a_nbrow, a_nbcol) = a.dim();
     let jobu = 'U' as u8;   // we compute U
     let jobv = b'V';   // we compute V
@@ -472,7 +471,7 @@ fn test_lapack_array() {
     let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
     let mut q_f64 = Vec::<f64>::new(); 
     let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A
-    let ldv = a_nbrow as i32;
+    let ldv = b_dim.1 as i32;
     // The following deviates from doc http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
     let ldq = a_nbcol as i32;    // we do not ask for Q but ldq must be >= a_nbcol (error msg from LAPACKE_dggsvd3_work)
     let mut iwork = Array1::<i32>::zeros(a_nbcol);
@@ -503,12 +502,46 @@ fn test_lapack_array() {
     let mut gsvdres = GSvdResult::<f64>::new();
     gsvdres.init_from_lapack(a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b_dim.0.try_into().unwrap(), 
             u_f64, v_f64, k.into(), l.into(), alpha_f64, beta_f64, iwork);
+    //
+    gsvdres
+}   // end of small_lapack_gsvd
+
+
+
+
+
+
+#[test]
+// a test to check rust lapack interface more rows than columns
+// small example from https://fr.mathworks.com/help/matlab/ref/gsvd.html
+fn test_lapack_gsvd_array_1() {
+    log_init_test();
+    //
+    let mut a = array![ [1., 6., 11.], [2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mut b = array![ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    let gsvdres = small_lapack_gsvd(&mut a, &mut b);
     // dump results
     gsvdres.dump_u();
-    gsvdres.check_u_orthogonal();
-} // end of test_lapack_array
+    gsvdres.check_uv_orthogonal();
+} // end of test_lapack_gsvd_array
 
 
+
+
+// taken from https://rdrr.io/cran/geigen/man/gsvd.html
+#[test]
+fn test_lapack_gsvd_array_2() {
+    log_init_test();
+    //
+    let mut a = array![ [ 1. , 2. , 3. , 3.,  2. , 1.] , [ 4. , 5. , 6. , 7. , 8., 8.]   ];
+    let mut b = array![ [1., 2., 3., 4., 5., 6.] , 
+                                                [ 7. , 8., 9., 10., 11., 12.] , 
+                                                [ 13. , 14., 15., 16., 17., 18.]   ];
+    let gsvdres = small_lapack_gsvd(&mut a, &mut b);
+    // dump results
+    gsvdres.dump_u();
+    gsvdres.check_uv_orthogonal();
+} // end of test_lapack_gsvd_array_2
 
 
 fn test_gsvd_full_precision_1() {
