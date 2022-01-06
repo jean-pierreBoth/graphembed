@@ -16,13 +16,13 @@
 // ndarray::ScalarOperand provides array * F
 // ndarray_linalg::Scalar provides Exp notation + Display + Debug + Serialize and sum on iterators
 use log::Level::Debug;
-use log::{debug, log_enabled};
+use log::{log_enabled};
 
 
-use anyhow::{Error, anyhow};
+use anyhow::{anyhow};
 
 use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
-use num_traits::cast::FromPrimitive;
+//use num_traits::cast::FromPrimitive;
 
 
 use ndarray::{s,Array1, Array2, ArrayView2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
@@ -143,7 +143,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         // now we must decode depending upon k and l values, we use the lapack doc at :
         // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
         //
-        log::debug!("m : {}, n : {}, k : {}, l : {} ", m, n, k, l);
+        log::debug!("m : {}, n : {}, p : {}, k : {}, l : {} ", m, n, p, k, l);
         assert!(m >= 0);
         assert!(l >= 0);
         assert!(k >= 0);
@@ -187,8 +187,8 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
             assert!(epsil < 1.0E-5 );
         }
         // we clone
-        let s1 = s1_v.to_owned();
-        let s2 = s2_v.to_owned();
+        self.s1 = Some(s1_v.to_owned());
+        self.s2 = Some(s2_v.to_owned());
         // TODO monotonicity check.  before clone ?? It seems alpha is sorted.
         let mut alpha_sorted = alpha.clone();
         let s = m.min(k+l) as usize;
@@ -215,24 +215,30 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         }
     }  // end of dump_u
 
-    fn check_uv_orthogonal(&self) {
+    // we check that u and v are orthogonal
+    fn check_uv_orthogonal(&self) -> Result<(),()> {
         if self.v1.is_some() {
             let u = self.v1.as_ref().unwrap();
-            let id : Array2<F> = u.dot(&u.t());       
-            println!("\n\n dumping u*tu");
-            dump(&id.view());
+            let res = check_orthogonality::<F>(u);
+            if res.is_err() {
+                return res;
+            }
         }
         if self.v2.is_some() {
             let v = self.v2.as_ref().unwrap();
             println!("\n\n dumping v");
             dump::<F>(&v.view());
-            let id : Array2<F> = v.dot(&v.t());       
-            println!("\n\n dumping v*tv");
-            dump(&id.view());
+            let res = check_orthogonality::<F>(v);
+            if res.is_err() {
+                return res;
+            }
         }
+        //
+        Ok(())
     }  // end of check_u_orthogonal
 
 } // end of impl block for GSvdResult
+
 
 
 fn dump<F>(a : &ArrayView2<F>) where F : Float + Lapack + Scalar {
@@ -243,6 +249,36 @@ fn dump<F>(a : &ArrayView2<F>) where F : Float + Lapack + Scalar {
         }
     }
 } // end of dump
+
+
+
+fn check_orthogonality<F>(u: &Array2<F>) -> Result<(),()> 
+             where F : Float + Lapack + Scalar {
+    //
+    let epsil = 1.0E-5;
+    //
+    let id : Array2<F> = u.dot(&u.t()); 
+    if log_enabled!(Debug) {
+        dump::<F>(&id.view());
+    }
+    let n = id.dim().0;
+    for i in 0..n {
+        if (1. - id[[i,i]].to_f64().unwrap()).abs() > epsil {
+            log::error!("check_orthogonality failed at ({},{})", i,i);
+            return Err(());
+        }
+        for j in 0..i {
+            if (id[[i,j]].to_f64().unwrap()).abs() > epsil {
+                log::error!("check_orthogonality failed at ({},{})", i,j);
+                return Err(());
+            }                    
+        }
+    }       
+    //
+    Ok(())
+}  // end check orthogonality
+
+
 
 impl  <'a, F> GSvdApprox<'a, F>  
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
@@ -327,9 +363,9 @@ impl  <'a, F> GSvdApprox<'a, F>
         let b_dim = b.dim();
         // caution our matrix are C (row) ordered so lda is nbcol. but we want to send the transpose (!) so lda is a_nbrow
         let ldb : i32 = b_dim.1 as i32;
-        let ires: i32;
+        let _ires: i32;
         let ldu = a_nbrow as i32;  // ldu must be greater equal nb rows of A.  as U = (a_nbrow, a_nbrow)
-        let ldv = b_dim.1 as i32;  // ldv is b_nbcol as V = (b_nbcol, b_nbcol)
+        let ldv = b_dim.0 as i32;  // ldv is b_nbcol as V = (b_nbcol, b_nbcol)
         //
         let ldq : i32 = a_nbcol as i32;  // as we do not ask for Q but test test_lapack_array showed we cannot set to 1!
         let mut iwork = Array1::<i32>::zeros(a_nbcol);
@@ -343,9 +379,9 @@ impl  <'a, F> GSvdApprox<'a, F>
             let mut alpha_f32 = Vec::<f32>::with_capacity(a_nbcol);
             let mut beta_f32 = Vec::<f32>::with_capacity(a_nbcol);
             let mut u_f32= Array2::<f32>::zeros((a_nbrow, a_nbrow));
-            let mut v_f32= Array2::<f32>::zeros((b_dim.1, b_dim.1));
+            let mut v_f32= Array2::<f32>::zeros((b_dim.0, b_dim.0));
             let mut q_f32 = Vec::<f32>::new();
-            ires = unsafe {
+            _ires = unsafe {
                 // we must cast a and b to f32 slices!! unsafe but we know our types with TypeId
                 let mut af32 = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f32 , a.len());
                 let mut bf32 = std::slice::from_raw_parts_mut(b.as_slice_mut().unwrap().as_ptr() as * mut f32 , b.len());
@@ -364,14 +400,14 @@ impl  <'a, F> GSvdApprox<'a, F>
                     // but now we must  transform u,v, alpha and beta from f32 to F
                     u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f32.dim(), u_f32.as_ptr() as *const F).into_owned();
                     v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f32.dim(), v_f32.as_ptr() as *const F).into_owned();
-                    alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f32.len()),alpha_f32.as_ptr() as *const F).into_owned();
-                    beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f32.len()),beta_f32.as_ptr() as *const F).into_owned();
+                    alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr(alpha_f32.len(),alpha_f32.as_ptr() as *const F).into_owned();
+                    beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr(beta_f32.len(),beta_f32.as_ptr() as *const F).into_owned();
                     // convert usize to i64 as matrix sizes surely permits that
                     gsvdres.init_from_lapack(a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap() , b_dim.0.try_into().unwrap(), 
                                 u, v, k as i64, l as i64 , alpha , beta, iwork);
                 }
                 else if ires == 1 {
-                    return Err(anyhow!("lapack failed to converge"));
+                    return Err(anyhow!("lapack for f64 failed to converge"));
                 }
                 else if ires < 0 {
                     return Err(anyhow!("argument {} had an illegal value", -ires));
@@ -384,9 +420,9 @@ impl  <'a, F> GSvdApprox<'a, F>
             let mut alpha_f64 = Vec::<f64>::with_capacity(a_nbcol);
             let mut beta_f64 = Vec::<f64>::with_capacity(a_nbcol);
             let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
-            let mut v_f64= Array2::<f64>::zeros((b_dim.1, b_dim.1));
+            let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
             let mut q_f64 = Vec::<f64>::new(); 
-            ires = unsafe {
+            _ires = unsafe {
                 let mut af64 = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f64 , a.len());
                 let mut bf64 = std::slice::from_raw_parts_mut(b.as_slice_mut().unwrap().as_ptr() as * mut f64 , b.len()); 
                 let ires = lapacke::dggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
@@ -404,13 +440,13 @@ impl  <'a, F> GSvdApprox<'a, F>
                 if ires == 0 {
                     u = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(u_f64.dim(), u_f64.as_ptr() as *const F).into_owned();
                     v = ndarray::ArrayView::<F, Ix2>::from_shape_ptr(v_f64.dim(), v_f64.as_ptr() as *const F).into_owned();
-                    alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((alpha_f64.len()),alpha_f64.as_ptr() as *const F).into_owned();
-                    beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr((beta_f64.len()),beta_f64.as_ptr() as *const F).into_owned();
+                    alpha = ndarray::ArrayView::<F, Ix1>::from_shape_ptr(alpha_f64.len(),alpha_f64.as_ptr() as *const F).into_owned();
+                    beta = ndarray::ArrayView::<F, Ix1>::from_shape_ptr(beta_f64.len(),beta_f64.as_ptr() as *const F).into_owned();
                     gsvdres.init_from_lapack(a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap() , b_dim.0.try_into().unwrap(), 
                             u, v, k as i64, l as i64 , alpha , beta, iwork);
                 }
                 else if ires == 1 {
-                    return Err(anyhow!("lapack failed to converge"));
+                    return Err(anyhow!("lapack for f32 failed to converge"));
                 }
                 else if ires < 0 {
                     return Err(anyhow!("argument {} had an illegal value", -ires));
@@ -476,10 +512,10 @@ fn small_lapack_gsvd(a: &mut Array2<f64>, b : &mut Array2<f64>) -> GSvdResult::<
     let mut alpha_f64 = Array1::<f64>::zeros(a_nbcol);
     let mut beta_f64 = Array1::<f64>::zeros(a_nbcol);
     let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
-    let mut v_f64= Array2::<f64>::zeros((b_dim.1, b_dim.1));
+    let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
     let mut q_f64 = Vec::<f64>::new(); 
     let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A lapack doc
-    let ldv = b_dim.1 as i32;
+    let ldv = b_dim.0 as i32;
     // The following deviates from doc http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
     let ldq = a_nbcol as i32;    // we do not ask for Q but ldq must be >= a_nbcol (error msg from LAPACKE_dggsvd3_work)
     let mut iwork = Array1::<i32>::zeros(a_nbcol);
@@ -530,7 +566,8 @@ fn test_lapack_gsvd_array_1() {
     let gsvdres = small_lapack_gsvd(&mut a, &mut b);
     // dump results
     gsvdres.dump_u();
-    gsvdres.check_uv_orthogonal();
+    let res = gsvdres.check_uv_orthogonal();
+    assert!(res.is_ok());
 } // end of test_lapack_gsvd_array
 
 
@@ -548,7 +585,8 @@ fn test_lapack_gsvd_array_2() {
     let gsvdres = small_lapack_gsvd(&mut a, &mut b);
     // dump results
     gsvdres.dump_u();
-    gsvdres.check_uv_orthogonal();
+    let res = gsvdres.check_uv_orthogonal();
+    assert!(res.is_ok());
 } // end of test_lapack_gsvd_array_2
 
 
