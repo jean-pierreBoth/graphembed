@@ -323,13 +323,13 @@ impl  <'a, F> GSvdApprox<'a, F>
         let mut l : i32 = 0;
         // for lda  see lapacke interface  : http://www.netlib.org/lapack/lapacke.html#_array_arguments
         // Caution our matrix are C (row) ordered so lda is nbcol. but we want to send the transpose (!) so lda is a_nbrow
-        let lda : i32 = a_nbrow as i32;
+        let lda : i32 = a_nbcol as i32;
         let b_dim = b.dim();
         // caution our matrix are C (row) ordered so lda is nbcol. but we want to send the transpose (!) so lda is a_nbrow
-        let ldb : i32 = b_dim.0 as i32;
+        let ldb : i32 = b_dim.1 as i32;
         let ires: i32;
-        let ldu = lda;  // TODO check that : as we compute U , ldu must be greater than nb rows of A
-        let ldv = ldb;
+        let ldu = a_nbrow as i32;  // ldu must be greater equal nb rows of A.  as U = (a_nbrow, a_nbrow)
+        let ldv = b_dim.1 as i32;  // ldv is b_nbcol as V = (b_nbcol, b_nbcol)
         //
         let ldq : i32 = a_nbcol as i32;  // as we do not ask for Q but test test_lapack_array showed we cannot set to 1!
         let mut iwork = Array1::<i32>::zeros(a_nbcol);
@@ -343,7 +343,7 @@ impl  <'a, F> GSvdApprox<'a, F>
             let mut alpha_f32 = Vec::<f32>::with_capacity(a_nbcol);
             let mut beta_f32 = Vec::<f32>::with_capacity(a_nbcol);
             let mut u_f32= Array2::<f32>::zeros((a_nbrow, a_nbrow));
-            let mut v_f32= Array2::<f32>::zeros((b_dim.0, b_dim.0));
+            let mut v_f32= Array2::<f32>::zeros((b_dim.1, b_dim.1));
             let mut q_f32 = Vec::<f32>::new();
             ires = unsafe {
                 // we must cast a and b to f32 slices!! unsafe but we know our types with TypeId
@@ -384,7 +384,7 @@ impl  <'a, F> GSvdApprox<'a, F>
             let mut alpha_f64 = Vec::<f64>::with_capacity(a_nbcol);
             let mut beta_f64 = Vec::<f64>::with_capacity(a_nbcol);
             let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
-            let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
+            let mut v_f64= Array2::<f64>::zeros((b_dim.1, b_dim.1));
             let mut q_f64 = Vec::<f64>::new(); 
             ires = unsafe {
                 let mut af64 = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as * mut f64 , a.len());
@@ -476,7 +476,7 @@ fn small_lapack_gsvd(a: &mut Array2<f64>, b : &mut Array2<f64>) -> GSvdResult::<
     let mut alpha_f64 = Array1::<f64>::zeros(a_nbcol);
     let mut beta_f64 = Array1::<f64>::zeros(a_nbcol);
     let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
-    let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
+    let mut v_f64= Array2::<f64>::zeros((b_dim.1, b_dim.1));
     let mut q_f64 = Vec::<f64>::new(); 
     let ldu = a_nbrow as i32;  // as we compute U , ldu must be greater than nb rows of A lapack doc
     let ldv = b_dim.1 as i32;
