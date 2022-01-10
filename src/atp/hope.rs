@@ -157,6 +157,7 @@ fn estimate_spectral_radius_fullmat<F>(mat : &Array2<F>) -> f64
 } // end of estimate_spectral_radius_fullmat
 
 
+// useful for Katz Index
 fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64) -> MatRepr<F> 
         where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
             //

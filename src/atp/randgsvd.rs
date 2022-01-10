@@ -103,7 +103,7 @@ impl GSvdOptParams {
 
 
 #[cfg_attr(doc, katexit::katexit)]
-/// For a problem described in GSvdApprox by the pair of matrix mat_1 (m,n) and mat_2 (p,n)
+/// For a problem Satandard Gvsd problem described by the pair of matrix mat_1 (m,n) and mat_2 (p,n)
 /// we get:  
 /// 
 ///  - 2 orthogonal matrices  $V_{1}$  and  $V_{2}$
@@ -210,7 +210,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     fn dump_u(&self) {
         if self.v1.is_some() {
             let u = self.v1.as_ref().unwrap();
-            println!("\n dumping U");
+            log::debug!("\n dumping U");
             dump::<F>(&u.view());
         }
     }  // end of dump_u
@@ -226,8 +226,10 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         }
         if self.v2.is_some() {
             let v = self.v2.as_ref().unwrap();
-            println!("\n\n dumping v");
-            dump::<F>(&v.view());
+            if log_enabled!(Debug) {
+                println!("\n\n dumping v");
+                dump::<F>(&v.view());
+            }
             let res = check_orthogonality::<F>(v);
             if res.is_err() {
                 return res;
@@ -259,6 +261,7 @@ fn check_orthogonality<F>(u: &Array2<F>) -> Result<(),()>
     //
     let id : Array2<F> = u.dot(&u.t()); 
     if log_enabled!(Debug) {
+        println!("\n\n\n dump a*t(a)");
         dump::<F>(&id.view());
     }
     let n = id.dim().0;
@@ -461,6 +464,10 @@ impl  <'a, F> GSvdApprox<'a, F>
         Ok(gsvdres)
     }  // end of do_approx_gsvd
 
+    // compute the approximated gsvd, builds the final embedding vectors.
+    fn compute_embedding(&self) {
+
+    }
 } // end of impl block for GSvdApprox
 
 
