@@ -21,7 +21,8 @@ use sprs::{CsMat, TriMatBase};
 
 use annembed::tools::svdapprox::{MatRepr, MatMode, RangePrecision};
 
-use super::randgsvd::{GSvdOptParams, GSvdApprox};
+use super::randgsvd::{GSvdApprox};
+use super::gsvd::{GSvdOptParams};
 /// Structure for graph asymetric embedding with approximate random generalized svd to get an estimate of rank necessary
 /// to get a required precision in the SVD. 
 /// The structure stores the adjacency matrix in a full (ndarray) or compressed row storage format (using crate sprs).
