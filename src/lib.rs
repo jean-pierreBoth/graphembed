@@ -27,4 +27,6 @@ pub mod atp;
 pub mod sketching;
 
 pub mod embedding;
+
+pub mod renormalize;
 // pub mod sketching;
