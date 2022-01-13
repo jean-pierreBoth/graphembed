@@ -68,8 +68,6 @@ impl <F> Hope<F>  where
     ///     factor must be between 0. and 1.
     fn make_katz_problem(&self, factor : f64) -> GSvdApprox<F> {
         // enforce rule on factor
-
-        //
         let radius = match self.mat.get_data() {
             MatMode::FULL(mat) =>  { estimate_spectral_radius_fullmat(&mat) },
             MatMode::CSR(csmat) =>  { estimate_spectral_radius_csmat(&csmat)},
@@ -89,7 +87,7 @@ impl <F> Hope<F>  where
         let mat1 = self.mat.clone();
         let opt_params = GSvdOptParams::new(beta, true, 1., true);
         // mat2 is moved but the opt parameters 
-        let mat2 = compute_1_minus_beta_mat(&self.mat, beta);
+        let mat2 = compute_1_minus_beta_mat(&self.mat, beta, true);
         let gsvdapprox = GSvdApprox::new(mat1, mat2 , rangeprecision, Some(opt_params));
         //
         return gsvdapprox;
@@ -99,6 +97,7 @@ impl <F> Hope<F>  where
     /// Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β P, (1. - β) * I). 
     /// Has a good performance on link prediction Cf [https://dl.acm.org/doi/10.1145/3012704]
     /// A survey of link prediction in complex networks. Martinez, Berzal ACM computing Surveys 2016.
+    // In fact we go to the Gsvd with the pair (transpose((1. - β) * I)), transpose(I - β P))
     fn make_rooted_pagerank_problem(&mut self, factor : f64) -> GSvdApprox<F> where
                     for<'r> F: std::ops::MulAssign<&'r F>  {
         //
@@ -109,7 +108,7 @@ impl <F> Hope<F>  where
         //
         crate::renormalize::matrepr_row_normalization(& mut self.mat);
         // MMg is I - alfa * P where P is normalizez adjacency matrix to a probability matrix
-        let mat1 = compute_1_minus_beta_mat(&self.mat, factor);
+        let mat1 = compute_1_minus_beta_mat(&self.mat, factor, true);
         // compute Ml = (1-alfa) I
         let mat2 = match self.mat.get_data() {
             MatMode::FULL(_) => { 
@@ -145,8 +144,8 @@ impl <F> Hope<F>  where
             HopeMode::KATZ => { self.make_katz_problem(dampening_f) },
             HopeMode::RPR => { self.make_rooted_pagerank_problem(dampening_f) },
         };
-       // now we can approximately solve svd problem
-       let _gsvd_res = gsvd_pb.do_approx_gsvd();    
+        // now we can approximately solve svd problem
+        let _gsvd_res = gsvd_pb.do_approx_gsvd();    
         // now we have everything to construct the embedding
 
     }  // end of compute_embedding
@@ -212,16 +211,24 @@ fn estimate_spectral_radius_fullmat<F>(mat : &Array2<F>) -> f64
 } // end of estimate_spectral_radius_fullmat
 
 
-// useful for Katz Index
-fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64) -> MatRepr<F> 
+// useful for Katz Index and Rooted Page Rank
+// return Id -  β * mat if transpose == false or Id -  β * transpose(mat) if transpose == true
+// cannot avoid allocations (See as Katz Index and Rooted Page Rank needs a reallocation for a different mat each! which
+// forbid using reference in GSvdApprox if we want to keep one definition a GSvdApprox)
+fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) -> MatRepr<F> 
         where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
-            //
+    //
     match mat.get_data() {
         MatMode::FULL(mat) => {
             let new_mat = mat * F::from_f64(beta).unwrap();
-            return MatRepr::from_array2(new_mat);
+            if transpose {
+                return MatRepr::from_array2(new_mat.t().to_owned());
+            }
+            else {
+                return MatRepr::from_array2(new_mat);
+            }
         },
-        // TODO can we do better ?
+        // 
         MatMode::CSR(mat)  => { 
             log::trace!("compute_1_minus_beta_mat");
             assert_eq!(mat.rows(), mat.cols());
@@ -236,10 +243,15 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64) -> MatRepr<F>
             let beta_f = F::from_f64(beta).unwrap();
             while let Some((val, (row, col))) = iter.next() {
                 if row != col {
-                    rows.push(row);
-                    cols.push(col);
+                    if transpose {
+                        rows.push(col);
+                        cols.push(row);
+                    }
+                    else {
+                        rows.push(row);
+                        cols.push(col);                        
+                    }
                     values.push(- beta_f * *val);
-
                 } else {
                     values.push(F::one() - beta_f * *val);
                     already_diag[row] = 1;

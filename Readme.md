@@ -18,7 +18,8 @@ An extension of the paper is also implemented to get asymetric embedding for dir
     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
 
 The main idea of the paper is to preserve multi-hop proximity and constructing an asymetric graph embedding. 
-It relies on Generalized SVD. The approximation of the generalized we used is based on randomization 
+It relies on Generalized SVD. The dimension required for the embedding can be estimated from the degree of approximation of the SVD.  
+The approximation of the generalized SVD we used is based on randomization 
 as described in 
 *Randomized General Singular Value Decomposition CAMC 2021*
     W. Wei H. Zhang, X. Yang, X. Chen

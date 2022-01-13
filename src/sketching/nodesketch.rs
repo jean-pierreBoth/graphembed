@@ -12,6 +12,8 @@ use ahash::{AHasher};
 use std::collections::HashMap;
 use probminhash::probminhasher::*;
 
+use crate::embedding::Embedding;
+
 use super::sla::*;
 
 /// Compute the sketch of node proximity for a (undirected) graph.

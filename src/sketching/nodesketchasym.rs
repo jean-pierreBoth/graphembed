@@ -12,12 +12,14 @@ use ahash::{AHasher};
 use std::collections::HashMap;
 use probminhash::probminhasher::*;
 
+use crate::embedding::EmbeddingAsym;
+
 use super::sla::*;
 
-/// Compute the sketch of node proximity for a (undirected) graph.
+/// Compute the sketch of node proximity for a directed graph.
 /// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
 /// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
-pub struct NodeSketchD {
+pub struct NodeSketchAsym {
     /// size of the skecth
     sketch_size: usize,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
@@ -33,10 +35,10 @@ pub struct NodeSketchD {
     /// sketches_out state at previous iterations 
     previous_sketches_out : Array2<usize>, 
 
-} // end of struct NodeSketchD
+} // end of struct NodeSketchAsym
 
 
-impl NodeSketchD {
+impl NodeSketchAsym {
 
     pub fn new(sketch_size : usize, decay : f64, trimat : &mut  TriMatI<f64, usize>) -> Self {
         // TODO can adjust weight depending on context?
@@ -45,7 +47,7 @@ impl NodeSketchD {
         let previous_sketches_in = Array2::zeros((csrmat.cols(), sketch_size));
         let sketches_out = Array2::zeros((csrmat.cols(), sketch_size));
         let previous_sketches_out = Array2::zeros((csrmat.cols(), sketch_size));
-        NodeSketchD{sketch_size, decay, csrmat, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
+        NodeSketchAsym{sketch_size, decay, csrmat, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
     }
     
     /// sketch of a row of initial self loop augmented matrix. Returns a vector of size self.sketch_size
@@ -71,7 +73,7 @@ impl NodeSketchD {
 
 
 
-} // end of impl NodeSketch
+} // end of impl NodeSketchAsym
 
 
 

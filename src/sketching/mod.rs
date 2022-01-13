@@ -2,6 +2,6 @@
 
 pub mod nodesketch;
 
-pub mod nodesketchd;
+pub mod nodesketchasym;
 
 pub mod sla;

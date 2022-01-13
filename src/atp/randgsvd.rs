@@ -2,7 +2,8 @@
 //! randomized svd.
 //! We implement algorithm 2.4 from : 
 //!     *Randomized General Singular Value Decomposition CAMC 2021*
-//!     W. Wei, H. Zhang, X. Yang, X. Chen
+//!     W. Wei, H. Zhang, X. Yang, X. Chen.  
+//! 
 //! We build upon the crate annembed which give us algo 2.3 of the same paper
 //! (which corresponds to algo 4.2 of Halko-Tropp)
 
@@ -50,16 +51,18 @@ use annembed::tools::svdapprox::*;
 
 
 #[cfg_attr(doc, katexit::katexit)]
-/// We searh a generalized svd for the pair of matrix mat_1 (m,n) and mat_2 (p,n)
+/// We search a generalized svd for the pair of matrix mat_1 (m,n) and mat_2 (p,n)
 /// i.e we search 2 orthogonal matrices $V_1$ and $V_2$ , 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$
 /// and one non singular matrix X such that:
-/// $$ V_{1}^{t} * mat1 * X = \Sigma_{1} \space and \space
 /// 
-///     V_{2}^{t} * mat2 * X = \Sigma_{2} $$
-///  
-/// The optional parameters can be used to modify (by multiplication or transposition) the 2 matrices mat1 and mat2.  
-/// This avoids some matrix reallocations befote entering lapack.  
-/// They are described in the GSvdOptParams documentation.
+///  $$ 
+///     V_{1}^{t} * mat1 * X = \Sigma_{1}
+///  $$
+///     and 
+///  $$ 
+///         V_{2}^{t} * mat2 * X = \Sigma_{2}
+///  $$
+///     
 /// 
 /// Most often the matrix representation will be CSR and the precision approximation mode will
 /// be used. But for small graph we can consider the approximation with given target rank
@@ -139,7 +142,7 @@ impl  <F> GSvdApprox<F>
         };
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n
         // We are at step iv) of algo 2.4 of Wei and al.
-        let mut gsvd_pb = GSvd::new(&mut a,&mut b, None);
+        let mut gsvd_pb = GSvd::new(&mut a,&mut b);
         let gsvd_res = gsvd_pb.do_gsvd(); 
         //
         if gsvd_res.is_err() {

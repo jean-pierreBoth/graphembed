@@ -260,10 +260,14 @@ pub(crate) fn check_orthogonality<F>(u: &Array2<F>) -> Result<(),()>
 impl  <'a, F> GSvd<'a, F>  
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
     /// We impose the RangePrecision mode for now.
-    pub fn new(a : &'a mut Array2<F>, b : &'a mut Array2<F>, opt_params : Option<GSvdOptParams>) -> Self {
-        // TODO check for dimensions constraints, and type representation
-
-        return GSvd{a, b, opt_params};
+    pub fn new(a : &'a mut Array2<F>, b : &'a mut Array2<F>) -> Self {
+        // check for dimensions constraints
+        if a.dim().1 != b.dim().1 {
+            log::error!("The two matrices for gsvd must have the same number of columns");
+            println!("The two matrices for gsvd must have the same number of columns");
+            panic!("Error constructiing Gsvd problem");
+        }
+        return GSvd{a, b, opt_params:None};
     } // end of new
 
     /// return optional paramertes if any
