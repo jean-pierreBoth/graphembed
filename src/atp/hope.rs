@@ -13,7 +13,7 @@ use ndarray_linalg::{Scalar, Lapack};
 
 
 
-use num_traits::float::*;    // tp get FRAC_1_PI from FloatConst
+use num_traits::float::*; 
 // use num_traits::cast::FromPrimitive;
 
 use sprs::prod;
@@ -23,6 +23,20 @@ use annembed::tools::svdapprox::{MatRepr, MatMode, RangePrecision};
 
 use super::randgsvd::{GSvdApprox};
 use super::gsvd::{GSvdOptParams};
+
+use crate::embedding::EmbeddingAsym;
+
+///
+/// To specify if we run with Katz index or in Rooted Page Rank 
+pub enum HopeMode {
+    /// 
+    KATZ,
+    /// Rooted Page Rank
+    RPR,
+} // end of HopeMode
+
+
+
 /// Structure for graph asymetric embedding with approximate random generalized svd to get an estimate of rank necessary
 /// to get a required precision in the SVD. 
 /// The structure stores the adjacency matrix in a full (ndarray) or compressed row storage format (using crate sprs).
@@ -34,7 +48,7 @@ pub struct Hope<F> {
 
 
 impl <F> Hope<F>  where
-    F: Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
+    F: Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> {
 
     /// instantiate a Hope problem with the adjacency matrix
     pub fn from_ndarray(mat : Array2<F>) -> Self {
@@ -42,6 +56,9 @@ impl <F> Hope<F>  where
         Hope::<F> {mat}
     }
 
+    pub fn get_nb_nodes(&self) -> usize {
+        self.mat.shape()[0]
+    }
 
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β A, β A). 
     // We must check that beta is less than the spectral radius of adjacency matrix so that M_g is inversible.
@@ -49,8 +66,7 @@ impl <F> Hope<F>  where
 
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
     ///     factor must be between 0. and 1.
-    #[allow(unused)]
-    fn make_katz_problem(&self, factor : f64) {
+    fn make_katz_problem(&self, factor : f64) -> GSvdApprox<F> {
         // enforce rule on factor
 
         //
@@ -62,38 +78,76 @@ impl <F> Hope<F>  where
         let beta = factor / radius;
         // now we can define a GSvdApprox problem
         let epsil = 0.1;
-        let rank_increment = 20;
+        let rank_increment = 50;
         let max_rank = 300;
+        // TODO do we want RangePrecision or RangeRank mode as we now have RangeRank also for csr ...
         let rangeprecision = RangePrecision::new(epsil, rank_increment, max_rank);
         // We must now define mat1 and mat2 (or A and B  in Wei-Zhang paper)
         // mat1 is easy: it is beta * transpose(self.mat), so we define mat1 by &self.mat and adjust optional parameters
         // accordingly.
         // For mat2 it is I - beta * &self.mat, we need to reallocate a matrix
-        let mat1 = &self.mat;
-        // TODO compute mat2
+        let mat1 = self.mat.clone();
         let opt_params = GSvdOptParams::new(beta, true, 1., true);
+        // mat2 is moved but the opt parameters 
         let mat2 = compute_1_minus_beta_mat(&self.mat, beta);
-        let gsvdapprox = GSvdApprox::new(mat1, &mat2 , rangeprecision, Some(opt_params));
-        // now we can solve svd problem
-        let _gsvd_res = gsvdapprox.do_approx_gsvd();
+        let gsvdapprox = GSvdApprox::new(mat1, mat2 , rangeprecision, Some(opt_params));
+        //
+        return gsvdapprox;
     } // end of make_katz_pair
 
 
-    /// 
-    #[allow(unused)]
-    fn make_rooted_pagerank_problem(&self) {
-        panic!("make_rooted_pagerank_problem: not yet implemented");
+    /// Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β P, (1. - β) * I). 
+    /// Has a good performance on link prediction Cf [https://dl.acm.org/doi/10.1145/3012704]
+    /// A survey of link prediction in complex networks. Martinez, Berzal ACM computing Surveys 2016.
+    fn make_rooted_pagerank_problem(&mut self, factor : f64) -> GSvdApprox<F> where
+                    for<'r> F: std::ops::MulAssign<&'r F>  {
+        //
+        let max_rank = 300;
+        // now we can define a GSvdApprox problem
+        let epsil = 0.1;
+        let rank_increment = 50;
+        //
+        crate::renormalize::matrepr_row_normalization(& mut self.mat);
+        // MMg is I - alfa * P where P is normalizez adjacency matrix to a probability matrix
+        let mat1 = compute_1_minus_beta_mat(&self.mat, factor);
+        // compute Ml = (1-alfa) I
+        let mat2 = match self.mat.get_data() {
+            MatMode::FULL(_) => { 
+                    let mut dense = Array2::<F>::eye(self.mat.shape()[0]);
+                    dense *= F::from_f64(1. - factor).unwrap();
+                    MatRepr::<F>::from_array2(dense)
+                },
+            MatMode::CSR(_) =>  {
+                    let mut id =  CsMat::<F>::eye(self.get_nb_nodes());
+                    id.scale(F::one() - F::from_f64(factor).unwrap());
+                    MatRepr::<F>::from_csrmat(id)
+                }
+        };
+        // TODO do we want RangePrecision or RangeRank mode as we now have RangeRank also for csr ...
+        let opt_params = GSvdOptParams::new(1., true, 1., true);
+        let rangeprecision = RangePrecision::new(epsil, rank_increment, max_rank);
+        let gsvdapprox = GSvdApprox::new(mat1, mat2 , rangeprecision, Some(opt_params));
+        //
+        return gsvdapprox;
     } // end of make_rooted_pagerank_problem
 
-    /// computes the embedding.
-    /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
-    ///     factor must be between 0. and 1.
-    /// 
-    pub fn compute_embedding(&self) {
-    
 
-        // transpose and formulate gsvd problem. 
-        // We can now define a GSvdApprox structure
+
+    /// computes the embedding.
+    /// - dampening_factor helps defining the extent to which the multi hop neighbourhood of a node is taken into account 
+    ///   when using the katz index matrix or Rooted Page Rank. Factor must be between 0. and 1.
+    /// 
+    /// *Note that in RPR mode the matrix stored in the Hope structure is renormalized to a transition matrix!!*
+    /// 
+    pub fn compute_embedding(&mut self, mode :HopeMode, dampening_f : f64) {
+        //
+        let gsvd_pb = match mode {
+            HopeMode::KATZ => { self.make_katz_problem(dampening_f) },
+            HopeMode::RPR => { self.make_rooted_pagerank_problem(dampening_f) },
+        };
+       // now we can approximately solve svd problem
+       let _gsvd_res = gsvd_pb.do_approx_gsvd();    
+        // now we have everything to construct the embedding
 
     }  // end of compute_embedding
 }  // end of impl Hope

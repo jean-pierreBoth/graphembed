@@ -45,6 +45,8 @@ use annembed::tools::svdapprox::*;
 
 // We fist implement a Range approximation with a precision criteria as 
 // this one can be done with Sparse Matrix. Moreover it help determine the rank
+// Cannot use references in GSvdApprox beccause depending on Katz index/Rooted PageRank 
+// it is not the same matrices that can be passed by reference!
 
 
 #[cfg_attr(doc, katexit::katexit)]
@@ -62,11 +64,11 @@ use annembed::tools::svdapprox::*;
 /// Most often the matrix representation will be CSR and the precision approximation mode will
 /// be used. But for small graph we can consider the approximation with given target rank
 /// 
-pub struct GSvdApprox<'a, F: Scalar> {
+pub struct GSvdApprox<F: Scalar> {
     /// first matrix we want to approximate range of
-    mat1 : &'a MatRepr<F>,
+    mat1 : MatRepr<F>,
     /// second matrix
-    mat2 : &'a MatRepr<F>,
+    mat2 : MatRepr<F>,
     /// optional parameters
     opt_params : Option<GSvdOptParams>,
     /// approximation mode
@@ -76,10 +78,10 @@ pub struct GSvdApprox<'a, F: Scalar> {
 
 
 
-impl  <'a, F> GSvdApprox<'a, F>  
+impl  <F> GSvdApprox<F>  
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
     /// We impose the RangePrecision mode for now.
-    pub fn new(mat1 : &'a MatRepr<F>, mat2 : &'a MatRepr<F>, precision : RangePrecision, opt_params : Option<GSvdOptParams>) -> Self {
+    pub fn new(mat1 : MatRepr<F>, mat2 : MatRepr<F>, precision : RangePrecision, opt_params : Option<GSvdOptParams>) -> Self {
         // TODO check for dimensions constraints, and type representation
 
         return GSvdApprox{mat1, mat2, opt_params, precision : RangeApproxMode::EPSIL(precision)};
@@ -102,13 +104,13 @@ impl  <'a, F> GSvdApprox<'a, F>
     pub fn do_approx_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
         // We construct an approximation first for mat1 and then for mat2 and with the same precision 
         // criterion
-        let r_approx1 = RangeApprox::new(self.mat1, self.precision);
+        let r_approx1 = RangeApprox::new(&self.mat1, self.precision);
         let  approx1_res = r_approx1.get_approximator();
         if approx1_res.is_none() {
             return Err(anyhow!("approximation of matrix 1 failed"));
         }
         let approx1_res = approx1_res.unwrap();
-        let r_approx2 = RangeApprox::new(self.mat2, self.precision);
+        let r_approx2 = RangeApprox::new(&self.mat2, self.precision);
         let  approx2_res = r_approx2.get_approximator();
         if approx2_res.is_none() {
             return Err(anyhow!("approximation of matrix 2 failed"));
@@ -156,6 +158,7 @@ impl  <'a, F> GSvdApprox<'a, F>
         }
         else {
             // must compute quotient of eigenvalues, check for null right eigenvalue.
+            // possibly compute gsvd residual error.
 
         }
         return Err(anyhow!("compute_embedding not yet implemented")); 
