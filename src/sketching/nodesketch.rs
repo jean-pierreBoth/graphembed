@@ -44,6 +44,7 @@ impl NodeSketch {
     }
     
     /// sketch of a row of initial self loop augmented matrix. Returns a vector of size self.sketch_size
+    /// TODO Loop on i can be made parallel
     fn sketch_slamatrix(&mut self) {
         // We use probminhash3a, allocate a Hash structure
         for i in 0..self.csrmat.rows() {
@@ -69,6 +70,7 @@ impl NodeSketch {
 
 
     // do iteration on sketches
+    // TODO loop on rows must be made parallel, needs just a lock on self.sketches
     fn iteration(&mut self) {
         // now we repeatedly merge csrmat (loop augmented matrix) with sketches
         for (row, row_vec) in self.csrmat.outer_iterator().enumerate() {
@@ -100,6 +102,7 @@ impl NodeSketch {
             // save sketches into previous sketch
             sketch.move_into(self.sketches.row_mut(row));
         }  // end of for on row
+        // TODO transfert to previous sketch.
     } // end of iteration
 
 

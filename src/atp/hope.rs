@@ -20,6 +20,8 @@ use num_traits::float::*;
 use sprs::prod;
 use sprs::{CsMat, TriMatBase};
 
+use std::cmp;
+
 use annembed::tools::svdapprox::{MatRepr, MatMode, RangePrecision};
 
 use super::randgsvd::{GSvdApprox};
@@ -149,9 +151,8 @@ impl <F> Hope<F>  where
             return Err(anyhow!("compute_embedding : call GSvdApprox.do_approx_gsvd failed"));
         }
         let gsvd_res = gsvd_res.unwrap();
-        // now we have everything to construct the embedding, M_g is the first matrix, M_l the second of the Gsvd problem.
+        // Recall M_g is the first matrix, M_l the second of the Gsvd problem.
         // so we need to sort quotients of M_l/M_g eigenvalues i.e s2/s1
-
         let s1 : &Array1<F> = match gsvd_res.get_s1() {
             Some(s) =>  s,
             _ => { return  Err(anyhow!("compute_embedding could not get s1")); },
@@ -170,14 +171,30 @@ impl <F> Hope<F>  where
         };
         //
         assert_eq!(s1.len() , s2.len());
+        // in theory sigma_q should be sorted in decreasing order
         let mut sigma_q = Vec::<F>::with_capacity(s1.len());
         for i in 0..s1.len() {
             log::debug!("s1 : {}, s2 : {}", s1[i], s2[i]);
+            let last = sigma_q.last();
             if s1[i] > F::zero() {
-                sigma_q.push(s2[i]/s1[i]);
+                let new_val = s2[i]/s1[i];
+                if last.is_some() {
+                    if new_val >= *last.unwrap() {
+                        log::error!("non decreasing quotient of eigen values, must implement permutation");
+                        return Err(anyhow!("non decreasing quotient of eigen values"));
+                    }
+                }
+                sigma_q.push(new_val);
+                log::debug!("i {} , s2/s1[i] {}", i , new_val);
             }
         }
-
+        // possible use of a permutation we suppose it is identity
+        // so that the i th larger value is at position permutation[i]
+        let mut permutation = Vec::<usize>::with_capacity(s1.len());
+        for i in 0..s1.len() {
+            permutation.push(i);
+        }
+        // Now we can construct embedding
         //
         return Err(anyhow!("compute_embedding failed"));
     }  // end of compute_embedding
@@ -306,6 +323,18 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
         },
     }  // end of match
 } // end of compute_1_minus_beta_mat
+
+
+// makes an ordering on Float by putting Nan at end of sort.
+// rust sorts in Increasing order so we reverse Greater and Less
+fn decreasing_sort_nans_first<F : Float>(a: &F, b: &F) -> cmp::Ordering {
+    match (a, b) {
+        (x, y) if x.is_nan() && y.is_nan() => cmp::Ordering::Equal,
+        (x, _) if x.is_nan() => cmp::Ordering::Less,
+        (_, y) if y.is_nan() => cmp::Ordering::Greater,
+        (_, _) => b.partial_cmp(a).unwrap()
+    }
+}  // end of decreasing_sort_nans_first
 
 
 //========================================================================================
