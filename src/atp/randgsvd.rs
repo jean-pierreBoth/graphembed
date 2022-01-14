@@ -82,11 +82,15 @@ pub struct GSvdApprox<F: Scalar> {
 
 
 impl  <F> GSvdApprox<F>  
-    where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
-    /// We impose the RangePrecision mode for now.
+    where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    /// TODO We impose the RangePrecision mode for now. No more necessary, to be changed
     pub fn new(mat1 : MatRepr<F>, mat2 : MatRepr<F>, precision : RangePrecision, opt_params : Option<GSvdOptParams>) -> Self {
-        // TODO check for dimensions constraints, and type representation
-
+        // check for dimensions constraints
+        if mat1.shape()[1] != mat2.shape()[1] {
+            log::error!("The two matrices for GSvdApprox must have the same number of columns");
+            println!("The two matrices for GSvdApprox must have the same number of columns");
+            panic!("Error constructiing Gsvd problem");
+        }
         return GSvdApprox{mat1, mat2, opt_params, precision : RangeApproxMode::EPSIL(precision)};
     } // end of new
 
@@ -151,22 +155,6 @@ impl  <F> GSvdApprox<F>
 
         gsvd_res
     }  // end of do_approx_gsvd
-
-    // compute the approximated gsvd, builds the final embedding vectors.
-    fn compute_embedding(&self) -> Result<EmbeddingAsym<F>, anyhow::Error>   {
-        // do an approximate gsvd
-        let gsvd_approx = self.do_approx_gsvd();
-        if gsvd_approx.is_err() {
-            return Err(anyhow!("Gsvd failed")); 
-        }
-        else {
-            // must compute quotient of eigenvalues, check for null right eigenvalue.
-            // possibly compute gsvd residual error.
-
-        }
-        return Err(anyhow!("compute_embedding not yet implemented")); 
-
-    } // end of compute_embedding
 
 
     /// 

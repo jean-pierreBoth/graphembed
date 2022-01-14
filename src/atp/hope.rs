@@ -6,6 +6,7 @@
 //! 
 
 
+use anyhow::{anyhow};
 
 use ndarray::{Array1, Array2};
 
@@ -22,14 +23,13 @@ use sprs::{CsMat, TriMatBase};
 use annembed::tools::svdapprox::{MatRepr, MatMode, RangePrecision};
 
 use super::randgsvd::{GSvdApprox};
-use super::gsvd::{GSvdOptParams};
 
 use crate::embedding::EmbeddingAsym;
 
 ///
 /// To specify if we run with Katz index or in Rooted Page Rank 
 pub enum HopeMode {
-    /// 
+    /// Katz index mode
     KATZ,
     /// Rooted Page Rank
     RPR,
@@ -48,7 +48,7 @@ pub struct Hope<F> {
 
 
 impl <F> Hope<F>  where
-    F: Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> {
+    F: Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
 
     /// instantiate a Hope problem with the adjacency matrix
     pub fn from_ndarray(mat : Array2<F>) -> Self {
@@ -80,18 +80,18 @@ impl <F> Hope<F>  where
         let max_rank = 300;
         // TODO do we want RangePrecision or RangeRank mode as we now have RangeRank also for csr ...
         let rangeprecision = RangePrecision::new(epsil, rank_increment, max_rank);
-        // We must now define mat1 and mat2 (or A and B  in Wei-Zhang paper)
-        // mat1 is easy: it is beta * transpose(self.mat), so we define mat1 by &self.mat and adjust optional parameters
-        // accordingly.
-        // For mat2 it is I - beta * &self.mat, we need to reallocate a matrix
-        let mat1 = self.mat.clone();
-        let opt_params = GSvdOptParams::new(beta, true, 1., true);
-        // mat2 is moved but the opt parameters 
-        let mat2 = compute_1_minus_beta_mat(&self.mat, beta, true);
-        let gsvdapprox = GSvdApprox::new(mat1, mat2 , rangeprecision, Some(opt_params));
+        // We must now define  A and B in Wei-Zhang paper or mat_g (global) and mat_l (local in Ou paper)
+        // mat_g is beta * transpose(self.mat) but we must send it transpose to Gsvd  * transpose(self.mat)
+        // For mat_l it is I - beta * &self.mat, but ust send transposed to Gsvd
+        let mut mat_g = self.mat.transpose_owned();
+        mat_g.scale(F::from_f64(beta).unwrap());
+        // 
+        let mat_l = compute_1_minus_beta_mat(&self.mat, beta, true);
+        let gsvdapprox = GSvdApprox::new(mat_g, mat_l , rangeprecision, None);
         //
         return gsvdapprox;
     } // end of make_katz_pair
+
 
 
     /// Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β P, (1. - β) * I). 
@@ -101,16 +101,16 @@ impl <F> Hope<F>  where
     fn make_rooted_pagerank_problem(&mut self, factor : f64) -> GSvdApprox<F> where
                     for<'r> F: std::ops::MulAssign<&'r F>  {
         //
-        let max_rank = 300;
+        let max_rank = 500;
         // now we can define a GSvdApprox problem
         let epsil = 0.1;
         let rank_increment = 50;
         //
         crate::renormalize::matrepr_row_normalization(& mut self.mat);
-        // MMg is I - alfa * P where P is normalizez adjacency matrix to a probability matrix
-        let mat1 = compute_1_minus_beta_mat(&self.mat, factor, true);
+        // Mg is I - alfa * P where P is normalizez adjacency matrix to a probability matrix
+        let mat_g = compute_1_minus_beta_mat(&self.mat, factor, true);
         // compute Ml = (1-alfa) I
-        let mat2 = match self.mat.get_data() {
+        let mat_l = match self.mat.get_data() {
             MatMode::FULL(_) => { 
                     let mut dense = Array2::<F>::eye(self.mat.shape()[0]);
                     dense *= F::from_f64(1. - factor).unwrap();
@@ -123,9 +123,8 @@ impl <F> Hope<F>  where
                 }
         };
         // TODO do we want RangePrecision or RangeRank mode as we now have RangeRank also for csr ...
-        let opt_params = GSvdOptParams::new(1., true, 1., true);
         let rangeprecision = RangePrecision::new(epsil, rank_increment, max_rank);
-        let gsvdapprox = GSvdApprox::new(mat1, mat2 , rangeprecision, Some(opt_params));
+        let gsvdapprox = GSvdApprox::new(mat_g, mat_l , rangeprecision, None);
         //
         return gsvdapprox;
     } // end of make_rooted_pagerank_problem
@@ -138,16 +137,49 @@ impl <F> Hope<F>  where
     /// 
     /// *Note that in RPR mode the matrix stored in the Hope structure is renormalized to a transition matrix!!*
     /// 
-    pub fn compute_embedding(&mut self, mode :HopeMode, dampening_f : f64) {
+    pub fn compute_embedding(&mut self, mode :HopeMode, dampening_f : f64) -> Result<EmbeddingAsym<F>,anyhow::Error> {
         //
         let gsvd_pb = match mode {
             HopeMode::KATZ => { self.make_katz_problem(dampening_f) },
             HopeMode::RPR => { self.make_rooted_pagerank_problem(dampening_f) },
         };
         // now we can approximately solve svd problem
-        let _gsvd_res = gsvd_pb.do_approx_gsvd();    
-        // now we have everything to construct the embedding
+        let gsvd_res = gsvd_pb.do_approx_gsvd(); 
+        if gsvd_res.is_err() {
+            return Err(anyhow!("compute_embedding : call GSvdApprox.do_approx_gsvd failed"));
+        }
+        let gsvd_res = gsvd_res.unwrap();
+        // now we have everything to construct the embedding, M_g is the first matrix, M_l the second of the Gsvd problem.
+        // so we need to sort quotients of M_l/M_g eigenvalues i.e s2/s1
 
+        let s1 : &Array1<F> = match gsvd_res.get_s1() {
+            Some(s) =>  s,
+            _ => { return  Err(anyhow!("compute_embedding could not get s1")); },
+        };
+        let s2 : &Array1<F> = match gsvd_res.get_s2() {
+            Some(s) =>  s,
+            _ => { return  Err(anyhow!("compute_embedding could not get s2")); },
+        };
+        let _v1 : &Array2<F> = match gsvd_res.get_v1() {
+            Some(s) =>  s,
+            _ => { return  Err(anyhow!("compute_embedding could not get v1")); },
+        };
+        let _v2 : &Array2<F> = match gsvd_res.get_v2() {
+            Some(s) =>  s,
+            _ => { return  Err(anyhow!("compute_embedding could not get v2")); },
+        };
+        //
+        assert_eq!(s1.len() , s2.len());
+        let mut sigma_q = Vec::<F>::with_capacity(s1.len());
+        for i in 0..s1.len() {
+            log::debug!("s1 : {}, s2 : {}", s1[i], s2[i]);
+            if s1[i] > F::zero() {
+                sigma_q.push(s2[i]/s1[i]);
+            }
+        }
+
+        //
+        return Err(anyhow!("compute_embedding failed"));
     }  // end of compute_embedding
 }  // end of impl Hope
 
@@ -216,11 +248,14 @@ fn estimate_spectral_radius_fullmat<F>(mat : &Array2<F>) -> f64
 // cannot avoid allocations (See as Katz Index and Rooted Page Rank needs a reallocation for a different mat each! which
 // forbid using reference in GSvdApprox if we want to keep one definition a GSvdApprox)
 fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) -> MatRepr<F> 
-        where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
+        where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
     //
     match mat.get_data() {
         MatMode::FULL(mat) => {
-            let new_mat = mat * F::from_f64(beta).unwrap();
+            let (nbrow, nbcol) = mat.dim();
+            assert_eq!(nbrow, nbcol);
+            let mut new_mat = ndarray::Array2::<F>::eye(nbrow);
+            new_mat.scaled_add(- F::from_f64(beta).unwrap(), mat);          // BLAS axpy
             if transpose {
                 return MatRepr::from_array2(new_mat.t().to_owned());
             }

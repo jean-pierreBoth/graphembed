@@ -173,7 +173,41 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     }  // end of GSvdResult::init_from_lapack
 
 
+    /// return eigenvalues corresponding to first matrix
+    pub fn get_s1(&self) -> Option<&Array1<F>> {
+        match &self.s1 {
+            Some(s) => Some(&s),
+            _                                  => None
+        }
+    }  // end of get_s1
 
+
+    /// return eigenvalues corresponding to second matrix
+    pub fn get_s2(&self) -> Option<&Array1<F>> {
+        match &self.s2 {
+            Some(s) => Some(&s),
+            _                                  => None
+        }
+    }  // end of get_s2
+
+
+    /// returns the left eigen vectors coressponding to s1 
+    pub fn get_v1(&self) -> Option<&Array2<F>> {
+        match &self.v1 {
+            Some(s) => Some(&s),
+            _                                  => None
+        }        
+    }  // end of get_v1
+
+    /// returns the left eigen vectors coressponding to s2 
+    pub fn get_v2(&self) -> Option<&Array2<F>> {
+        match &self.v2 {
+            Some(s) => Some(&s),
+            _                                  => None
+        }        
+    }  // end of get_v2
+
+    
     // debug utility for tests!
     #[allow(unused)]
     pub(crate) fn dump_u(&self) {
@@ -261,6 +295,9 @@ impl  <'a, F> GSvd<'a, F>
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
     /// We impose the RangePrecision mode for now.
     pub fn new(a : &'a mut Array2<F>, b : &'a mut Array2<F>) -> Self {
+        // for now we assume standard layout but this is to change
+        assert!(a.is_standard_layout());
+        assert!(b.is_standard_layout());      
         // check for dimensions constraints
         if a.dim().1 != b.dim().1 {
             log::error!("The two matrices for gsvd must have the same number of columns");
@@ -306,10 +343,10 @@ impl  <'a, F> GSvd<'a, F>
         let mut k : i32 = 0;
         let mut l : i32 = 0;
         // for lda  see lapacke interface  : http://www.netlib.org/lapack/lapacke.html#_array_arguments
-        // Caution our matrix are C (row) ordered so lda is nbcol. but we want to send the transpose (!) so lda is a_nbrow
+        // Caution our matrix are C (row) ordered so lda is nbcol.
         let lda : i32 = a_nbcol as i32;
         let b_dim = self.b.dim();
-        // caution our matrix are C (row) ordered so lda is nbcol. but we want to send the transpose (!) so lda is a_nbrow
+        // caution our matrix are for now C (row) ordered so lda is nbcol.
         let ldb : i32 = b_dim.1 as i32;
         let _ires: i32;
         let ldu = a_nbrow as i32;  // ldu must be greater equal nb rows of A.  as U = (a_nbrow, a_nbrow)
