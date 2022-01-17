@@ -14,7 +14,6 @@
 //! 
 
 
-use num_traits::float::*;
 
 use ndarray::{Array2};
 

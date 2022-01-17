@@ -103,9 +103,11 @@ impl NodeSketch {
             let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.sketch_size, 0);
             probminhash3a.hash_weigthed_hashmap(&v_k);
             let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
-            // save sketches into previous sketch
-            sketch.move_into(self.previous_sketches.row_mut(row));
+            // save sketches into self sketch
+            sketch.move_into(self.sketches.row_mut(row));
         }  // end of for on row
+        // transfer sketches into previous sketches
+        self.previous_sketches.iter_mut().zip(self.sketches.iter()).map(|(old, new)| *old = *new);
     } // end of iteration
 
 

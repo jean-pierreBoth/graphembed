@@ -98,6 +98,22 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         GSvdResult{v1 :None, v2 : None, s1 : None, s2 : None, _commonx :None}
     }
 
+    // debug utility for small tests
+    #[allow(unused)]
+    pub(crate) fn debug_print(&self) {
+        assert!(self.s1.is_some());
+        let s1 = self.s1.as_ref().unwrap();
+        assert!(self.s1.is_some());
+        let s2 = self.s2.as_ref().unwrap();
+        
+        println!("\n eigen valuses    s1          s2 \n");
+        for i in 0..s1.len() {
+            println!(" i : {},       {}        {}    ", i, s1[i], s2[i]);
+        }
+    } // end of debug_print
+
+
+
     // reconstruct result from the out parameters of lapack. For us u and v are always asked for
     // (m,n) is dimension of A. p is number of rows of B. k and l oare lapack output  
     pub(crate) fn init_from_lapack(&mut self, m : i64, n : i64, p : i64, u : Array2<F>, v : Array2<F>, k : i64 ,l : i64 , 
@@ -108,6 +124,10 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
         //
         log::debug!("m : {}, n : {}, p : {}, k : {}, l : {} ", m, n, p, k, l);
+        log::debug!("alpha length : {}, beta length : {}", alpha.len(), beta.len());
+        //
+        assert_eq!(alpha.len(), n as usize);
+        assert_eq!(beta.len(), n as usize);
         assert!(m >= 0);
         assert!(l >= 0);
         assert!(k >= 0);
@@ -361,8 +381,8 @@ impl  <'a, F> GSvd<'a, F>
         let mut gsvdres = GSvdResult::<F>::new();
         //
         if TypeId::of::<F>() == TypeId::of::<f32>() {
-            let mut alpha_f32 = Vec::<f32>::with_capacity(a_nbcol);
-            let mut beta_f32 = Vec::<f32>::with_capacity(a_nbcol);
+            let mut alpha_f32 = Array1::<f32>::zeros(a_nbcol);
+            let mut beta_f32 = Array1::<f32>::zeros(a_nbcol);
             let mut u_f32= Array2::<f32>::zeros((a_nbrow, a_nbrow));
             let mut v_f32= Array2::<f32>::zeros((b_dim.0, b_dim.0));
             let mut q_f32 = Vec::<f32>::new();
@@ -376,7 +396,7 @@ impl  <'a, F> GSvd<'a, F>
                         &mut k, &mut l,
                         &mut af32, lda,
                         &mut bf32, ldb,
-                        alpha_f32.as_mut_slice(),beta_f32.as_mut_slice(),
+                        alpha_f32.as_slice_mut().unwrap(),beta_f32.as_slice_mut().unwrap(),
                         u_f32.as_slice_mut().unwrap(), ldu,
                         v_f32.as_slice_mut().unwrap(), ldv,
                         q_f32.as_mut_slice(), ldq,
@@ -392,9 +412,11 @@ impl  <'a, F> GSvd<'a, F>
                                 u, v, k as i64, l as i64 , alpha , beta, iwork);
                 }
                 else if ires == 1 {
+                    log::error!("lapacke::sggsvd3 returned err code 1");
                     return Err(anyhow!("lapack for f64 failed to converge"));
                 }
                 else if ires < 0 {
+                    log::error!("lapacke::sggsvd3 returned err code {}", ires);
                     return Err(anyhow!("argument {} had an illegal value", -ires));
                 }
                 //
@@ -402,8 +424,8 @@ impl  <'a, F> GSvd<'a, F>
             }; // end of unsafe block
         }  // end case f32
         else if TypeId::of::<F>() == TypeId::of::<f64>() {
-            let mut alpha_f64 = Vec::<f64>::with_capacity(a_nbcol);
-            let mut beta_f64 = Vec::<f64>::with_capacity(a_nbcol);
+            let mut alpha_f64 = Array1::<f64>::zeros(a_nbcol);
+            let mut beta_f64 = Array1::<f64>::zeros(a_nbcol);
             let mut u_f64= Array2::<f64>::zeros((a_nbrow, a_nbrow));
             let mut v_f64= Array2::<f64>::zeros((b_dim.0, b_dim.0));
             let mut q_f64 = Vec::<f64>::new(); 
@@ -416,7 +438,7 @@ impl  <'a, F> GSvd<'a, F>
                     &mut k, &mut l,
                     &mut af64, lda,
                     &mut bf64, ldb,
-                    alpha_f64.as_mut_slice(),beta_f64.as_mut_slice(),
+                    alpha_f64.as_slice_mut().unwrap(),beta_f64.as_slice_mut().unwrap(),
                     u_f64.as_slice_mut().unwrap(), ldu,
                     v_f64.as_slice_mut().unwrap(), ldv,
                     q_f64.as_mut_slice(), ldq,

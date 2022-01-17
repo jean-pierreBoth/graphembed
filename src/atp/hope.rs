@@ -21,7 +21,7 @@ use sprs::prod;
 use sprs::{CsMat, TriMatBase};
 
 
-use annembed::tools::svdapprox::{MatRepr, MatMode, RangePrecision};
+use annembed::tools::svdapprox::{MatRepr, MatMode, RangeApproxMode};
 
 use super::randgsvd::{GSvdApprox};
 use super::orderingf::*;
@@ -79,7 +79,7 @@ impl <F> Hope<F>  where
 
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
     ///     factor must be between 0. and 1.
-    fn make_katz_problem(&self, factor : f64) -> GSvdApprox<F> {
+    fn make_katz_problem(&self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> {
         // enforce rule on factor
         let radius = match self.mat.get_data() {
             MatMode::FULL(mat) =>  { estimate_spectral_radius_fullmat(&mat) },
@@ -88,11 +88,6 @@ impl <F> Hope<F>  where
         //  defining beta ensures that the matrix (Mg) in Hope paper is inversible.
         let beta = factor / radius;
         // now we can define a GSvdApprox problem
-        let epsil = 0.1;
-        let rank_increment = 50;
-        let max_rank = 300;
-        // TODO do we want RangePrecision or RangeRank mode as we now have RangeRank also for csr ...
-        let rangeprecision = RangePrecision::new(epsil, rank_increment, max_rank);
         // We must now define  A and B in Wei-Zhang paper or mat_g (global) and mat_l (local in Ou paper)
         // mat_g is beta * transpose(self.mat) but we must send it transpose to Gsvd  * transpose(self.mat)
         // For mat_l it is I - beta * &self.mat, but ust send transposed to Gsvd
@@ -100,7 +95,7 @@ impl <F> Hope<F>  where
         mat_g.scale(F::from_f64(beta).unwrap());
         // 
         let mat_l = compute_1_minus_beta_mat(&self.mat, beta, true);
-        let gsvdapprox = GSvdApprox::new(mat_g, mat_l , rangeprecision, None);
+        let gsvdapprox = GSvdApprox::new(mat_g, mat_l, approx_mode, None);
         //
         return gsvdapprox;
     } // end of make_katz_pair
@@ -111,13 +106,8 @@ impl <F> Hope<F>  where
     /// Has a good performance on link prediction Cf [https://dl.acm.org/doi/10.1145/3012704]
     /// A survey of link prediction in complex networks. Martinez, Berzal ACM computing Surveys 2016.
     // In fact we go to the Gsvd with the pair (transpose((1. - β) * I)), transpose(I - β P))
-    fn make_rooted_pagerank_problem(&mut self, factor : f64) -> GSvdApprox<F> where
+    fn make_rooted_pagerank_problem(&mut self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> where
                     for<'r> F: std::ops::MulAssign<&'r F>  {
-        //
-        let max_rank = 500;
-        // now we can define a GSvdApprox problem
-        let epsil = 0.1;
-        let rank_increment = 50;
         //
         crate::renormalize::matrepr_row_normalization(& mut self.mat);
         // Mg is I - alfa * P where P is normalizez adjacency matrix to a probability matrix
@@ -135,9 +125,7 @@ impl <F> Hope<F>  where
                     MatRepr::<F>::from_csrmat(id)
                 }
         };
-        // TODO do we want RangePrecision or RangeRank mode as we now have RangeRank also for csr ...
-        let rangeprecision = RangePrecision::new(epsil, rank_increment, max_rank);
-        let gsvdapprox = GSvdApprox::new(mat_g, mat_l , rangeprecision, None);
+        let gsvdapprox = GSvdApprox::new(mat_g, mat_l , approx_mode, None);
         //
         return gsvdapprox;
     } // end of make_rooted_pagerank_problem
@@ -150,11 +138,11 @@ impl <F> Hope<F>  where
     /// 
     /// *Note that in RPR mode the matrix stored in the Hope structure is renormalized to a transition matrix!!*
     /// 
-    pub fn compute_embedding(&mut self, mode :HopeMode, dampening_f : f64) -> Result<EmbeddingAsym<F>,anyhow::Error> {
+    pub fn compute_embedding(&mut self, mode :HopeMode, approx_mode : RangeApproxMode, dampening_f : f64) -> Result<EmbeddingAsym<F>,anyhow::Error> {
         //
         let gsvd_pb = match mode {
-            HopeMode::KATZ => { self.make_katz_problem(dampening_f) },
-            HopeMode::RPR => { self.make_rooted_pagerank_problem(dampening_f) },
+            HopeMode::KATZ => { self.make_katz_problem(dampening_f, approx_mode) },
+            HopeMode::RPR => { self.make_rooted_pagerank_problem(dampening_f, approx_mode) },
         };
         // now we can approximately solve svd problem
         let gsvd_res = gsvd_pb.do_approx_gsvd(); 

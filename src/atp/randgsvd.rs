@@ -9,7 +9,6 @@
 
 
 
-#![allow(unused)]
 // num_traits::float::Float : Num + Copy + NumCast + PartialOrd + Neg<Output = Self>,  PartialOrd which is not in Scalar.
 //     and nan() etc
 
@@ -18,8 +17,9 @@
 
 // ndarray::ScalarOperand provides array * F
 // ndarray_linalg::Scalar provides Exp notation + Display + Debug + SerializFe and sum on iterators
-use log::Level::Debug;
-use log::{log_enabled};
+
+//use log::Level::Debug;
+//use log::{log_enabled};
 
 
 use anyhow::{anyhow};
@@ -28,14 +28,11 @@ use num_traits::float::*;
 //use num_traits::cast::FromPrimitive;
 
 
-use ndarray::{s,Array1, Array2, ArrayView2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
+use ndarray::{Array2};
 
 use ndarray_linalg::{Scalar, Lapack};
-use std::any::TypeId;
 
-use lapacke::{dggsvd3, Layout};
 
-use crate::embedding::{EmbeddingAsym};
 use super::gsvd::{GSvd, GSvdOptParams, GSvdResult};
 
 
@@ -64,8 +61,8 @@ use annembed::tools::svdapprox::*;
 ///  $$
 ///     
 /// 
-/// Most often the matrix representation will be CSR and the precision approximation mode will
-/// be used. But for small graph we can consider the approximation with given target rank
+/// Most often the matrix representation will be CSR. 
+/// The approximation mode can be either a given precision and maximum rank target or with given target rank
 /// 
 pub struct GSvdApprox<F: Scalar> {
     /// first matrix we want to approximate range of
@@ -74,8 +71,8 @@ pub struct GSvdApprox<F: Scalar> {
     mat2 : MatRepr<F>,
     /// optional parameters
     opt_params : Option<GSvdOptParams>,
-    /// approximation mode
-    precision : RangeApproxMode,
+    /// approximation mode with its target
+    target : RangeApproxMode,
 }   // end of struct GsvdApprox
 
 
@@ -84,18 +81,18 @@ pub struct GSvdApprox<F: Scalar> {
 impl  <F> GSvdApprox<F>  
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
     /// TODO We impose the RangePrecision mode for now. No more necessary, to be changed
-    pub fn new(mat1 : MatRepr<F>, mat2 : MatRepr<F>, precision : RangePrecision, opt_params : Option<GSvdOptParams>) -> Self {
+    pub fn new(mat1 : MatRepr<F>, mat2 : MatRepr<F>, target: RangeApproxMode, opt_params : Option<GSvdOptParams>) -> Self {
         // check for dimensions constraints
         if mat1.shape()[1] != mat2.shape()[1] {
             log::error!("The two matrices for GSvdApprox must have the same number of columns");
             println!("The two matrices for GSvdApprox must have the same number of columns");
             panic!("Error constructiing Gsvd problem");
         }
-        return GSvdApprox{mat1, mat2, opt_params, precision : RangeApproxMode::EPSIL(precision)};
+        return GSvdApprox{mat1, mat2, opt_params, target};
     } // end of new
 
     /// return optional paramertes if any
-    pub fn get_parameters(&mut self,  alpha_1 : f64,  transpose_1 : bool,  alpha_2 : f64 , transpose_2 : bool) -> &Option<GSvdOptParams> {
+    pub fn get_parameters(&mut self) -> &Option<GSvdOptParams> {
         &self.opt_params
     } // end of set_parameters
 
@@ -111,13 +108,13 @@ impl  <F> GSvdApprox<F>
     pub fn do_approx_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
         // We construct an approximation first for mat1 and then for mat2 and with the same precision 
         // criterion
-        let r_approx1 = RangeApprox::new(&self.mat1, self.precision);
+        let r_approx1 = RangeApprox::new(&self.mat1, self.target);
         let  approx1_res = r_approx1.get_approximator();
         if approx1_res.is_none() {
             return Err(anyhow!("approximation of matrix 1 failed"));
         }
         let approx1_res = approx1_res.unwrap();
-        let r_approx2 = RangeApprox::new(&self.mat2, self.precision);
+        let r_approx2 = RangeApprox::new(&self.mat2, self.target);
         let  approx2_res = r_approx2.get_approximator();
         if approx2_res.is_none() {
             return Err(anyhow!("approximation of matrix 2 failed"));
@@ -160,7 +157,6 @@ impl  <F> GSvdApprox<F>
     /// 
     pub fn compute_gsvd_residual(&self) -> f64 {
         panic!("not yet implemented");
-        return -1.;
     }
 } // end of impl block for GSvdApprox
 
@@ -172,17 +168,18 @@ mod tests {
 #[allow(unused)]
 use super::*;
 
-use ndarray::{array};
+#[allow(unused)]
+use ndarray::array;
 
 use sprs::{CsMat, TriMat};
-
+#[allow(unused)]
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }  
 
 // to convert a small matrix into a csr storage
+#[allow(unused)]
 fn smallmat_to_csr(a : &Array2<f64>) -> CsMat<f64> {
-    let dim = a.dim();
     // fill the TriMat
     let mut trim = TriMat::new(a.dim());
     for (idx, val) in a.indexed_iter() {
@@ -193,17 +190,29 @@ fn smallmat_to_csr(a : &Array2<f64>) -> CsMat<f64> {
 }
 
 
-
-fn test_gsvd_full_precision_1() {
+#[test]
+fn test_gsvd_dense_precision_1() {
     log_init_test();
     //
     let mat_a = array![ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
     let mat_b = array![ [8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
     // 
-
+    let a = MatRepr::<f64>::from_array2(mat_a);
+    let b = MatRepr::<f64>::from_array2(mat_b);
+    //
+    let precision = RangePrecision::new(0.1, 1, 3);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::EPSIL(precision),  None);
+    //
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+    res.debug_print();
 } // end of test_gsv_full_1
 
-// The smae test as test_gsvd_full_1 but with matrix described in csr mode, run in precision mode
+
+
+// The same test as test_gsvd_full_1 but with matrix described in csr mode, run in precision mode
+#[test]
 fn test_gsvd_csr_precision_1() {
     log_init_test();
     //
@@ -214,23 +223,63 @@ fn test_gsvd_csr_precision_1() {
     let csr_b = smallmat_to_csr(&mat_b);
     let a = MatRepr::from_csrmat(csr_a);
     let b = MatRepr::from_csrmat(csr_b);
-
+    //
+    let precision = RangePrecision::new(0.1, 1, 3);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::EPSIL(precision),  None);
+    //
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+    res.debug_print();
 }  // end of test_gsvd_csr_precision_1
 
 
 
 
 // we have full matrix we can test in rank mode
-fn test_gsvd_full_rank_1() {
+#[test]
+fn test_gsvd_dense_rank_1() {
     log_init_test();
     //
     let mat_a = array![ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
-
     let mat_b = array![[8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
-
+    // 
+    let a = MatRepr::<f64>::from_array2(mat_a);
+    let b = MatRepr::<f64>::from_array2(mat_b);
+    //
+    let target = RangeRank::new(2, 2);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
+    //
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+    res.debug_print();
 } // end of test_gsvd_full_rank_1
 
 
+
+// we have full matrix we can test in rank mode
+#[test]
+fn test_gsvd_csr_rank_1() {
+    log_init_test();
+    //
+    let mat_a = array![ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
+    let mat_b = array![[8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
+    // 
+    let csr_a = smallmat_to_csr(&mat_a);
+    let csr_b = smallmat_to_csr(&mat_b);
+    //
+    let a = MatRepr::from_csrmat(csr_a);
+    let b = MatRepr::from_csrmat(csr_b);
+    //
+    let target = RangeRank::new(2, 2);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
+    //
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+    res.debug_print();
+} // end of test_gsvd_full_rank_1
 
 
 
