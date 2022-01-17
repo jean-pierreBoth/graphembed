@@ -45,6 +45,8 @@ pub enum HopeMode {
 pub struct Hope<F> {
     /// the graph as a matrix
     mat : MatRepr<F>,
+    /// store the eigenvalue weighting the eigenvectors. This give information on precision.
+    sigma_q : Option<Array1<F>>
 }
 
 
@@ -55,12 +57,21 @@ impl <F> Hope<F>  where
     /// instantiate a Hope problem with the adjacency matrix
     pub fn from_ndarray(mat : Array2<F>) -> Self {
         let mat = MatRepr::from_array2(mat);
-        Hope::<F> {mat}
+        Hope::<F> {mat, sigma_q : None}
     }
 
     pub fn get_nb_nodes(&self) -> usize {
         self.mat.shape()[0]
     }
+
+    /// returns the quotients of eigenvalues.
+    /// The relative precision of the embedding can be appreciated by the quantity quotient[quotient.len()-1]/quotient[0]
+    pub fn get_quotient_eigenvalues(&self) -> Option<&Array1<F>> {
+        match &self.sigma_q {
+            Some(sigma) => {return Some(sigma); }
+            _                                   => { return  None;}
+        }
+    } // end of get_quotient_eigenvalues
 
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β A, β A). 
     // We must check that beta is less than the spectral radius of adjacency matrix so that M_g is inversible.
@@ -161,11 +172,11 @@ impl <F> Hope<F>  where
             Some(s) =>  s,
             _ => { return  Err(anyhow!("compute_embedding could not get s2")); },
         };
-        let _v1 : &Array2<F> = match gsvd_res.get_v1() {
+        let v1 : &Array2<F> = match gsvd_res.get_v1() {
             Some(s) =>  s,
             _ => { return  Err(anyhow!("compute_embedding could not get v1")); },
         };
-        let _v2 : &Array2<F> = match gsvd_res.get_v2() {
+        let v2 : &Array2<F> = match gsvd_res.get_v2() {
             Some(s) =>  s,
             _ => { return  Err(anyhow!("compute_embedding could not get v2")); },
         };
@@ -193,12 +204,30 @@ impl <F> Hope<F>  where
         if sort_needed {
             sigma_q.sort_unstable_by(decreasing_sort_nans_first);
         }
-        for idx in  sigma_q {
+        for idx in &sigma_q {
             permutation.push(idx.0);
         }
         // Now we can construct embedding
+        // U_source (resp. U_target) corresponds to M_global (resp. M_local) i.e  first (resp. second) component of GsvdApprox
         //
-        return Err(anyhow!("compute_embedding failed"));
+        let nb_sigma = permutation.len();
+        let mut source = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma));
+        let mut target = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma));
+        for i in 0..nb_sigma {
+            let sigma = sigma_q[i].1;
+            for j in 0..v1.ncols() {
+                log::debug!(" sigma_q i : {}, value : {:?} ", i, sigma);
+                source.row_mut(i)[j] = sigma * v1.row(permutation[i])[j];
+                target.row_mut(i)[j] = sigma * v2.row(permutation[i])[j];
+            }
+        } 
+        //
+        log::info!("last eigen value to first : {}", sigma_q[sigma_q.len()-1].1/ sigma_q[0].1);
+        self.sigma_q = Some(Array1::from_iter(sigma_q.iter().map(|x| x.1)));
+        //
+        let embeddinga = EmbeddingAsym::new(source, target);
+        //
+        Ok(embeddinga)
     }  // end of compute_embedding
 }  // end of impl Hope
 
