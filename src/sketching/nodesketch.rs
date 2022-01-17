@@ -60,13 +60,17 @@ impl NodeSketch {
 
 
 
-    fn iterate(&mut self,  nb_iter:usize) {
+    pub fn compute_embedding(&mut self,  nb_iter:usize) -> Result<Embedding<usize>,anyhow::Error> {
         // first iteration, we fill previous sketches
         self.sketch_slamatrix();    
         for _ in 0..nb_iter {
             self.iteration();  
-        }    
-    }  // end of iterate
+        }
+        // allocate the (symetric) embedding
+        let embedding = Embedding::<usize>::new(self.sketches.clone());
+        //
+        Ok(embedding)
+    }  // end of compute_embedding
 
 
     // do iteration on sketches
@@ -100,9 +104,8 @@ impl NodeSketch {
             probminhash3a.hash_weigthed_hashmap(&v_k);
             let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
             // save sketches into previous sketch
-            sketch.move_into(self.sketches.row_mut(row));
+            sketch.move_into(self.previous_sketches.row_mut(row));
         }  // end of for on row
-        // TODO transfert to previous sketch.
     } // end of iteration
 
 

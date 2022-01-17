@@ -1,7 +1,11 @@
 //! Describes the embedding vectors. 
 //! 
-//! Basic symetric Embedding are described by an Array2<F> where F is f32 or f64.  
-//! The type F is described by the constraints  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc.  
+//! Basic symetric Embedding are described by an Array2<F>
+//! 
+//! F can be a floating point type f32 or f64, in this case thetype F is described by the constraints :  
+//!   F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc.... 
+//! 
+//! For Nodesketch embedding the type is usize.  
 //! Each row corresponds to a node.
 //! 
 //! For an asymetric or directed graph, an asymetric embedding distinguishes for each node, its target role from its source role.
@@ -12,13 +16,12 @@
 
 use num_traits::float::*;
 
-use ndarray_linalg::{Scalar};
 use ndarray::{Array2};
 
+/// symetric embedding
+pub struct Embedding<F>(Array2<F>);
 
-pub struct Embedding<F:Scalar+Float>(Array2<F>);
-
-impl<F:Scalar+Float> Embedding<F> {
+impl<F> Embedding<F> {
 
     pub(crate) fn new( arr : Array2<F>) -> Self {
         Embedding{0 : arr}
@@ -36,15 +39,15 @@ impl<F:Scalar+Float> Embedding<F> {
 
 
 /// Asymetric embedding representation
-pub struct EmbeddingAsym<F:Scalar+Float> {
+pub struct EmbeddingAsym<F> {
     /// source node representation
     source : Array2<F>,
     /// target node representation
-    target : Array2<F>
+    target : Array2<F>,
 } // end of struct EmbeddingAsym
 
 
-impl <F:Scalar+Float> EmbeddingAsym<F> {
+impl <F> EmbeddingAsym<F> {
 
     pub(crate) fn new(source : Array2<F>, target : Array2<F>) -> Self {
         assert_eq!(source.dim().0, target.dim().0);
