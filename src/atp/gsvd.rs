@@ -12,7 +12,7 @@ use num_traits::float::*;
 
 use ndarray_linalg::{Scalar, Lapack};
 use std::any::TypeId;
-use ndarray::{s,Array1, Array2, ArrayView2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
+use ndarray::{s,Array1, Array2, ArrayView1, ArrayView2, ArrayBase, ViewRepr, Dim, Ix1, Ix2};
 
 use lapacke::{Layout};
 
@@ -78,11 +78,32 @@ pub struct GSvd<'a, F: Scalar> {
 /// $$ V_{1}^{t} * mat1 * X = \Sigma_{1} \space and \space
 ///    V_{2}^{t} * mat2 * X = \Sigma_{2} $$
 /// 
+/// - alpha : decreasing sorted eigenvalues of mat1. eigenvalues are between 1. and 0.
+///           The first k eigenvalues are equal to 1.
+/// 
+/// - beta : increasing eigenvalues of mat1. eigenvalues are between 0. and 1.
+///          
+/// If the first matrix is invrsible (and so m=n) we have k+l = m = n
+/// If the second matrix is inversible (and so p=n) we have k=0, l = p = n
 pub struct GSvdResult<F: Float + Scalar> {
-    /// left eigenvectors for first matrix. U
+    ///
+    m : usize, 
+    ///
+    n : usize,
+    ///
+    p : usize,
+    /// in the 0..k range we have 1 eigenvalues for the first matrix
+    k : usize,
+    /// in the (k+l)..m range we have 1 eigenvalues for the second matrix.
+    l : usize,
+    /// left eigenvectors for first matrix. U  (m,m) orithogonal matrix where r is rank asked for and m the number of data
     pub(crate)  v1 : Option<Array2<F>>,
-    /// left eigenvectors. (m,r) matrix where r is rank asked for and m the number of data.
+    /// left eigenvectors. (p,p) orthogonal matrix where r is rank asked for and p the number of data.
     pub(crate)  v2 : Option<Array2<F>>,
+    /// 
+    pub(crate) alpha : Option<Array1<F>>,
+    ///
+    pub(crate) beta : Option<Array1<F>>,
     /// first (diagonal matrix) eigenvalues
     pub(crate)  s1 : Option<Array1<F>>,
     /// second (diagonal matrix) eigenvalues
@@ -95,20 +116,101 @@ pub struct GSvdResult<F: Float + Scalar> {
 impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOperand + sprs::MulAcc  {
 
     pub(crate) fn new() -> Self {
-        GSvdResult{v1 :None, v2 : None, s1 : None, s2 : None, _commonx :None}
+        GSvdResult{ m : 0, n : 0, p : 0, k:0, l:0, v1 :None, v2 : None, s1 : None, s2 : None, alpha : None, beta : None, _commonx :None}
     }
+
+    /// returns the dimension of the first matrix
+    pub fn get_mat1_dim(self) -> (usize, usize) {
+        (self.m, self.n)
+    } 
+    /// returns the dimensions of the second matrix
+    pub fn get_mat2_dim(&self) -> (usize, usize) {
+        (self.p, self.n)
+    }
+
+    /// retunns 
+    pub fn get_k(&self) -> usize {
+        self.k
+    }
+
+    ///
+    pub fn get_l(&self) -> usize {
+        self.l
+    } 
+
+    /// get S1 vector of eigenvalues in ]0., 1.[  of first matrix
+    /// if S2 is vector  eigenvalues in ]0., 1.[  of second matrix we have S1**2 + S2**2 = 1
+    pub fn get_s1(&self) -> Option<ArrayView1<F>> {
+        if (self.m - self.k - self.l) as i64 >= 0 {
+            log::debug!("m-k-l >= 0");
+            // s1 is alpha[k .. k+l-1] and   s2 is beta[k .. k+l-1], 
+            assert!(self.l > 0);
+            let s1_v = self.alpha.as_ref().unwrap().slice(s![self.k as usize ..(self.k+self.l) as usize]);
+            return Some(s1_v);
+        } 
+        else {
+            log::debug!("m-k-l < 0");
+            // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
+            assert!(self.m >= self.k);
+            let s1_v = self.alpha.as_ref().unwrap().slice(s![self.k as usize..(self.m as usize)]);
+            return Some(s1_v);
+        }       
+    } // end of get_s1
+
+
+    /// get S2 vector of eigenvalues in ]0., 1.[  of second matrix
+    /// if S1 is vector eigenvalues in ]0., 1.[  of first matrix we have S1**2 + S2**2 = 1
+    pub fn get_s2(&self) -> Option<ArrayView1<F>> {
+        if (self.m - self.k - self.l) as i64 >= 0 {
+            log::debug!("m-k-l >= 0");
+            // s2 is beta[k .. k+l-1], 
+            assert!(self.l > 0);
+            let s2_v = self.beta.as_ref().unwrap().slice(s![self.k as usize ..(self.k+self.l) as usize]);
+            return Some(s2_v);
+        } 
+        else {
+            log::debug!("m-k-l < 0");
+            // s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
+            assert!(self.m >= self.k);
+            let s2_v = self.beta.as_ref().unwrap().slice(s![self.k as usize..(self.m as usize)]);
+            return Some(s2_v);
+        }       
+    } // end of get_s2
+
+
+    /// get alpha 
+    /// see lapack doc (gsvd)[http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+    pub fn get_alpha(&self) -> Option<&Array1<F>> {
+        let s = match  self.alpha.as_ref() {
+            Some(s) => Some(s),
+            _        => None,        
+        };
+        s
+    } // end of get_alpha
+
+    /// get beta
+    /// see lapack doc (gsvd)[http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+    pub fn get_beta(&self) -> Option<&Array1<F>> {
+        let s = match  self.beta.as_ref() {
+            Some(s) => Some(s),
+            _        => None,        
+        };
+        s
+    } // end of get_beta
 
     // debug utility for small tests
     #[allow(unused)]
     pub(crate) fn debug_print(&self) {
-        assert!(self.s1.is_some());
-        let s1 = self.s1.as_ref().unwrap();
-        assert!(self.s1.is_some());
-        let s2 = self.s2.as_ref().unwrap();
+        println!("\n GSvdResult : ");
+        println!(" k : {}, l : {}", self.k, self.l);
+        assert!(self.alpha.is_some());
+        let alpha = self.alpha.as_ref().unwrap();
+        assert!(self.beta.is_some());
+        let beta = self.beta.as_ref().unwrap();
         
-        println!("\n eigen valuses    s1          s2 \n");
-        for i in 0..s1.len() {
-            println!(" i : {},       {}        {}    ", i, s1[i], s2[i]);
+        println!("\n eigen values    alpha          beta \n");
+        for i in 0..alpha.len() {
+            println!(" i : {},       {:.3e}        {:.3e}    ", i, alpha[i], beta[i]);
         }
     } // end of debug_print
 
@@ -123,7 +225,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         // now we must decode depending upon k and l values, we use the lapack doc at :
         // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
         //
-        log::debug!("m : {}, n : {}, p : {}, k : {}, l : {} ", m, n, p, k, l);
+        log::debug!("\n\n got from init_from_lapack : \n m : {}, n : {}, p : {}, k : {}, l : {} ", m, n, p, k, l);
         log::debug!("alpha length : {}, beta length : {}", alpha.len(), beta.len());
         //
         assert_eq!(alpha.len(), n as usize);
@@ -131,6 +233,9 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         assert!(m >= 0);
         assert!(l >= 0);
         assert!(k >= 0);
+        //
+        self.k = k as usize;
+        self.l = l as usize;
         //
         let s1_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
         let s2_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
@@ -154,25 +259,23 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         // a dump if log Debug enabled we dump alpha, beta and C and S in the middle range of alpha and beta
         if log_enabled!(Debug) {
             for i in 0..k as usize {
-                log::debug!(" i {}, alpha[i] {},  beta[i] {}", i, alpha[i], beta[i]);
+                log::debug!(" i {}, alpha[i] {:.3e},  beta[i] {:.3e}", i, alpha[i], beta[i]);
             }
             for i in 0..s1_v.len() {
-                log::debug!(" i {}, C[i] {},  S[i] {}", i, s1_v[i], s2_v[i]);
+                log::debug!(" i {}, C[i] {:.3e},  S[i] {:.3e}", i, s1_v[i], s2_v[i]);
             }
             for i in (k+l).min(m) as usize..n as usize {
-                log::debug!(" i {}, alpha[i] {},  beta[i] {}", i, alpha[i], beta[i]);
+                log::debug!(" i {}, alpha[i] {:.3e},  beta[i] {:.3e}", i, alpha[i], beta[i]);
             }
         }
         // some checks
         let check : Vec<F> = s1_v.iter().zip(s2_v.iter()).map(| x |  *x.0 * *x.0 + *x.1 * *x.1).collect();
         for v in check {
             let epsil = (1. - v.to_f64().unwrap()).abs();
-            log::debug!(" epsil = {}", epsil);
+            log::debug!(" epsil (should be very small) = {:.3e}", epsil);
             assert!(epsil < 1.0E-5 );
         }
-        // we clone
-        self.s1 = Some(s1_v.to_owned());
-        self.s2 = Some(s2_v.to_owned());
+
         let k_1 = k as usize;
         let s = m.min(k+l) as usize;
         // sorting
@@ -189,29 +292,17 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
                 panic!("non sorted alpha");
             }
         }
+        // we clone s1 and s2
+        self.s1 = Some(s1_v.to_owned());
+        self.s2 = Some(s2_v.to_owned());
+        //
+        self.alpha = Some(alpha);
+        self.beta = Some(beta);
         // possibly commonx (or Q in Lapack docs) but here we do not keep it
     }  // end of GSvdResult::init_from_lapack
 
 
-    /// return eigenvalues corresponding to first matrix
-    pub fn get_s1(&self) -> Option<&Array1<F>> {
-        match &self.s1 {
-            Some(s) => Some(&s),
-            _                                  => None
-        }
-    }  // end of get_s1
-
-
-    /// return eigenvalues corresponding to second matrix
-    pub fn get_s2(&self) -> Option<&Array1<F>> {
-        match &self.s2 {
-            Some(s) => Some(&s),
-            _                                  => None
-        }
-    }  // end of get_s2
-
-
-    /// returns the left eigen vectors coressponding to s1 
+    /// returns the left eigen vectors corresponding to s1 
     pub fn get_v1(&self) -> Option<&Array2<F>> {
         match &self.v1 {
             Some(s) => Some(&s),
@@ -219,7 +310,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         }        
     }  // end of get_v1
 
-    /// returns the left eigen vectors coressponding to s2 
+    /// returns the left eigen vectors corresponding to s2 
     pub fn get_v2(&self) -> Option<&Array2<F>> {
         match &self.v2 {
             Some(s) => Some(&s),

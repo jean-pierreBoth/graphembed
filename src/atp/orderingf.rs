@@ -1,7 +1,6 @@
 //! Some utilities to order the abstract type for f64 or f32 
 //! i.e trait satisfying F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default
 
-#![allow(unused)]
 
 use num_traits::float::*; 
 use std::cmp;

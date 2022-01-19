@@ -3,7 +3,6 @@
 //! 
 
 
-#![allow(unused)]
 
 use ndarray::{Array2, Array1};
 use sprs::{TriMatI, CsMatI};
@@ -107,7 +106,11 @@ impl NodeSketch {
             sketch.move_into(self.sketches.row_mut(row));
         }  // end of for on row
         // transfer sketches into previous sketches
-        self.previous_sketches.iter_mut().zip(self.sketches.iter()).map(|(old, new)| *old = *new);
+        for i in 0..self.previous_sketches.nrows() {
+            for j in 0..self.previous_sketches.ncols() {
+                self.previous_sketches[[i,j]] = self.sketches[[i,j]];
+            }
+        }
     } // end of iteration
 
 
@@ -120,9 +123,13 @@ impl NodeSketch {
 //=====================================================================================================
 
 mod tests {
- 
+
+
+#[allow(unused)]
 use log::*;
 
+#[allow(unused)]
+use super::*; 
 
 
 #[allow(dead_code)]
@@ -130,7 +137,6 @@ fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-use super::*; 
 
 
 

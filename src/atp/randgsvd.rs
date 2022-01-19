@@ -79,8 +79,8 @@ pub struct GSvdApprox<F: Scalar> {
 
 
 impl  <F> GSvdApprox<F>  
-    where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
-    /// TODO We impose the RangePrecision mode for now. No more necessary, to be changed
+    where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc + 
+               for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + Default {
     pub fn new(mat1 : MatRepr<F>, mat2 : MatRepr<F>, target: RangeApproxMode, opt_params : Option<GSvdOptParams>) -> Self {
         // check for dimensions constraints
         if mat1.shape()[1] != mat2.shape()[1] {
@@ -165,11 +165,17 @@ impl  <F> GSvdApprox<F>
 
 mod tests {
 
+// we approximate the solution of the problem tested in gsvd::test::test_lapack_gsvd_array_1
+// firsr eigenvalues (alpha/s1 = 9.807e-1, 3.155e-1,  2.511e-16)
+
 #[allow(unused)]
 use super::*;
 
 #[allow(unused)]
 use ndarray::array;
+
+#[allow(unused)]
+use num_traits::ToPrimitive;
 
 use sprs::{CsMat, TriMat};
 #[allow(unused)]
@@ -200,7 +206,7 @@ fn test_gsvd_dense_precision_1() {
     let a = MatRepr::<f64>::from_array2(mat_a);
     let b = MatRepr::<f64>::from_array2(mat_b);
     //
-    let precision = RangePrecision::new(0.1, 1, 3);
+    let precision = RangePrecision::new(0.1, 3, 3);
     let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::EPSIL(precision),  None);
     //
     let res = approx_svd.do_approx_gsvd();
@@ -224,7 +230,7 @@ fn test_gsvd_csr_precision_1() {
     let a = MatRepr::from_csrmat(csr_a);
     let b = MatRepr::from_csrmat(csr_b);
     //
-    let precision = RangePrecision::new(0.1, 1, 3);
+    let precision = RangePrecision::new(0.1, 10, 3);
     let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::EPSIL(precision),  None);
     //
     let res = approx_svd.do_approx_gsvd();
@@ -244,17 +250,48 @@ fn test_gsvd_dense_rank_1() {
     let mat_a = array![ [1., 6., 11.],[2., 7., 12.] , [3., 8., 13.], [4., 9., 14.], [5., 10., 15.] ];
     let mat_b = array![[8., 1., 6.],[3., 5., 7.] , [4., 9., 2.]];
     // 
-    let a = MatRepr::<f64>::from_array2(mat_a);
-    let b = MatRepr::<f64>::from_array2(mat_b);
+    let a = MatRepr::<f64>::from_array2(mat_a.clone());
+    let b = MatRepr::<f64>::from_array2(mat_b.clone());
     //
+    // with rank = 3
+    //
+    println!("\n test_gsvd_dense_rank with rank 3");
+    let target = RangeRank::new(3, 2);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+    res.debug_print();
+    assert!((res.get_alpha().unwrap()[0].to_f64().unwrap() - 0.9807).abs() < 1.0E-4);
+    assert!((res.get_alpha().unwrap()[1].to_f64().unwrap() - 0.3155).abs() < 1.0E-4);
+    assert!((res.get_alpha().unwrap()[2].to_f64().unwrap()).abs() < 1.0E-4);
+    //
+    //  with asked rank = 2
+    //
+    println!("\n test_gsvd_dense_rank with rank 2");
+    let a = MatRepr::<f64>::from_array2(mat_a.clone());
+    let b = MatRepr::<f64>::from_array2(mat_b.clone());
     let target = RangeRank::new(2, 2);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+    res.debug_print();
+    assert!((res.get_alpha().unwrap()[1].to_f64().unwrap() - 0.3424).abs() < 1.0E-4);
+    //
+    //  with asked rank = 1
+    //
+    println!("\n test_gsvd_dense_rank with rank 1");
+    let a = MatRepr::<f64>::from_array2(mat_a.clone());
+    let b = MatRepr::<f64>::from_array2(mat_b.clone());
+    let target = RangeRank::new(1, 2);
     let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
     //
     let res = approx_svd.do_approx_gsvd();
     assert!(res.is_ok());
     let res = res.unwrap();
     res.debug_print();
-} // end of test_gsvd_full_rank_1
+} // end of test_gsvd_dense_rank_1
 
 
 
@@ -269,9 +306,26 @@ fn test_gsvd_csr_rank_1() {
     let csr_a = smallmat_to_csr(&mat_a);
     let csr_b = smallmat_to_csr(&mat_b);
     //
-    let a = MatRepr::from_csrmat(csr_a);
-    let b = MatRepr::from_csrmat(csr_b);
+    let a = MatRepr::from_csrmat(csr_a.clone());
+    let b = MatRepr::from_csrmat(csr_b.clone());
+    // test with rank 3
+    println!("\n test_gsvd_dense_rank with rank 3");
+    let target = RangeRank::new(3, 2);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();   
+    assert!((res.get_alpha().unwrap()[0].to_f64().unwrap() - 0.9807).abs() < 1.0E-4);
+    assert!((res.get_alpha().unwrap()[1].to_f64().unwrap() - 0.3155).abs() < 1.0E-4);
+    assert!((res.get_alpha().unwrap()[2].to_f64().unwrap()).abs() < 1.0E-4);
+    res.debug_print();
     //
+    // test with rank 2
+    //
+    let a = MatRepr::from_csrmat(csr_a.clone());
+    let b = MatRepr::from_csrmat(csr_b.clone());
+    // test with rank 3
+    println!("\n test_gsvd_dense_rank with rank 2");
     let target = RangeRank::new(2, 2);
     let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
     //
@@ -279,7 +333,23 @@ fn test_gsvd_csr_rank_1() {
     assert!(res.is_ok());
     let res = res.unwrap();
     res.debug_print();
-} // end of test_gsvd_full_rank_1
+    log::debug!("alpha 1 : {}" , res.get_alpha().unwrap()[1].to_f64().unwrap());
+    assert!((res.get_alpha().unwrap()[1].to_f64().unwrap() - 0.3424).abs() < 1.0E-4);
+    //
+    // test with rank 1
+    //
+    let a = MatRepr::from_csrmat(csr_a.clone());
+    let b = MatRepr::from_csrmat(csr_b.clone());
+    // test with rank 3
+    println!("\n test_gsvd_dense_rank with rank 1");
+    let target = RangeRank::new(1, 2);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::RANK(target),  None);
+    //
+    let res = approx_svd.do_approx_gsvd();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+    res.debug_print();    //
+} // end of test_gsvd_csr_rank_1
 
 
 

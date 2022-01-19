@@ -4,11 +4,13 @@
 //!     Ou, Cui Pei, Zhang, Zhu   in KDD 2016
 //!  See  [atp](https://www.kdd.org/kdd2016/papers/files/rfp0184-ouA.pdf)
 //! 
+//! The type F is supposed to be f32 or f64 and is constrained to sataisfy whatever is expected for floats
+//! 
 
 
 use anyhow::{anyhow};
 
-use ndarray::{Array1, Array2};
+use ndarray::{Array1, Array2, ArrayView1};
 
 use ndarray_linalg::{Scalar, Lapack};
 
@@ -52,7 +54,7 @@ pub struct Hope<F> {
 
 
 impl <F> Hope<F>  where
-    F: Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    F: Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + Default {
 
     /// instantiate a Hope problem with the adjacency matrix
     pub fn from_ndarray(mat : Array2<F>) -> Self {
@@ -150,13 +152,19 @@ impl <F> Hope<F>  where
             return Err(anyhow!("compute_embedding : call GSvdApprox.do_approx_gsvd failed"));
         }
         let gsvd_res = gsvd_res.unwrap();
+        // get k. How many eigenvalues for first matrix are 1. (The part in alpha before s1)
+        let k = gsvd_res.get_k();
+        log::debug!(" k : {}", k);
+        if k > 0 {
+            println!("k = {}, should be zero!", k);
+        }
         // Recall M_g is the first matrix, M_l the second of the Gsvd problem.
         // so we need to sort quotients of M_l/M_g eigenvalues i.e s2/s1
-        let s1 : &Array1<F> = match gsvd_res.get_s1() {
+        let s1 : ArrayView1<F> = match gsvd_res.get_s1() {
             Some(s) =>  s,
             _ => { return  Err(anyhow!("compute_embedding could not get s1")); },
         };
-        let s2 : &Array1<F> = match gsvd_res.get_s2() {
+        let s2 : ArrayView1<F> = match gsvd_res.get_s2() {
             Some(s) =>  s,
             _ => { return  Err(anyhow!("compute_embedding could not get s2")); },
         };
@@ -202,7 +210,7 @@ impl <F> Hope<F>  where
         let mut source = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma));
         let mut target = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma));
         for i in 0..nb_sigma {
-            let sigma = sigma_q[i].1;
+            let sigma = Float::sqrt(sigma_q[i].1);
             for j in 0..v1.ncols() {
                 log::debug!(" sigma_q i : {}, value : {:?} ", i, sigma);
                 source.row_mut(i)[j] = sigma * v1.row(permutation[i])[j];
