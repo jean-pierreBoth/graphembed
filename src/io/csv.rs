@@ -1,4 +1,4 @@
-//! Construct or dump a (small) graph from data from a csv
+//! Construct or dump a (small) graph or its matricial representation FULL or CSR from data from a csv file
 
 
 //use std::fmt::{Debug};
@@ -14,6 +14,9 @@ use std::str::FromStr;
 use std::io::{Read};
 
 use csv::ReaderBuilder;
+use num_traits::float::*;
+
+use annembed::tools::svdapprox::*;
 
 //use petgraph::graph::{Graph, NodeIndex, IndexType};
 use petgraph::graphmap::{GraphMap, NodeTrait};
@@ -69,7 +72,7 @@ fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
 /// N and E in Grap<N,E,Ty,Ix are data (weights) associated to node and edge respectively>
 /// instantiate with UnDirected for undirected graph
 /// 
-pub fn directed_unweighted_from_csv<N, Ty>(filepath : &Path, delim : u8) -> anyhow::Result<GraphMap<N, (), Ty>> 
+pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> anyhow::Result<GraphMap<N, (), Ty>> 
     where   N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display ,
             Ty : EdgeType {
     //
@@ -102,8 +105,8 @@ pub fn directed_unweighted_from_csv<N, Ty>(filepath : &Path, delim : u8) -> anyh
     // we already skipped headers
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(file);
     //
-    let nb_nodes_guess = 10_000;   // to pass as function argument
-    let mut graph = GraphMap::<N, (), Ty>::with_capacity(nb_nodes_guess, 100_000);
+    let nb_nodes_guess = 50_000;   // to pass as function argument
+    let mut graph = GraphMap::<N, (), Ty>::with_capacity(nb_nodes_guess, 500_000);
     //
     let mut nb_record = 0;
     let mut nb_fields = 0;
@@ -152,10 +155,101 @@ pub fn directed_unweighted_from_csv<N, Ty>(filepath : &Path, delim : u8) -> anyh
         }
         // now fill graph
     } // end of for
-    log::info!("directed_from_csv read nb record : {}", nb_record);
+    log::info!("directed_unweighted_csv_to_graph read nb record : {}", nb_record);
     //
     Ok(graph)
-} // end of from_csv
+} // end of directed_unweighted_csv_to_graph
+
+
+
+
+/// load a directed unweighted graph in csv format into a MatRepr representation
+/// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix
+/// until we use an IndexSet (see annembed::fromhnsw::KGraph)
+pub fn directed_unweighted_csv_to_csrmat<N, F:Float>(filepath : &Path, delim : u8, mat_type :  MatType) -> anyhow::Result<MatRepr<F>> 
+        where   N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display {
+    // first get number of header lines
+    let nb_headers_line = get_header_size(&filepath)?;
+    log::info!("directed_from_csv , got header nb lines {}", nb_headers_line);
+    //
+    // get rid of potential lines beginning with # or %
+    // initialize a reader from filename, skip lines beginning with # or %
+    let fileres = OpenOptions::new().read(true).open(&filepath);
+    if fileres.is_err() {
+        log::error!("ProcessingState reload_json : reload could not open file {:?}", filepath.as_os_str());
+        println!("directed_from_csv could not open file {:?}", filepath.as_os_str());
+        return Err(anyhow!("directed_from_csv could not open file {}", filepath.display()));            
+    }
+    let mut file = fileres?;
+    // skip header lines
+    let mut nb_skipped = 0;
+    let mut c = [0];
+    loop {
+        file.read_exact(&mut c)?;
+        if c[0] == '\n' as u8 {
+            nb_skipped += 1;
+        }
+        if nb_skipped  == nb_headers_line {
+            break;
+        }
+    }
+    let nb_edges_guess = 500_000;   // to pass as function argument
+    let mut rows = Vec::<usize>::with_capacity(nb_edges_guess);
+    let mut cols = Vec::<usize>::with_capacity(nb_edges_guess);
+    let mut values = Vec::<f64>::with_capacity(nb_edges_guess);
+    let mut node1 : N;
+    let mut node2 : N;
+    // now we can parse records and construct a parser from current position of file
+    // we already skipped headers
+    let mut nb_record = 0;
+    let mut nb_fields = 0;
+    //
+    let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(file);
+    for result in rdr.records() {
+        let record = result?;
+        if log::log_enabled!(Level::Info) && nb_record <= 5 {
+            log::info!("{:?}", record);
+        }
+        //
+        if nb_record == 0 {
+            nb_fields = record.len();
+        }
+        else {
+            if record.len() != nb_fields {
+                println!("non constant number of fields at record {} first record has {}",nb_record+1,  nb_fields);
+                return Err(anyhow!("non constant number of fields at record {} first record has {}",nb_record+1,  nb_fields));   
+            }
+        }
+        // we have 2 fields
+
+        let field = record.get(0).unwrap();
+        // decode into Ix type
+        if let Ok(idx) = field.parse::<N>() {
+            node1 = idx;
+        }
+        else {
+            return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
+        }
+        let field = record.get(1).unwrap();
+        if let Ok(idx) = field.parse::<N>() {
+            node2 = idx;
+        }
+        else {
+            return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
+        }
+        // TODO store data ...
+        nb_record += 1;
+        if log::log_enabled!(Level::Info) && nb_record <= 5 {
+            log::info!("{:?}", record);
+            log::info!(" node1 {}, node2 {}", node1, node2);
+        }
+        //
+        
+    }  // end of for result
+    //
+    Err(anyhow!("directed_unweighted_csv_to_mat unimplemented"))
+}  // end of directed_unweighted_csv_to_mat
+
 
 
 //========================================================================================
@@ -181,7 +275,7 @@ fn load_undirected() {
 } // end test load_undirected
 
 #[test]
-fn test_directed_unweighted_from_csv() {
+fn test_directed_unweighted_csv_to_graph() {
     // We load CA-GrQc.txt taken from Snap data directory. It is in Data directory of the crate.
     log_init_test();
     // path from where we launch cargo test
@@ -191,7 +285,7 @@ fn test_directed_unweighted_from_csv() {
     assert_eq!(header_size.unwrap(),4);
     println!("\n\n test_directed_unweighted_from_csv data : {:?}", path);
     // we must have 28979 edges as we have 28979 records.
-    let graph = directed_unweighted_from_csv::<u32, Directed>(&path, b'\t');
+    let graph = directed_unweighted_csv_to_graph::<u32, Directed>(&path, b'\t');
     if let Err(err) = &graph {
         eprintln!("ERROR: {}", err);
     }
