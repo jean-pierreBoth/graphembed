@@ -1,5 +1,6 @@
-//! this file implements the nodesketch algorithm 
+//! this file implements the nodesketch (symetric) algorithm 
 //! described (nodesketch)<https://dl.acm.org/doi/10.1145/3292500.3330951>
+//! An asymetric implementation is in ['NodeSketchAsym`]
 //! 
 
 
@@ -54,7 +55,7 @@ impl NodeSketch {
             previous_sketches.push(Arc::new(RwLock::new(previous_sketch)));
         }
         NodeSketch{sketch_size, decay, csrmat, sketches, previous_sketches}
-    }
+    } // end of NodeSketch::new 
     
 
     /// get sketch_size 
@@ -75,8 +76,22 @@ impl NodeSketch {
     }  // end of get_nb_nodes
 
 
+    // utility to debug very small tests
+    #[allow(unused)]
+    pub(crate) fn dump_state(&self) {
+        println!("\n dump previous state \n");
+        for i in 0..self.get_nb_nodes() {
+            println!("row i : {}   {:?}", i, self.previous_sketches[i].read());
+        }
+        println!("\n dump state \n");
+        for i in 0..self.get_nb_nodes() {
+            println!("row i : {}   {:?}", i, self.sketches[i].read());
+        }
+    } // end of dump_state
+
+
     /// sketch of a row of initial self loop augmented matrix. Returns a vector of size self.sketch_size
-    /// TODO Loop on i can be made parallel
+    /// TODO Loop on i can also be made parallel
     fn sketch_slamatrix(&mut self) {
         // We use probminhash3a, allocate a Hash structure
         for i in 0..self.csrmat.rows() {
@@ -85,8 +100,10 @@ impl NodeSketch {
                 let w = self.csrmat.get_outer_inner(i,j).unwrap();
                 probminhash3.hash_item(j,*w);
             }
-            let sketch = Array1::from_vec(probminhash3.get_signature().clone());
-            *self.previous_sketches[i].write() = sketch;
+            let sketch = probminhash3.get_signature();
+            for j in 0..self.get_sketch_size() {
+                self.previous_sketches[i].write()[j] = sketch[j];
+            }
         }
     } // end of sketch_slamatrix
 
@@ -108,7 +125,9 @@ impl NodeSketch {
         let dim = self.sketches[0].read().len();
         let mut embedded = Array2::<usize>::zeros((nbnodes,dim));
         for i in 0..nbnodes {
-            self.sketches[i].read().clone().move_into(embedded.row_mut(i))
+            for j in 0..self.get_sketch_size() {
+                embedded.row_mut(i)[j] = self.sketches[i].read()[j];
+            }
         }
         let embedding = Embedding::<usize>::new(embedded);
         //
@@ -134,7 +153,7 @@ impl NodeSketch {
 
 
     // given a row (its number and the data in compressed row Matrice corresponding) 
-    // the function update computes sketch value given previous sketch values
+    // the function omputes sketch value given previous sketch values
     fn treat_row(&self, row : &usize, row_vec : &CsVecBase<&[usize], &[f64], f64, usize>) {
         // new neighbourhood for current iteration 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
@@ -170,6 +189,7 @@ impl NodeSketch {
 
 
 
+    // do one iteration with // treatment of nodes
     fn parallel_iteration(&mut self) {
         // we must first gather all information on rows
         let nb_rows = self.csrmat.rows();
