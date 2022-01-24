@@ -6,6 +6,7 @@
 use log::*;
 use anyhow::{anyhow};
 
+use std::collections::HashSet;
 
 use std::fs::{OpenOptions};
 use std::path::{Path};
@@ -14,10 +15,12 @@ use std::str::FromStr;
 use std::io::{Read};
 
 use csv::ReaderBuilder;
-use num_traits::float::*;
+use num_traits::{float::*};
 
+// recall this gives also use ndarray_linalg::{Scalar, Lapack}
 use annembed::tools::svdapprox::*;
 
+use sprs::{TriMatI, CsMat};
 //use petgraph::graph::{Graph, NodeIndex, IndexType};
 use petgraph::graphmap::{GraphMap, NodeTrait};
 #[allow(unused)]
@@ -163,14 +166,18 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 
 
 
-/// load a directed unweighted graph in csv format into a MatRepr representation
-/// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix
+/// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
+/// 
+/// If there are 3 fields by record, the third is asuumed to be a weight of type F (f32 oe f64)
+/// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
 /// until we use an IndexSet (see annembed::fromhnsw::KGraph)
-pub fn directed_unweighted_csv_to_csrmat<N, F:Float>(filepath : &Path, delim : u8, mat_type :  MatType) -> anyhow::Result<MatRepr<F>> 
-        where   N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display {
+pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<MatRepr<F>> 
+    where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
     // first get number of header lines
     let nb_headers_line = get_header_size(&filepath)?;
     log::info!("directed_from_csv , got header nb lines {}", nb_headers_line);
+    //
+    let mut hset = HashSet::<(usize,usize)>::new();
     //
     // get rid of potential lines beginning with # or %
     // initialize a reader from filename, skip lines beginning with # or %
@@ -196,14 +203,16 @@ pub fn directed_unweighted_csv_to_csrmat<N, F:Float>(filepath : &Path, delim : u
     let nb_edges_guess = 500_000;   // to pass as function argument
     let mut rows = Vec::<usize>::with_capacity(nb_edges_guess);
     let mut cols = Vec::<usize>::with_capacity(nb_edges_guess);
-    let mut values = Vec::<f64>::with_capacity(nb_edges_guess);
-    let mut node1 : N;
-    let mut node2 : N;
-    // now we can parse records and construct a parser from current position of file
-    // we already skipped headers
+    let mut values = Vec::<F>::with_capacity(nb_edges_guess);
+    let mut node1 : usize;
+    let mut node2 : usize;
+    let mut weight : F;
+    let mut rowmax : usize = 0;
+    let mut colmax : usize = 0;
     let mut nb_record = 0;
     let mut nb_fields = 0;
     //
+    // nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(file);
     for result in rdr.records() {
         let record = result?;
@@ -220,34 +229,68 @@ pub fn directed_unweighted_csv_to_csrmat<N, F:Float>(filepath : &Path, delim : u
                 return Err(anyhow!("non constant number of fields at record {} first record has {}",nb_record+1,  nb_fields));   
             }
         }
-        // we have 2 fields
-
+        // we have 2 or 3 fields
         let field = record.get(0).unwrap();
         // decode into Ix type
-        if let Ok(idx) = field.parse::<N>() {
+        if let Ok(idx) = field.parse::<usize>() {
             node1 = idx;
+            rowmax = rowmax.max(node1);
         }
         else {
             return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
         }
         let field = record.get(1).unwrap();
-        if let Ok(idx) = field.parse::<N>() {
+        if let Ok(idx) = field.parse::<usize>() {
             node2 = idx;
+            colmax = colmax.max(node2);
         }
         else {
             return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
         }
-        // TODO store data ...
+        if hset.insert((node1,node2)) {
+            return Err(anyhow!("2-uple ({:?}, {:?}) already present", node1, node2));
+        }
+        if !directed {
+            rowmax = rowmax.max(node2);
+            colmax = colmax.max(node1);
+        }
+        if nb_fields == 3 {
+            // then we read a weight
+            let field = record.get(3).unwrap();
+            if let Ok(w) = field.parse::<F>() {
+                weight = w;
+            }
+            else {
+                return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
+            }
+        }
+        else {
+            weight = F::one();
+        }
+        // we store data ...
+        rows.push(node1);
+        cols.push(node2);
+        values.push(weight);
+        if !directed {
+            // store symetric point and check it was not already present
+            if hset.insert((node2,node1)) {
+                return Err(anyhow!("2-uple ({:?}, {:?}) already present", node2, node1));
+            }
+            rows.push(node2);
+            cols.push(node1);
+            values.push(weight); 
+        }
         nb_record += 1;
         if log::log_enabled!(Level::Info) && nb_record <= 5 {
             log::info!("{:?}", record);
-            log::info!(" node1 {}, node2 {}", node1, node2);
+            log::info!(" node1 {:?}, node2 {:?}", node1, node2);
         }
-        //
-        
     }  // end of for result
     //
-    Err(anyhow!("directed_unweighted_csv_to_mat unimplemented"))
+    let trimat = TriMatI::<F, usize>::from_triplets((rowmax,colmax), rows, cols, values);
+    let csrmat : CsMat<F> = trimat.to_csr();
+    //
+    Ok(MatRepr::from_csrmat(csrmat))
 }  // end of directed_unweighted_csv_to_mat
 
 
