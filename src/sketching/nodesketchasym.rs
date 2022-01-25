@@ -4,12 +4,15 @@
 //! 
 
 
-#![allow(unused)]
+// For a directed graph we suppose the Csr matrix so that mat[[i,j]] is edge from i to j.
+
+
+//#![allow(unused)]
 
 use anyhow::{anyhow};
 
-use ndarray::{Array2, Array1};
-use sprs::{TriMatI, CsMatI, CsVecBase};
+use ndarray::{Array1};
+use sprs::{TriMatI, CsMatI};
 
 use ahash::{AHasher};
 use std::collections::HashMap;
@@ -59,10 +62,16 @@ impl NodeSketchAsym {
         let mut sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
         for _ in 0..csrmat.rows() {
+            // incoming edges
             let sketch = Array1::<usize>::zeros(sketch_size);
             sketches_in.push(Arc::new(RwLock::new(sketch)));
             let previous_sketch_in = Array1::<usize>::zeros(sketch_size);
             previous_sketches_in.push(Arc::new(RwLock::new(previous_sketch_in)));
+            // outgoing edges
+            let sketch = Array1::<usize>::zeros(sketch_size);
+            sketches_out.push(Arc::new(RwLock::new(sketch)));
+            let previous_sketch_out = Array1::<usize>::zeros(sketch_size);
+            previous_sketches_out.push(Arc::new(RwLock::new(previous_sketch_out)));            
         }
         NodeSketchAsym{sketch_size, decay, csrmat, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
     }  // end of for NodeSketchAsym::new
@@ -92,15 +101,6 @@ impl NodeSketchAsym {
 
 
 
-    fn iterate(&mut self,  nb_iter:usize) {
-        // first iteration, we fill previous sketches
-        self.sketch_slamatrix();    
-        for _ in 0..nb_iter {
-            self.iteration();  
-        }    
-    }  // end of iterate
-
-
     // do iteration on sketches separately for in neighbours and out neighbours
     fn iteration(&mut self) {
         panic!("not yet implemented");
@@ -115,8 +115,84 @@ impl NodeSketchAsym {
 
     // given a row (its number and the data in compressed row Matrice corresponding) 
     // the function omputes sketch value given previous sketch values
-    fn treat_row(&self, row : &usize, row_vec : &CsVecBase<&[usize], &[f64], f64, usize>) {
-        panic!("not yet implemented");
+    fn treat_row_and_col(&self, row : &usize) {
+        // if we have no data ar row we return immediately
+        let row_vec = self.csrmat.outer_view(*row);
+        if row_vec.is_none() {
+            return;
+        }
+        let row_vec = row_vec.unwrap();
+        // out treatment new neighbourhood for current iteration 
+        let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
+        let weight = self.decay/self.sketch_size as f64;
+        // get an iterator on neighbours of node corresponding to row 
+        let mut row_iter = row_vec.iter();
+        while let Some(neighbour) = row_iter.next() {
+            match v_k.get_mut(&neighbour.0) {
+                Some(val) => { *val = *val + weight * *neighbour.1; }
+                None              => { v_k.insert(neighbour.0, *neighbour.1).unwrap(); }
+            };
+            // get sketch of neighbour
+            let neighbour_sketch = &*self.previous_sketches_out[neighbour.0].read();
+            for n in neighbour_sketch {
+                match v_k.get_mut(&neighbour.0) {
+                   // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
+                   Some(val)   => { *val = *val + weight; }
+                   None                => { v_k.insert(*n, weight).unwrap(); }
+                };                    
+            }
+        }
+        // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
+        // as we possibly got more.
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.sketch_size, 0);
+        probminhash3a.hash_weigthed_hashmap(&v_k);
+        let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
+        // save sketches into self sketch
+        let mut row_write = self.sketches_out[*row].write();
+        for j in 0..self.get_sketch_size() {
+           row_write[j] = sketch[j];
+        }
+        //
+        // now the problem for in treatment is that we should better have a csc mat?         
+        // For a directed graph we suppose the Csr matrix so that mat[[i,j]] is edge from i to j.
+        // So we get a transposed view of self.csrmat
+        //
+        let transpose = self.csrmat.transpose_view();
+        let row_vec = transpose.outer_view(*row);
+        if row_vec.is_none() {
+            return;
+        }
+        let row_vec = row_vec.unwrap();
+        // out treatment new neighbourhood for current iteration 
+        let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
+        let weight = self.decay/self.sketch_size as f64;
+        // get an iterator on neighbours of node corresponding to row 
+        let mut row_iter = row_vec.iter();
+        while let Some(neighbour) = row_iter.next() {
+            match v_k.get_mut(&neighbour.0) {
+                Some(val) => { *val = *val + weight * *neighbour.1; }
+                None              => { v_k.insert(neighbour.0, *neighbour.1).unwrap(); }
+            };
+            // get sketch of neighbour
+            let neighbour_sketch = &*self.previous_sketches_in[neighbour.0].read();
+            for n in neighbour_sketch {
+                match v_k.get_mut(&neighbour.0) {
+                   // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
+                   Some(val)   => { *val = *val + weight; }
+                   None                => { v_k.insert(*n, weight).unwrap(); }
+                };                    
+            }
+        }
+        // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
+        // as we possibly got more.
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.sketch_size, 0);
+        probminhash3a.hash_weigthed_hashmap(&v_k);
+        let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
+        // save sketches into self sketch
+        let mut row_write = self.sketches_in[*row].write();
+        for j in 0..self.get_sketch_size() {
+           row_write[j] = sketch[j];
+        }        
     } // end of treat_row
 
 
@@ -149,15 +225,17 @@ impl NodeSketchAsym {
 
 mod tests {
  
+#[allow(unused)]
 use log::*;
 
 
 
-#[allow(dead_code)]
+#[allow(unused)]
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
+#[allow(unused)]
 use super::*; 
 
 

@@ -6,13 +6,13 @@
 
 
 use ndarray::{Array2, Array1};
-use sprs::{TriMatI, CsMatI, CsVecBase};
+use sprs::{TriMatI, CsMatI};
 
 use ahash::{AHasher};
 use std::collections::HashMap;
 use probminhash::probminhasher::*;
 //
-use rayon::iter::{ParallelIterator,IntoParallelRefIterator};
+use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
 
@@ -23,6 +23,8 @@ use super::sla::*;
 // We access rows in //, we need rows to be protected by a RwLock
 // as Rows are accesses once in each iteration we avoid locks
 type RowSketch = Arc<RwLock<Array1<usize>>>;
+
+
 
 /// Compute the sketch of node proximity for a (undirected) graph.
 /// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
@@ -37,11 +39,11 @@ pub struct NodeSketch {
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
     sketches : Vec<RowSketch>,
     ///
-    previous_sketches : Vec<RowSketch>,  
+    previous_sketches : Vec<RowSketch>, 
 } // end of struct NodeSketch
 
 
-impl NodeSketch {
+impl  NodeSketch {
 
     pub fn new(sketch_size : usize, decay : f64, trimat : &mut  TriMatI<f64, usize>) -> Self {
         // TODO can adjust weight depending on context?
@@ -54,7 +56,7 @@ impl NodeSketch {
             let previous_sketch = Array1::<usize>::zeros(sketch_size);
             previous_sketches.push(Arc::new(RwLock::new(previous_sketch)));
         }
-        NodeSketch{sketch_size, decay, csrmat, sketches, previous_sketches}
+        NodeSketch{sketch_size, csrmat, decay, sketches, previous_sketches}
     } // end of NodeSketch::new 
     
 
@@ -91,27 +93,43 @@ impl NodeSketch {
 
 
     /// sketch of a row of initial self loop augmented matrix. Returns a vector of size self.sketch_size
-    /// TODO Loop on i can also be made parallel
-    fn sketch_slamatrix(&mut self) {
-        // We use probminhash3a, allocate a Hash structure
-        for i in 0..self.csrmat.rows() {
+    fn sketch_slamatrix(&mut self, parallel : bool) {
+        // 
+        let treat_row = | row : usize | {
             let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.sketch_size, 0);
-            for j in 0..self.csrmat.cols() {
-                let w = self.csrmat.get_outer_inner(i,j).unwrap();
+            let col_range = self.csrmat.indptr().outer_inds_sz(row);
+            for j in col_range {
+                let w = self.csrmat.get_outer_inner(row,j).unwrap();
                 probminhash3.hash_item(j,*w);
             }
             let sketch = probminhash3.get_signature();
             for j in 0..self.get_sketch_size() {
-                self.previous_sketches[i].write()[j] = sketch[j];
+                self.previous_sketches[row].write()[j] = sketch[j];
             }
+        };
+
+        if !parallel {
+            // We use probminhash3a, allocate a Hash structure
+            for row in 0..self.csrmat.rows() {
+                if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 {
+                    treat_row(row);
+                }
+            }
+        } 
+        else {
+            // parallel case
+            (0..self.csrmat.rows()).into_par_iter().for_each(| row|  if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 { treat_row(row); })
         }
     } // end of sketch_slamatrix
 
 
 
+    /// computes the embedding 
+    ///     - nb_iter  : corresponds to the number of hops we want to explore around each node.
+    ///     - parallel : a flag to ask for parallel exploration of nodes neighbourhood 
     pub fn compute_embedding(&mut self,  nb_iter:usize, parallel : bool) -> Result<Embedding<usize>,anyhow::Error> {
         // first iteration, we fill previous sketches
-        self.sketch_slamatrix();    
+        self.sketch_slamatrix(parallel);    
         for _ in 0..nb_iter {
             if parallel {
                 self.parallel_iteration();
@@ -138,9 +156,9 @@ impl NodeSketch {
     // do serial iteration on sketches
     fn iteration(&mut self) {
         // now we repeatedly merge csrmat (loop augmented matrix) with sketches
-        for (row, row_vec) in self.csrmat.outer_iterator().enumerate() {
+        for (row, _) in self.csrmat.outer_iterator().enumerate() {
             // new neighbourhood for current iteration 
-            self.treat_row(&row, &row_vec);
+            self.treat_row(&row);
         }  // end of for on row
         // transfer sketches into previous sketches
         for i in 0..self.get_nb_nodes() { 
@@ -152,9 +170,30 @@ impl NodeSketch {
     } // end of iteration
 
 
+
+    // do one iteration with // treatment of nodes
+    fn parallel_iteration(&mut self) {
+        // now we repeatedly merge csrmat (loop augmented matrix) with sketches
+        (0..self.csrmat.rows()).into_par_iter().for_each( |row| self.treat_row(&row));
+        // transfer sketches into previous sketches
+        for i in 0..self.get_nb_nodes() { 
+            let mut row_write = self.previous_sketches[i].write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = self.sketches[i].read()[j];
+            }
+        }  
+    } // end of parallel_iteration
+
+
     // given a row (its number and the data in compressed row Matrice corresponding) 
-    // the function omputes sketch value given previous sketch values
-    fn treat_row(&self, row : &usize, row_vec : &CsVecBase<&[usize], &[f64], f64, usize>) {
+    // the function computes sketch value given previous sketch values
+    fn treat_row(&self, row : &usize) {
+        // if we have no data ar row we return immediately
+        let row_vec = self.csrmat.outer_view(*row);
+        if row_vec.is_none() {
+            return;
+        }
+        let row_vec = row_vec.unwrap();
         // new neighbourhood for current iteration 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
         let weight = self.decay/self.sketch_size as f64;
@@ -189,17 +228,6 @@ impl NodeSketch {
 
 
 
-    // do one iteration with // treatment of nodes
-    fn parallel_iteration(&mut self) {
-        // we must first gather all information on rows
-        let nb_rows = self.csrmat.rows();
-        let mut rows_info = Vec::<(usize,CsVecBase<&[usize], &[f64], f64, usize>) >::with_capacity(nb_rows);
-        for (row, row_vec) in self.csrmat.outer_iterator().enumerate() {
-            rows_info.push((row, row_vec));
-        }
-        // now we repeatedly merge csrmat (loop augmented matrix) with sketches
-        rows_info.par_iter().for_each( |(row, row_vec)| self.treat_row(row, row_vec));
-    } // end of parallel_iteration
 
 
 } // end of impl NodeSketch
