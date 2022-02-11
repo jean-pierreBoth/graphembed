@@ -173,6 +173,27 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 /// until we use an IndexSet (see annembed::fromhnsw::KGraph)
 pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<MatRepr<F>> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    //
+    let trimat = csv_to_trimat(filepath, directed, delim);
+    if trimat.is_ok() {
+        let csrmat : CsMat<F> = trimat.unwrap().to_csr();
+        return Ok(MatRepr::from_csrmat(csrmat));
+    }
+    else {
+        return Err(trimat.unwrap_err());
+    }
+}  // end of csv_to_csrmat
+
+
+/// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
+/// 
+/// If there are 3 fields by record, the third is assumed to be a weight of type F (f32 oe f64)
+/// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
+/// Possibly the TrimatI will have some edges filtered for validation (precision or AUC cross validation)
+/// 
+pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<TriMatI<F, usize>> 
+    where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    //
     // first get number of header lines
     let nb_headers_line = get_header_size(&filepath)?;
     log::info!("directed_from_csv , got header nb lines {}", nb_headers_line);
@@ -288,11 +309,9 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     }  // end of for result
     //
     let trimat = TriMatI::<F, usize>::from_triplets((rowmax,colmax), rows, cols, values);
-    let csrmat : CsMat<F> = trimat.to_csr();
     //
-    Ok(MatRepr::from_csrmat(csrmat))
-}  // end of directed_unweighted_csv_to_mat
-
+    Ok(trimat)
+} // end of csv_to_trimat
 
 
 //========================================================================================

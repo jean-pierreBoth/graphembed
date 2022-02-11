@@ -13,3 +13,5 @@
 /// 
 /// - Path‑based extensions of local link prediction methods for complex networks
 ///     Aziz, Gul Nature Scientific reports 2020.
+
+pub mod link;

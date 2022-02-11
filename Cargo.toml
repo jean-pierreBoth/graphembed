@@ -57,6 +57,7 @@ clap = {version = "2.33"}
 ##
 ahash = {version = "0.7"}
 probminhash = {version = "0.1.5"}
+rand = {version = "0.8"}
 
 annembed ={ path = "../annembed"}
 
