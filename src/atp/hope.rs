@@ -67,7 +67,7 @@ impl <F> Hope<F>  where
     }
 
     /// returns the quotients of eigenvalues.
-    /// The relative precision of the embedding can be appreciated by the quantity quotient[quotient.len()-1]/quotient[0]
+    /// The relative precision of the embedding can be appreciated by the quantity quotient[quotient.len()-1]/quotient\[0\]
     pub fn get_quotient_eigenvalues(&self) -> Option<&Array1<F>> {
         match &self.sigma_q {
             Some(sigma) => {return Some(sigma); }

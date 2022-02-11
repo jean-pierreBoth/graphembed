@@ -15,20 +15,36 @@
 
 
 
-use ndarray::{Array2};
+use ndarray::{Array2, Array1};
 
+
+pub trait EmbeddingT<F> {
+    /// returns true if embedding is symetric
+    fn is_symetric(&self) -> bool;
+    /// the trait provides a function (distance or similarity) between embedded items
+    fn get_similarity(v1 : &Array1<F>, v2: &Array1<F>) -> f64;
+    ///
+    fn get_dimension() -> usize;
+}
 /// symetric embedding
-pub struct Embedding<F>(Array2<F>);
+pub struct Embedding<F> {
+    /// array (n,d) with n number of data, d dimension of embedding
+    data: Array2<F>,
+    /// distance
+    distance : fn(&Array1<F>, &Array1<F>) -> f64,
+} // end of Embedding
+
+
 
 impl<F> Embedding<F> {
 
-    pub(crate) fn new( arr : Array2<F>) -> Self {
-        Embedding{0 : arr}
+    pub(crate) fn new(arr : Array2<F>, distance : fn(&Array1<F>, &Array1<F>) -> f64) -> Self {
+        Embedding{data : arr, distance : distance}
     }
 
     /// get dimension of embedding. (row size of Array)
     pub fn get_dimension(&self) -> usize {
-        self.0.dim().1
+        self.data.dim().1
     }
 }  // end of impl Embedding
 

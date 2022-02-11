@@ -14,14 +14,25 @@ use probminhash::probminhasher::*;
 //
 use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
+use std::cell::RefCell;
 use std::sync::Arc;
 
 //
 use crate::embedding::Embedding;
 use super::sla::*;
 
+
+/// The distance corresponding to nodesketch embedding
+/// similarity is obtained by 1. - jaccard
+pub fn jaccard_distance(v1:&Array1<usize>, v2 : &Array1<usize>) -> f64 {
+    assert_eq!(v1.len(), v2.len());
+    let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1  { acc + 1 } else {acc});
+    1.- (common as f64)/(v1.len() as f64)
+} // end of jaccard
+
 // We access rows in //, we need rows to be protected by a RwLock
 // as Rows are accesses once in each iteration we avoid locks
+// TODO a RefCell is sufficient (instead of RwLock)
 type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 
@@ -147,7 +158,7 @@ impl  NodeSketch {
                 embedded.row_mut(i)[j] = self.sketches[i].read()[j];
             }
         }
-        let embedding = Embedding::<usize>::new(embedded);
+        let embedding = Embedding::<usize>::new(embedded, jaccard_distance);
         //
         Ok(embedding)
     }  // end of compute_embedding

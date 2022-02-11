@@ -179,7 +179,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
 
 
     /// get alpha 
-    /// see lapack doc (gsvd)[http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+    /// see lapack doc <http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html>
     pub fn get_alpha(&self) -> Option<&Array1<F>> {
         let s = match  self.alpha.as_ref() {
             Some(s) => Some(s),
@@ -189,7 +189,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     } // end of get_alpha
 
     /// get beta
-    /// see lapack doc (gsvd)[http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html
+    /// see lapack doc <http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html>
     pub fn get_beta(&self) -> Option<&Array1<F>> {
         let s = match  self.beta.as_ref() {
             Some(s) => Some(s),
