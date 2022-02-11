@@ -29,6 +29,14 @@ use super::randgsvd::{GSvdApprox};
 use super::orderingf::*;
 use crate::embedding::EmbeddingAsym;
 
+/// The distance corresponding to hope embedding. In fact it is L2
+/// TODO similarity : any decreasing function of distance for example 1/(1+d) 
+pub fn hope_distance<F>(v1:&Array1<F>, v2 : &Array1<F>) -> f64 
+    where F : Float + Scalar + Lapack {
+    assert_eq!(v1.len(), v2.len());
+    let dist2 = v1.iter().zip(v2.iter()).fold(F::zero(), |acc, v| acc + (*v.0 - *v.1)*(*v.0 - *v.1));
+    dist2.to_f64().unwrap().sqrt()
+} // end of jaccard
 
 ///
 /// To specify if we run with Katz index or in Rooted Page Rank 
@@ -221,7 +229,7 @@ impl <F> Hope<F>  where
         log::info!("last eigen value to first : {}", sigma_q[sigma_q.len()-1].1/ sigma_q[0].1);
         self.sigma_q = Some(Array1::from_iter(sigma_q.iter().map(|x| x.1)));
         //
-        let embeddinga = EmbeddingAsym::new(source, target);
+        let embeddinga = EmbeddingAsym::new(source, target, hope_distance);
         //
         Ok(embeddinga)
     }  // end of compute_embedding

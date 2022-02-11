@@ -17,15 +17,19 @@
 
 use ndarray::{Array2, Array1};
 
+type Distance<F> = fn(&Array1<F>, &Array1<F>) -> f64;
 
 pub trait EmbeddingT<F> {
     /// returns true if embedding is symetric
     fn is_symetric(&self) -> bool;
-    /// the trait provides a function (distance or similarity) between embedded items
-    fn get_similarity(v1 : &Array1<F>, v2: &Array1<F>) -> f64;
+    /// the trait provides a function distance between embedded items
+    fn get_distance(&self, v1 : &Array1<F>, v2: &Array1<F>) -> f64;
     ///
-    fn get_dimension() -> usize;
-}
+    fn get_dimension(&self) -> usize;
+} // end of trait
+
+
+
 /// symetric embedding
 pub struct Embedding<F> {
     /// array (n,d) with n number of data, d dimension of embedding
@@ -38,19 +42,32 @@ pub struct Embedding<F> {
 
 impl<F> Embedding<F> {
 
-    pub(crate) fn new(arr : Array2<F>, distance : fn(&Array1<F>, &Array1<F>) -> f64) -> Self {
+    pub(crate) fn new(arr : Array2<F>, distance : Distance<F>)  -> Self {
         Embedding{data : arr, distance : distance}
     }
 
-    /// get dimension of embedding. (row size of Array)
-    pub fn get_dimension(&self) -> usize {
-        self.data.dim().1
-    }
 }  // end of impl Embedding
 
 
 
-//============================================
+impl<F> EmbeddingT<F> for Embedding<F> {
+
+    fn is_symetric(&self) -> bool {
+        return true;
+    }
+
+    /// get dimension of embedding. (row size of Array)
+    fn get_dimension(&self) -> usize {
+        self.data.dim().1
+    }
+
+    fn get_distance(&self, data1 : &Array1<F>, data2: &Array1<F>) -> f64 {
+        (self.distance)(data1, data2)
+    }
+
+} // end impl EmbeddingT<F>
+
+//===============================================================
 
 
 /// Asymetric embedding representation
@@ -59,15 +76,17 @@ pub struct EmbeddingAsym<F> {
     source : Array2<F>,
     /// target node representation
     target : Array2<F>,
+    /// distance
+    distance : Distance<F>,
 } // end of struct EmbeddingAsym
 
 
 impl <F> EmbeddingAsym<F> {
 
-    pub(crate) fn new(source : Array2<F>, target : Array2<F>) -> Self {
+    pub(crate) fn new(source : Array2<F>, target : Array2<F>, distance : Distance<F>) -> Self {
         assert_eq!(source.dim().0, target.dim().0);
         assert_eq!(source.dim().1, target.dim().1);
-        EmbeddingAsym{source, target}
+        EmbeddingAsym{source, target, distance}
     }
 
     pub fn get_source(&self) -> &Array2<F> {
@@ -78,8 +97,21 @@ impl <F> EmbeddingAsym<F> {
         &self.target
     }
  
+} // end of impl block for EmbeddingAsym
+
+
+impl<F>  EmbeddingT<F> for EmbeddingAsym<F> {
+
+    fn is_symetric(&self) -> bool {
+        return false;
+    }
+
     /// get dimension of embedding. (row size of Array)
-    pub fn get_dimension(&self) -> usize {
+    fn get_dimension(&self) -> usize {
         self.source.dim().1
     }
-} // end of impl block for EmbeddingAsym
+
+    fn get_distance(&self, data1 : &Array1<F>, data2: &Array1<F>) -> f64 {
+        (self.distance)(data1, data2)
+    }
+} // end impl EmbeddingT<F>

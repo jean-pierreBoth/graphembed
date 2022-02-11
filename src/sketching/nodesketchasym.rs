@@ -103,7 +103,25 @@ impl NodeSketchAsym {
 
     // do iteration on sketches separately for in neighbours and out neighbours
     fn iteration(&mut self) {
-        panic!("not yet implemented");
+        // now we repeatedly merge csrmat (loop augmented matrix) with sketches
+        for (row, _) in self.csrmat.outer_iterator().enumerate() {
+            // new neighbourhood for current iteration 
+            self.treat_row_and_col(&row);
+        }  // end of for on row 
+        // transfer sketches into previous in sketches
+        for i in 0..self.get_nb_nodes() { 
+            let mut row_write = self.previous_sketches_in[i].write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = self.sketches_in[i].read()[j];
+            }
+        }
+        // transfer sketches into previous out sketches
+        for i in 0..self.get_nb_nodes() { 
+            let mut row_write = self.previous_sketches_out[i].write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = self.sketches_out[i].read()[j];
+            }
+        }        
     } // end of iteration
 
 
@@ -114,7 +132,7 @@ impl NodeSketchAsym {
 
 
     // given a row (its number and the data in compressed row Matrice corresponding) 
-    // the function omputes sketch value given previous sketch values
+    // the function computes sketch value given previous sketch values
     fn treat_row_and_col(&self, row : &usize) {
         // if we have no data ar row we return immediately
         let row_vec = self.csrmat.outer_view(*row);

@@ -14,7 +14,6 @@ use probminhash::probminhasher::*;
 //
 use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
-use std::cell::RefCell;
 use std::sync::Arc;
 
 //
@@ -31,8 +30,8 @@ pub fn jaccard_distance(v1:&Array1<usize>, v2 : &Array1<usize>) -> f64 {
 } // end of jaccard
 
 // We access rows in //, we need rows to be protected by a RwLock
-// as Rows are accesses once in each iteration we avoid locks
-// TODO a RefCell is sufficient (instead of RwLock)
+// as Rows are accesses once in each iteration we avoid deadlocks
+// But we need RwLock to get Sync in for_each
 type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 
