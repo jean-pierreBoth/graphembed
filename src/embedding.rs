@@ -19,6 +19,14 @@ use ndarray::{Array2, Array1};
 
 type Distance<F> = fn(&Array1<F>, &Array1<F>) -> f64;
 
+
+pub enum EmbeddingMode {
+    Hope, 
+    Nodesketch,
+}
+
+
+
 pub trait EmbeddingT<F> {
     /// returns true if embedding is symetric
     fn is_symetric(&self) -> bool;
@@ -41,7 +49,7 @@ pub struct Embedding<F> {
 
 
 impl<F> Embedding<F> {
-
+    // fills embedded vectors with the appropriate distance function
     pub(crate) fn new(arr : Array2<F>, distance : Distance<F>)  -> Self {
         Embedding{data : arr, distance : distance}
     }

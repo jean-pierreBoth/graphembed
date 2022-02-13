@@ -38,7 +38,9 @@ pub fn hope_distance<F>(v1:&Array1<F>, v2 : &Array1<F>) -> f64
     dist2.to_f64().unwrap().sqrt()
 } // end of jaccard
 
-///
+
+
+// TODO add Resource Allocator (that is called AdamicAdar in Hope Paper and RA in references mentionned in validation module)
 /// To specify if we run with Katz index or in Rooted Page Rank 
 pub enum HopeMode {
     /// Katz index mode
@@ -48,10 +50,10 @@ pub enum HopeMode {
 } // end of HopeMode
 
 
-
 /// Structure for graph asymetric embedding with approximate random generalized svd to get an estimate of rank necessary
 /// to get a required precision in the SVD. 
 /// The structure stores the adjacency matrix in a full (ndarray) or compressed row storage format (using crate sprs).
+//
 pub struct Hope<F> {
     /// the graph as a matrix
     mat : MatRepr<F>,
