@@ -5,7 +5,7 @@
 
 
 
-use ndarray::{Array2, Array1};
+use ndarray::{Array2, Array1, ArrayView1};
 use sprs::{TriMatI, CsMatI};
 
 use ahash::{AHasher};
@@ -23,7 +23,7 @@ use super::sla::*;
 
 /// The distance corresponding to nodesketch embedding
 /// similarity is obtained by 1. - jaccard
-pub fn jaccard_distance(v1:&Array1<usize>, v2 : &Array1<usize>) -> f64 {
+pub fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
     assert_eq!(v1.len(), v2.len());
     let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1  { acc + 1 } else {acc});
     1.- (common as f64)/(v1.len() as f64)

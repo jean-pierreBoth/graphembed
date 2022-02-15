@@ -15,9 +15,9 @@
 
 
 
-use ndarray::{Array2, Array1};
+use ndarray::{Array2, ArrayView1};
 
-type Distance<F> = fn(&Array1<F>, &Array1<F>) -> f64;
+type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
 
 
 pub enum EmbeddingMode {
@@ -31,9 +31,11 @@ pub trait EmbeddingT<F> {
     /// returns true if embedding is symetric
     fn is_symetric(&self) -> bool;
     /// the trait provides a function distance between embedded items
-    fn get_distance(&self, v1 : &Array1<F>, v2: &Array1<F>) -> f64;
+    fn get_vec_distance(&self, v1 : &ArrayView1<F>, v2: &ArrayView1<F>) -> f64;
     ///
     fn get_dimension(&self) -> usize;
+    /// get distance from node1 to node2 (same as distance from node2 to node1 if graph is symetric)
+    fn get_node_distance(&self, node1: usize, node2 : usize) -> f64;
 } // end of trait
 
 
@@ -43,7 +45,7 @@ pub struct Embedding<F> {
     /// array (n,d) with n number of data, d dimension of embedding
     data: Array2<F>,
     /// distance
-    distance : fn(&Array1<F>, &Array1<F>) -> f64,
+    distance : fn(&ArrayView1<F>, &ArrayView1<F>) -> f64,
 } // end of Embedding
 
 
@@ -69,8 +71,16 @@ impl<F> EmbeddingT<F> for Embedding<F> {
         self.data.dim().1
     }
 
-    fn get_distance(&self, data1 : &Array1<F>, data2: &Array1<F>) -> f64 {
+    /// computes the distance in embedded space between 2 vectors
+    /// dimensions must be equal to embedding dimension
+    fn get_vec_distance(&self, data1 : &ArrayView1<F>, data2: &ArrayView1<F>) -> f64 {
+        assert_eq!(data1.len(), self.get_dimension());
         (self.distance)(data1, data2)
+    }
+
+    /// get distance from node1 to node2 (different from distance between node2 to node1 if embedding is asymetric)
+    fn get_node_distance(&self, node1: usize, node2 : usize) -> f64 {
+        (self.distance)(&self.data.row(node1), &self.data.row(node2))
     }
 
 } // end impl EmbeddingT<F>
@@ -119,7 +129,13 @@ impl<F>  EmbeddingT<F> for EmbeddingAsym<F> {
         self.source.dim().1
     }
 
-    fn get_distance(&self, data1 : &Array1<F>, data2: &Array1<F>) -> f64 {
+    /// get distance from data1 to data2
+    fn get_vec_distance(&self, data1 : &ArrayView1<F>, data2: &ArrayView1<F>) -> f64 {
         (self.distance)(data1, data2)
+    }
+
+    ///
+    fn get_node_distance(&self, node1 : usize, node2 : usize) -> f64 {
+        (self.distance)(&self.source.row(node1), &self.target.row(node2))
     }
 } // end impl EmbeddingT<F>

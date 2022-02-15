@@ -31,7 +31,7 @@ use crate::embedding::EmbeddingAsym;
 
 /// The distance corresponding to hope embedding. In fact it is L2
 /// TODO similarity : any decreasing function of distance for example 1/(1+d) 
-pub fn hope_distance<F>(v1:&Array1<F>, v2 : &Array1<F>) -> f64 
+pub fn hope_distance<F>(v1:&ArrayView1<F>, v2 : &ArrayView1<F>) -> f64 
     where F : Float + Scalar + Lapack {
     assert_eq!(v1.len(), v2.len());
     let dist2 = v1.iter().zip(v2.iter()).fold(F::zero(), |acc, v| acc + (*v.0 - *v.1)*(*v.0 - *v.1));
