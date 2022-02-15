@@ -20,6 +20,13 @@ use rand::distributions::{Uniform, Distribution};
 use std::collections::HashSet;
 
 use sprs::{TriMatI, CsMatI};
+use ndarray::{Array1, Array2};
+
+use rayon::prelude::*;
+use parking_lot::RwLock;
+
+use crate::embedding::{Embedding, EmbeddingT};
+use crate::embedder::EmbedderT;
 
 use crate::sketching::{nodesketch::*, nodesketchasym};
 use crate::atp::*;
@@ -82,18 +89,28 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, rng : &mut Xo
 } // end of filter_csmat
 
 
-
+struct Edge(usize,usize,f64);
 
 /// filters at rate delete_proba.
 /// embed the filtered 
 /// sort all (seen and not seen) edges according to embedding similarity function and return 
 /// ratio of really filtered out / over the number of deleted edges (i.e precision of the iteration)
-fn one_precision_iteration<F: Copy>(csmat : &CsMatI<F, usize>, delete_proba : f64, rng : &mut Xoshiro256PlusPlus) -> f64 {
+fn one_precision_iteration<F: Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize>, delete_proba : f64, embedder : &dyn Fn(&TriMatI<F, usize>) -> E , rng : &mut Xoshiro256PlusPlus) -> f64 {
     // filter
     let (mut trimat, deleted_edge) = filter_csmat(csmat, delete_proba,rng);
     // embed (to be passed as a closure)
-//    let embedding = NodeSketch::new(10, 0.001, &mut trimat);
+    let embedding = &embedder(&trimat);
     // compute all similarities betwen nodes pairs and sort
+    let nb_nodes = embedding.get_nb_nodes();
+    let mut embedded_edges = Vec::<Edge>::with_capacity(nb_nodes*nb_nodes);
+    let f_i = |i : usize| -> Vec<Edge> {
+        (0..nb_nodes).into_iter().map(|j| Edge{0:i, 1:j, 2:embedding.get_node_distance(i,j)}).collect()
+    };
+    for i in 0..nb_nodes {
+        let mut row = f_i(i);
+        embedded_edges.append(&mut row);
+    }
+    // sort embedded_edges
     // find how many deleted edges are in upper part of the sorted edges.
     return -1.;
 
@@ -109,7 +126,8 @@ fn one_precision_iteration<F: Copy>(csmat : &CsMatI<F, usize>, delete_proba : f6
 /// AUC instead samples, for each deleted edge, a random inexistant edge from the original graph and compute its probability in the embedded graph
 /// count number of times the deleted edge is more probable than the deleted.
 /// 
-fn estimate_precision<F : Copy>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64) -> Vec<f64> {
+fn estimate_precision<F : Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, 
+                    embedder : &dyn Fn(&TriMatI<F, usize>) -> E) -> Vec<f64> {
     let rng = Xoshiro256PlusPlus::seed_from_u64(0);
     //
     let mut precision = Vec::<f64>::with_capacity(nbiter);
@@ -117,7 +135,7 @@ fn estimate_precision<F : Copy>(csmat : &CsMatI<F, usize>, nbiter : usize, delet
     for _ in 0..nbiter {
         let mut new_rng = rng.clone();
         new_rng.jump();
-        let prec = one_precision_iteration(csmat, delete_proba, &mut new_rng);
+        let prec = one_precision_iteration(csmat, delete_proba, embedder, &mut new_rng);
         precision.push(prec);
     }
     //

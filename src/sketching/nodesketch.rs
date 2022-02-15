@@ -257,18 +257,20 @@ impl  NodeSketch {
 
 
 impl EmbedderT<usize> for NodeSketch {
-    type Params = NodeSketchParams;
+    type Output = Embedding<usize>;
     ///
-    fn embed(&mut self) -> Result<Box<dyn EmbeddingT<usize>>, anyhow::Error > {
+    fn embed(&mut self) -> Result<Embedding<usize>, anyhow::Error > {
         let res = self.compute_embedding(self.params.nb_iter);
         match res {
             Ok(embeded) => {
-                return Ok(Box::new(embeded));
+                return Ok(embeded);
             },
             Err(err) => { return Err(err);}
         }
     } // end of embed
 } // end of impl<f64> EmbedderT<f64>
+
+
 
 //=====================================================================================================
 

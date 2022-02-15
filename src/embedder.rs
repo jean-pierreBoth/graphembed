@@ -1,6 +1,5 @@
 //! describes embedder trait
 
-use crate::embedding::*;
 
 /// A trait to be able to manipulate embedder in a somewhat unified way if necessary
 /// Comes at the cost of the Boxing of the result.
@@ -8,6 +7,7 @@ use crate::embedding::*;
 /// Useful just to make cross validation generic.
 
 pub trait EmbedderT<F> {
+    type Output;
     ///
-    fn embed(& mut self) -> Result<Box<dyn EmbeddingT<F>>, anyhow::Error>;
+    fn embed(& mut self) -> Result< Self::Output, anyhow::Error>;
 } // end of trait EmbedderT<F>
