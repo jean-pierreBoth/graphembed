@@ -107,10 +107,12 @@ impl <F> EmbeddingAsym<F> {
         EmbeddingAsym{source, target, distance}
     }
 
+    /// get representation of nodes as sources
     pub fn get_source(&self) -> &Array2<F> {
         &self.source
     }
 
+    /// get representation of nodes as targets
     pub fn get_target(&self) -> &Array2<F> {
         &self.target
     }
@@ -134,7 +136,7 @@ impl<F>  EmbeddingT<F> for EmbeddingAsym<F> {
         (self.distance)(data1, data2)
     }
 
-    ///
+    /// get distance FROM source node1 TO target node2 if embedding is asymetric, in symetric case there is no order) 
     fn get_node_distance(&self, node1 : usize, node2 : usize) -> f64 {
         (self.distance)(&self.source.row(node1), &self.target.row(node2))
     }

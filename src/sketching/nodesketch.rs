@@ -17,7 +17,8 @@ use parking_lot::{RwLock};
 use std::sync::Arc;
 
 //
-use crate::embedding::Embedding;
+use crate::embedding::{Embedding, EmbeddingT};
+use crate::embedder::EmbedderT;
 use super::sla::*;
 
 
@@ -35,17 +36,28 @@ pub fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
 type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 
+#[derive(Debug, Copy, Clone)]
+pub struct NodeSketchParams {
+    /// size of the skecth
+    pub sketch_size: usize,    
+    /// exponential decay coefficient for reducing weight of 
+    pub decay : f64,
+    /// parallel mode
+    pub parallel : bool,
+    ///
+    pub nb_iter : usize
+} // end of NodeSketchParams
+
+
 
 /// Compute the sketch of node proximity for a (undirected) graph.
 /// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
 /// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
 pub struct NodeSketch {
-    /// size of the skecth
-    sketch_size: usize,
+    /// specific arguments
+    params : NodeSketchParams,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
-    /// exponential decay coefficient for reducing weight of 
-    decay : f64,
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
     sketches : Vec<RowSketch>,
     ///
@@ -55,7 +67,9 @@ pub struct NodeSketch {
 
 impl  NodeSketch {
 
-    pub fn new(sketch_size : usize, decay : f64, trimat : &mut  TriMatI<f64, usize>) -> Self {
+    // We pass a Trimat as we have to do self loop augmentation
+    pub fn new(sketch_size : usize, decay : f64, nb_iter : usize, parallel : bool, trimat : &mut  TriMatI<f64, usize>) -> Self {
+        let params = NodeSketchParams{sketch_size, decay, parallel, nb_iter};
         // TODO can adjust weight depending on context?
         let csrmat = diagonal_augmentation(trimat, 1.);
         let mut sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
@@ -66,19 +80,19 @@ impl  NodeSketch {
             let previous_sketch = Array1::<usize>::zeros(sketch_size);
             previous_sketches.push(Arc::new(RwLock::new(previous_sketch)));
         }
-        NodeSketch{sketch_size, csrmat, decay, sketches, previous_sketches}
+        NodeSketch{params , csrmat, sketches, previous_sketches}
     } // end of NodeSketch::new 
     
 
     /// get sketch_size 
     pub fn get_sketch_size(&self) -> usize {
-        self.sketch_size
+        self.params.sketch_size
     } // end of get_nb_nodes
 
 
     /// get decay weight for multi hop neighbours
     pub fn get_decay_weight(&self) -> f64 {
-        self.decay
+        self.params.decay
     } // end of get_decay_weight
 
 
@@ -106,7 +120,7 @@ impl  NodeSketch {
     fn sketch_slamatrix(&mut self, parallel : bool) {
         // 
         let treat_row = | row : usize | {
-            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.sketch_size, 0);
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
             let col_range = self.csrmat.indptr().outer_inds_sz(row);
             for j in col_range {
                 let w = self.csrmat.get_outer_inner(row,j).unwrap();
@@ -137,7 +151,8 @@ impl  NodeSketch {
     /// computes the embedding 
     ///     - nb_iter  : corresponds to the number of hops we want to explore around each node.
     ///     - parallel : a flag to ask for parallel exploration of nodes neighbourhood 
-    pub fn compute_embedding(&mut self,  nb_iter:usize, parallel : bool) -> Result<Embedding<usize>,anyhow::Error> {
+    pub fn compute_embedding(&mut self,  nb_iter:usize) -> Result<Embedding<usize>,anyhow::Error> {
+        let parallel = self.params.parallel;
         // first iteration, we fill previous sketches
         self.sketch_slamatrix(parallel);    
         for _ in 0..nb_iter {
@@ -206,7 +221,7 @@ impl  NodeSketch {
         let row_vec = row_vec.unwrap();
         // new neighbourhood for current iteration 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
-        let weight = self.decay/self.sketch_size as f64;
+        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
         while let Some(neighbour) = row_iter.next() {
@@ -226,7 +241,7 @@ impl  NodeSketch {
         }
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.sketch_size, 0);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), 0);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch
@@ -237,13 +252,23 @@ impl  NodeSketch {
     }  // end of treat_row
 
 
-
-
-
 } // end of impl NodeSketch
 
 
 
+impl EmbedderT<usize> for NodeSketch {
+    type Params = NodeSketchParams;
+    ///
+    fn embed(&mut self) -> Result<Box<dyn EmbeddingT<usize>>, anyhow::Error > {
+        let res = self.compute_embedding(self.params.nb_iter);
+        match res {
+            Ok(embeded) => {
+                return Ok(Box::new(embeded));
+            },
+            Err(err) => { return Err(err);}
+        }
+    } // end of embed
+} // end of impl<f64> EmbedderT<f64>
 
 //=====================================================================================================
 

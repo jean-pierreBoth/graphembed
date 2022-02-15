@@ -181,7 +181,7 @@ impl NodeSketchAsym {
             return;
         }
         let row_vec = row_vec.unwrap();
-        // out treatment new neighbourhood for current iteration 
+        // in treatment new neighbourhood for current iteration 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
         let weight = self.decay/self.sketch_size as f64;
         // get an iterator on neighbours of node corresponding to row 

@@ -21,6 +21,9 @@ use std::collections::HashSet;
 
 use sprs::{TriMatI, CsMatI};
 
+use crate::sketching::{nodesketch::*, nodesketchasym};
+use crate::atp::*;
+
 // filter out edge with proba delete_proba
 // The return a tuple containing the matrix of the graph with some edge deleted and a perfect hash on deleted edges
 fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, rng : &mut Xoshiro256PlusPlus) -> (TriMatI::<F, usize>, HashSet<(usize,usize)>)
@@ -79,15 +82,17 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, rng : &mut Xo
 } // end of filter_csmat
 
 
+
+
 /// filters at rate delete_proba.
 /// embed the filtered 
 /// sort all (seen and not seen) edges according to embedding similarity function and return 
 /// ratio of really filtered out / over the number of deleted edges (i.e precision of the iteration)
 fn one_precision_iteration<F: Copy>(csmat : &CsMatI<F, usize>, delete_proba : f64, rng : &mut Xoshiro256PlusPlus) -> f64 {
     // filter
-    let (trimat, deleted_edge) = filter_csmat(csmat, delete_proba,rng);
-
-    // embed
+    let (mut trimat, deleted_edge) = filter_csmat(csmat, delete_proba,rng);
+    // embed (to be passed as a closure)
+//    let embedding = NodeSketch::new(10, 0.001, &mut trimat);
     // compute all similarities betwen nodes pairs and sort
     // find how many deleted edges are in upper part of the sorted edges.
     return -1.;
