@@ -8,8 +8,6 @@ use crate::embedding::*;
 /// Useful just to make cross validation generic.
 
 pub trait EmbedderT<F> {
-    /// specific arguments of the embedder process
-    type Params;
     ///
     fn embed(& mut self) -> Result<Box<dyn EmbeddingT<F>>, anyhow::Error>;
 } // end of trait EmbedderT<F>

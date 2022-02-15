@@ -36,6 +36,8 @@ pub trait EmbeddingT<F> {
     fn get_dimension(&self) -> usize;
     /// get distance from node1 to node2 (same as distance from node2 to node1 if graph is symetric)
     fn get_node_distance(&self, node1: usize, node2 : usize) -> f64;
+    /// get number of nodes
+    fn get_nb_nodes(&self) -> usize;
 } // end of trait
 
 
@@ -81,6 +83,11 @@ impl<F> EmbeddingT<F> for Embedding<F> {
     /// get distance from node1 to node2 (different from distance between node2 to node1 if embedding is asymetric)
     fn get_node_distance(&self, node1: usize, node2 : usize) -> f64 {
         (self.distance)(&self.data.row(node1), &self.data.row(node2))
+    }
+
+    //
+    fn get_nb_nodes(&self) -> usize {
+        self.data.dim().0
     }
 
 } // end impl EmbeddingT<F>
@@ -139,5 +146,9 @@ impl<F>  EmbeddingT<F> for EmbeddingAsym<F> {
     /// get distance FROM source node1 TO target node2 if embedding is asymetric, in symetric case there is no order) 
     fn get_node_distance(&self, node1 : usize, node2 : usize) -> f64 {
         (self.distance)(&self.source.row(node1), &self.target.row(node2))
+    }
+
+    fn get_nb_nodes(&self) -> usize {
+        self.source.dim().0
     }
 } // end impl EmbeddingT<F>
