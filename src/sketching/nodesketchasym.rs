@@ -22,6 +22,8 @@ use rayon::iter::{ParallelIterator,IntoParallelRefIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
 
+use std::time::{SystemTime};
+use cpu_time::ProcessTime;
 
 use crate::embedding::EmbeddingAsym;
 
@@ -218,6 +220,10 @@ impl NodeSketchAsym {
     ///  - nb_iter  : corresponds to number of hops explored around a node.  
     ///  - parallel : if true each iteration treats node in parallel
     pub fn compute_embedding(&mut self, nb_iter:usize, parallel : bool) -> Result<EmbeddingAsym<usize>, anyhow::Error> {
+        //
+        log::debug!("NodeSketchAsym compute_embedding");
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();        
         // first iteration, we fill previous sketches
         self.sketch_slamatrix();    
         for _ in 0..nb_iter {
@@ -228,6 +234,7 @@ impl NodeSketchAsym {
                 self.iteration(); 
             }
         }
+        println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         // allocate the asymetric embedding
         //
         return Err(anyhow!("not yet implemented"));

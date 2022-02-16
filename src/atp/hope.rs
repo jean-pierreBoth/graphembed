@@ -14,7 +14,8 @@ use ndarray::{Array1, Array2, ArrayView1};
 
 use ndarray_linalg::{Scalar, Lapack};
 
-
+use std::time::{SystemTime};
+use cpu_time::ProcessTime;
 
 use num_traits::float::*; 
 // use num_traits::cast::FromPrimitive;
@@ -152,6 +153,10 @@ impl <F> Hope<F>  where
     /// 
     pub fn compute_embedding(&mut self, mode :HopeMode, approx_mode : RangeApproxMode, dampening_f : f64) -> Result<EmbeddingAsym<F>,anyhow::Error> {
         //
+        log::debug!("hope::compute_embedding");
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
+        //
         let gsvd_pb = match mode {
             HopeMode::KATZ => { self.make_katz_problem(dampening_f, approx_mode) },
             HopeMode::RPR => { self.make_rooted_pagerank_problem(dampening_f, approx_mode) },
@@ -162,6 +167,8 @@ impl <F> Hope<F>  where
             return Err(anyhow!("compute_embedding : call GSvdApprox.do_approx_gsvd failed"));
         }
         let gsvd_res = gsvd_res.unwrap();
+        //
+        println!(" gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         // get k. How many eigenvalues for first matrix are 1. (The part in alpha before s1)
         let k = gsvd_res.get_k();
         log::debug!(" k : {}", k);

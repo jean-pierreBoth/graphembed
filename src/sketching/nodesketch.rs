@@ -16,8 +16,11 @@ use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
 
+use std::time::{SystemTime};
+use cpu_time::ProcessTime;
+
 //
-use crate::embedding::{Embedding, EmbeddingT};
+use crate::embedding::{Embedding};
 use crate::embedder::EmbedderT;
 use super::sla::*;
 
@@ -152,6 +155,10 @@ impl  NodeSketch {
     ///     - nb_iter  : corresponds to the number of hops we want to explore around each node.
     ///     - parallel : a flag to ask for parallel exploration of nodes neighbourhood 
     pub fn compute_embedding(&mut self,  nb_iter:usize) -> Result<Embedding<usize>,anyhow::Error> {
+        log::debug!("in nodesketch::compute_embedding");
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
+        //
         let parallel = self.params.parallel;
         // first iteration, we fill previous sketches
         self.sketch_slamatrix(parallel);    
@@ -163,6 +170,8 @@ impl  NodeSketch {
                 self.iteration(); 
             }
         }
+        //
+        println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         // allocate the (symetric) embedding
         let nbnodes = self.sketches.len();
         let dim = self.sketches[0].read().len();

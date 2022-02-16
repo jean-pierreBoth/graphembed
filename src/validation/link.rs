@@ -97,7 +97,7 @@ struct Edge(usize,usize,f64);
 /// ratio of really filtered out / over the number of deleted edges (i.e precision of the iteration)
 fn one_precision_iteration<F: Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize>, delete_proba : f64, embedder : &dyn Fn(&TriMatI<F, usize>) -> E , rng : &mut Xoshiro256PlusPlus) -> f64 {
     // filter
-    let (mut trimat, deleted_edge) = filter_csmat(csmat, delete_proba,rng);
+    let (mut trimat, deleted_edges) = filter_csmat(csmat, delete_proba,rng);
     // embed (to be passed as a closure)
     let embedding = &embedder(&trimat);
     // compute all similarities betwen nodes pairs and sort
@@ -106,14 +106,24 @@ fn one_precision_iteration<F: Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize
     let f_i = |i : usize| -> Vec<Edge> {
         (0..nb_nodes).into_iter().map(|j| Edge{0:i, 1:j, 2:embedding.get_node_distance(i,j)}).collect()
     };
+    /// TODO to parallelize
     for i in 0..nb_nodes {
         let mut row = f_i(i);
         embedded_edges.append(&mut row);
     }
-    // sort embedded_edges
+    // sort embedded_edges in increading order and keep the as many as the number we deleted. (keep the most probable)
+    embedded_edges.sort_unstable_by(|ea, eb| eb.2.partial_cmp(&ea.2).unwrap());
+    embedded_edges.truncate(deleted_edges.len());
     // find how many deleted edges are in upper part of the sorted edges.
-    return -1.;
-
+    let nb_in = embedded_edges.iter().fold(0usize, |acc, edge| if deleted_edges.contains(&(edge.0, edge.1)) { acc+1} else {acc});
+    // for edge in embedded_edges {
+    //     let is_in = deleted_edges.contains(&(edge.0, edge.1));
+    // }
+    //
+    let precision = nb_in as f64/ deleted_edges.len() as f64;
+    log::debug!("one_precision_iteration : precison {}, nb_deleted : {}", precision, deleted_edges.len());
+    //
+    precision
 } // end of one_precision_iteration
 
 

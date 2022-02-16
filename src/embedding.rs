@@ -19,23 +19,29 @@ use ndarray::{Array2, ArrayView1};
 
 type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
 
-
+/// We have 2 embedding modes.
+/// - Hope is described by the paper :
+///     *Asymetric Transitivity Preserving Graph Embedding 2016* 
+///     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.*.
+/// 
+/// - Nodesketch
+///     it is described by the paper [https://dl.acm.org/doi/10.1145/3292500.3330951]
 pub enum EmbeddingMode {
     Hope, 
     Nodesketch,
 }
 
 
-
+/// The embedding trait.
 pub trait EmbeddingT<F> {
     /// returns true if embedding is symetric
     fn is_symetric(&self) -> bool;
+    /// get dimension of vectors of the embedding
+    fn get_dimension(&self) -> usize;
+    /// get distance in embedded space from node1 to node2 (same as distance from node2 to node1 if graph is symetric)
+    fn get_node_distance(&self, node1: usize, node2 : usize) -> f64;
     /// the trait provides a function distance between embedded items
     fn get_vec_distance(&self, v1 : &ArrayView1<F>, v2: &ArrayView1<F>) -> f64;
-    ///
-    fn get_dimension(&self) -> usize;
-    /// get distance from node1 to node2 (same as distance from node2 to node1 if graph is symetric)
-    fn get_node_distance(&self, node1: usize, node2 : usize) -> f64;
     /// get number of nodes
     fn get_nb_nodes(&self) -> usize;
 } // end of trait
@@ -46,7 +52,7 @@ pub trait EmbeddingT<F> {
 pub struct Embedding<F> {
     /// array (n,d) with n number of data, d dimension of embedding
     data: Array2<F>,
-    /// distance
+    /// distance between vectors in embedded space. helps to implement trait EmbeddingT<F>
     distance : fn(&ArrayView1<F>, &ArrayView1<F>) -> f64,
 } // end of Embedding
 
@@ -85,7 +91,7 @@ impl<F> EmbeddingT<F> for Embedding<F> {
         (self.distance)(&self.data.row(node1), &self.data.row(node2))
     }
 
-    //
+    ///
     fn get_nb_nodes(&self) -> usize {
         self.data.dim().0
     }
@@ -148,6 +154,7 @@ impl<F>  EmbeddingT<F> for EmbeddingAsym<F> {
         (self.distance)(&self.source.row(node1), &self.target.row(node2))
     }
 
+    /// get number of nodes embedded.
     fn get_nb_nodes(&self) -> usize {
         self.source.dim().0
     }
