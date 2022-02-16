@@ -27,7 +27,6 @@ use parking_lot::RwLock;
 
 use crate::embedding::{Embedding, EmbeddingT};
 use crate::embedder::EmbedderT;
-
 use crate::sketching::{nodesketch::*, nodesketchasym};
 use crate::atp::*;
 
@@ -88,14 +87,15 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, rng : &mut Xo
     (trimat, deleted_edge)
 } // end of filter_csmat
 
-
+// local edge type corresponding to node1, ndde2 , distance from node1 to node2
 struct Edge(usize,usize,f64);
+
 
 /// filters at rate delete_proba.
 /// embed the filtered 
 /// sort all (seen and not seen) edges according to embedding similarity function and return 
 /// ratio of really filtered out / over the number of deleted edges (i.e precision of the iteration)
-fn one_precision_iteration<F: Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize>, delete_proba : f64, embedder : &dyn Fn(&TriMatI<F, usize>) -> E , rng : &mut Xoshiro256PlusPlus) -> f64 {
+fn one_precision_iteration<F: Copy, E : EmbeddingT<F> + std::marker::Sync>(csmat : &CsMatI<F, usize>, delete_proba : f64, embedder : &dyn Fn(&TriMatI<F, usize>) -> E, rng : &mut Xoshiro256PlusPlus) -> f64 {
     // filter
     let (mut trimat, deleted_edges) = filter_csmat(csmat, delete_proba,rng);
     // embed (to be passed as a closure)
@@ -107,11 +107,11 @@ fn one_precision_iteration<F: Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize
         (0..nb_nodes).into_iter().map(|j| Edge{0:i, 1:j, 2:embedding.get_node_distance(i,j)}).collect()
     };
     /// TODO to parallelize
+    let mut row_embedded : Vec<Vec<Edge>> = (0..nb_nodes).into_par_iter().map(|i| f_i(i)).collect();
     for i in 0..nb_nodes {
-        let mut row = f_i(i);
-        embedded_edges.append(&mut row);
+        embedded_edges.append(&mut row_embedded[i]);
     }
-    // sort embedded_edges in increading order and keep the as many as the number we deleted. (keep the most probable)
+    // sort embedded_edges in distance increasing order and keep the as many as the number we deleted. (keep the most probable)
     embedded_edges.sort_unstable_by(|ea, eb| eb.2.partial_cmp(&ea.2).unwrap());
     embedded_edges.truncate(deleted_edges.len());
     // find how many deleted edges are in upper part of the sorted edges.
@@ -136,7 +136,7 @@ fn one_precision_iteration<F: Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize
 /// AUC instead samples, for each deleted edge, a random inexistant edge from the original graph and compute its probability in the embedded graph
 /// count number of times the deleted edge is more probable than the deleted.
 /// 
-fn estimate_precision<F : Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, 
+fn estimate_precision<F : Copy, E : EmbeddingT<F> + std::marker::Sync>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, 
                     embedder : &dyn Fn(&TriMatI<F, usize>) -> E) -> Vec<f64> {
     let rng = Xoshiro256PlusPlus::seed_from_u64(0);
     //
@@ -151,3 +151,19 @@ fn estimate_precision<F : Copy, E : EmbeddingT<F> >(csmat : &CsMatI<F, usize>, n
     //
     precision
 } // end of estimate_precision
+
+
+
+mod tests {
+
+    use super::*;
+    
+    #[allow(unused_imports)]  // rust analyzer pb we need it!
+    use ndarray::{array};
+    
+    #[allow(unused)]
+    fn log_init_test() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }  
+
+}  // end of mod tests

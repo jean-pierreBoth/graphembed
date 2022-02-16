@@ -55,6 +55,7 @@ cpu-time = {version = "1.0"}
 clap = {version = "2.33"}
 
 ##
+indexmap = {version = "1.8"}
 ahash = {version = "0.7"}
 probminhash = {version = "0.1.5"}
 rand = {version = "0.8"}

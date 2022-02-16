@@ -21,13 +21,14 @@ use num_traits::{float::*};
 use annembed::tools::svdapprox::*;
 
 use sprs::{TriMatI, CsMat};
+use indexmap::IndexMap;
 //use petgraph::graph::{Graph, NodeIndex, IndexType};
 use petgraph::graphmap::{GraphMap, NodeTrait};
 #[allow(unused)]
 use petgraph::{Directed,EdgeType};
 
 
-
+// count number of first lines beginning with '#' or '%'
 fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
     //
     log::info!("get_header_size");
@@ -173,7 +174,6 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 /// until we use an IndexSet (see annembed::fromhnsw::KGraph)
 pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<MatRepr<F>> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
-    //
     let trimat = csv_to_trimat(filepath, directed, delim);
     if trimat.is_ok() {
         let csrmat : CsMat<F> = trimat.unwrap().to_csr();
@@ -185,11 +185,10 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 }  // end of csv_to_csrmat
 
 
-/// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
-/// 
-/// If there are 3 fields by record, the third is assumed to be a weight of type F (f32 oe f64)
+/// load a directed/undirected  weighted/unweighted graph in csv format into a TriMatI representation.  
+/// delim is the delimiter used in the csv file necessary for csv::ReaderBuilder
+/// If there are 3 fields by record, the third is assumed to be a weight convertible type F (morally usize, f32 or f64)
 /// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
-/// Possibly the TrimatI will have some edges filtered for validation (precision or AUC cross validation)
 /// 
 pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<TriMatI<F, usize>> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
@@ -198,6 +197,11 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let nb_headers_line = get_header_size(&filepath)?;
     log::info!("directed_from_csv , got header nb lines {}", nb_headers_line);
     //
+   // as nodes num in csv files are guaranteed to be numbered contiguously in 0..nb_nodes
+    // we maintain a nodeindex. Key is nodenum as in csv file, value is node's rank in appearance order.
+    // The methods get gives a rank given a num and the method get gives a num given a rank! 
+    let nodeindex = IndexMap::<usize, usize>::with_capacity(500000);
+    // hset is just to detect possible edge duplicata in csv file 
     let mut hset = HashSet::<(usize,usize)>::new();
     //
     // get rid of potential lines beginning with # or %
@@ -269,6 +273,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
         }
         if hset.insert((node1,node2)) {
+            log::error!("2-uple ({:?}, {:?}) already present", node1, node2);
             return Err(anyhow!("2-uple ({:?}, {:?}) already present", node1, node2));
         }
         if !directed {
@@ -345,7 +350,7 @@ fn test_directed_unweighted_csv_to_graph() {
     //
     let header_size = get_header_size(&path);
     assert_eq!(header_size.unwrap(),4);
-    println!("\n\n test_directed_unweighted_from_csv data : {:?}", path);
+    println!("\n\n test_directed_unweighted_csv_to_graph data : {:?}", path);
     // we must have 28979 edges as we have 28979 records.
     let graph = directed_unweighted_csv_to_graph::<u32, Directed>(&path, b'\t');
     if let Err(err) = &graph {
@@ -359,11 +364,20 @@ fn test_directed_unweighted_csv_to_graph() {
 
 
 #[test]
-fn test_directed_weighted_from_csv() {
+fn test_directed_weighted_csv_to_trimat() {
     // We load moreno_lesmis/out.moreno_lesmis_lesmis. It is in Data directory of the crate.
     println!("\n\n test_undirected_weighted_from_csv");
     log_init_test();
-
+    // path from where we launch cargo test
+    let path = Path::new(DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+    let header_size = get_header_size(&path);
+    assert_eq!(header_size.unwrap(),2);
+    println!("\n\n test_directed_weighted_csv_to_graph data : {:?}", path);
+    //
+    let trimat_res  = csv_to_trimat::<f64>(&path, false, b' ');
+    if let Err(err) = &trimat_res {
+        eprintln!("ERROR: {}", err);
+    }
 } // end test test_directed_unweightedfrom_csv
 
 

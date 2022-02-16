@@ -7,8 +7,8 @@ use crate::embedding::EmbeddingT;
 /// F is the type contained in embedded vectors , mostly f64, f32, usize
 /// Useful just to make cross validation generic.
 
-pub trait EmbedderT<F>  where Self::Output : EmbeddingT<F> {
-    type Output;
+pub trait EmbedderT<F>  {
+    type Output : EmbeddingT<F> ;
     ///
     fn embed(& mut self) -> Result< Self::Output, anyhow::Error>;
 } // end of trait EmbedderT<F>
