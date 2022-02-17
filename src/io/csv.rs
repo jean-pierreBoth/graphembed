@@ -27,6 +27,7 @@ use petgraph::graphmap::{GraphMap, NodeTrait};
 #[allow(unused)]
 use petgraph::{Directed,EdgeType};
 
+// TODO propagate genericity on N everywhehre ?
 /// maps the type N id of a node to a rank in a matrix
 pub type NodeIndexation<N> = IndexSet<N>;
 
@@ -171,6 +172,9 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 
 
 /// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
+///     - directed must be set to true if graph is directed.
+///     - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
+/// 
 /// Returns the MatRepr field and a mapping from NodeId to a rank in matrix.
 pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
@@ -186,10 +190,11 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 
 
 /// load a directed/undirected  weighted/unweighted graph in csv format into a TriMatI representation.  
-/// delim is the delimiter used in the csv file necessary for csv::ReaderBuilder
-/// If there are 3 fields by record, the third is assumed to be a weight convertible type F (morally usize, f32 or f64)
-/// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
-/// Returns a 2-uple containing first the TriMatI and then the NodeIndexation remapping nodes into (0..nb_nodes) 
+///     - directed must be set to true if graph is directed.
+///     - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
+/// 
+/// If there are 3 fields by record, the third is assumed to be a weight convertible type F (F morally is usize, f32 or f64)
+/// Returns a 2-uple containing first the TriMatI and then the NodeIndexation remapping nodes id as given in the Csv file into (0..nb_nodes) 
 /// 
 pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
@@ -353,7 +358,6 @@ mod tests {
 //    RUST_LOG=graphembed::io::csv=TRACE cargo test csv -- --nocapture
 
 
-const DATADIR : &str = &"/home/jpboth/Rust/graphembed/Data";
 
 use super::*;
 
@@ -374,7 +378,7 @@ fn test_directed_unweighted_csv_to_graph() {
     // We load CA-GrQc.txt taken from Snap data directory. It is in Data directory of the crate.
     log_init_test();
     // path from where we launch cargo test
-    let path = Path::new(DATADIR).join("ca-GrQc.txt");
+    let path = Path::new(crate::DATADIR).join("ca-GrQc.txt");
     //
     let header_size = get_header_size(&path);
     assert_eq!(header_size.unwrap(),4);
@@ -397,7 +401,7 @@ fn test_weighted_csv_to_trimat() {
     println!("\n\n test_weighted_csv_to_trimat");
     log_init_test();
     // path from where we launch cargo test
-    let path = Path::new(DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+    let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
     log::debug!("\n\n test_weighted_csv_to_trimat, loading file {:?}", path);
     let header_size = get_header_size(&path);
     assert_eq!(header_size.unwrap(),2);

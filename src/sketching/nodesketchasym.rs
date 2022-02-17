@@ -26,11 +26,12 @@ use std::time::{SystemTime};
 use cpu_time::ProcessTime;
 
 use crate::embedding::EmbeddingAsym;
+use crate::io::csv::NodeIndexation;
 
 use super::sla::*;
 
 
-type RowSketch = Arc<RwLock<Array1<usize>>>;
+pub type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 /// Compute the sketch of node proximity for a directed graph.
 /// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
@@ -40,6 +41,8 @@ pub struct NodeSketchAsym {
     sketch_size: usize,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
+    /// node from indexation original node id to an index in matrix
+    node_indexation : NodeIndexation<usize>,
     /// exponential decay coefficient for reducing weight of 
     decay : f64,
     /// The matrix storing all sketches along iterations for neighbours directed toward current node
@@ -56,9 +59,9 @@ pub struct NodeSketchAsym {
 
 impl NodeSketchAsym {
 
-    pub fn new(sketch_size : usize, decay : f64, trimat : &mut  TriMatI<f64, usize>) -> Self {
+    pub fn new(sketch_size : usize, decay : f64, mut trimat_indexed : (TriMatI<f64, usize>, NodeIndexation<usize>)) -> Self {
         // TODO can adjust weight depending on context?
-        let csrmat = diagonal_augmentation(trimat, 1.);
+        let csrmat = diagonal_augmentation(&mut trimat_indexed.0, 1.);
         let mut sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
@@ -75,7 +78,7 @@ impl NodeSketchAsym {
             let previous_sketch_out = Array1::<usize>::zeros(sketch_size);
             previous_sketches_out.push(Arc::new(RwLock::new(previous_sketch_out)));            
         }
-        NodeSketchAsym{sketch_size, decay, csrmat, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
+        NodeSketchAsym{sketch_size, decay, csrmat, node_indexation : trimat_indexed.1, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
     }  // end of for NodeSketchAsym::new
     
 
@@ -240,6 +243,26 @@ impl NodeSketchAsym {
         return Err(anyhow!("not yet implemented"));
     } // end of compute_embedding
 
+
+    /// return the embedded vector given the node id as in datafile seen as a target
+    /// The acces is made by the original id in datafile, not by its rank in embedded matrix
+    pub fn get_embdedded_node_in(&mut self, node : usize) -> Option<&RowSketch> {
+        let rank_opt = self.node_indexation.get_index_of(&node);
+        match rank_opt {
+            Some(rank) => { return Some(&self.sketches_in[rank]); }, 
+                _            => { return None;}
+        };
+    } // end of get_embdedded_node_in
+
+    /// return the embedded vector given the node id as in datafile seen as a source
+    /// The acces is made by the original id in datafile, not by its rank in embedded matrix
+    pub fn get_embdedded_node_out(&mut self, node : usize) -> Option<&RowSketch> {
+        let rank_opt = self.node_indexation.get_index_of(&node);
+        match rank_opt {
+            Some(rank) => { return Some(&self.sketches_out[rank]); }, 
+                _            => { return None;}
+        };
+    } // end of get_embdedded_node_in
 } // end of impl NodeSketchAsym
 
 

@@ -23,6 +23,7 @@ use cpu_time::ProcessTime;
 use crate::embedding::{Embedding};
 use crate::embedder::EmbedderT;
 use super::sla::*;
+use crate::io::csv::NodeIndexation;
 
 
 /// The distance corresponding to nodesketch embedding
@@ -34,9 +35,9 @@ pub fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
 } // end of jaccard
 
 // We access rows in //, we need rows to be protected by a RwLock
-// as Rows are accesses once in each iteration we avoid deadlocks
-// But we need RwLock to get Sync in for_each
-type RowSketch = Arc<RwLock<Array1<usize>>>;
+// as Rows are accessed once in each iteration we avoid deadlocks
+// But we need RwLock to get Sync for struct NodeSketch in closures
+pub type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 
 #[derive(Debug, Copy, Clone)]
@@ -61,6 +62,8 @@ pub struct NodeSketch {
     params : NodeSketchParams,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
+    /// to remap node id to index in matrix. rank is found by IndexSet::get_index_of, inversely given a index nodeid is found by IndexSet::get_index
+    node_indexation : NodeIndexation<usize>,
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
     sketches : Vec<RowSketch>,
     ///
@@ -71,10 +74,10 @@ pub struct NodeSketch {
 impl  NodeSketch {
 
     // We pass a Trimat as we have to do self loop augmentation
-    pub fn new(sketch_size : usize, decay : f64, nb_iter : usize, parallel : bool, trimat : &mut  TriMatI<f64, usize>) -> Self {
+    pub fn new(sketch_size : usize, decay : f64, nb_iter : usize, parallel : bool, mut trimat_indexed :(TriMatI<f64, usize>, NodeIndexation<usize>)) -> Self {
         let params = NodeSketchParams{sketch_size, decay, parallel, nb_iter};
         // TODO can adjust weight depending on context?
-        let csrmat = diagonal_augmentation(trimat, 1.);
+        let csrmat = diagonal_augmentation(&mut trimat_indexed.0, 1.);
         let mut sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         for _ in 0..csrmat.rows() {
@@ -83,7 +86,7 @@ impl  NodeSketch {
             let previous_sketch = Array1::<usize>::zeros(sketch_size);
             previous_sketches.push(Arc::new(RwLock::new(previous_sketch)));
         }
-        NodeSketch{params , csrmat, sketches, previous_sketches}
+        NodeSketch{params , csrmat, node_indexation : trimat_indexed.1, sketches, previous_sketches}
     } // end of NodeSketch::new 
     
 
@@ -260,7 +263,14 @@ impl  NodeSketch {
         }            
     }  // end of treat_row
 
-
+    /// return the embedded vector given the node id as in datafile. Not by its rank in embedded matrix
+    pub fn get_embdedded_node(&mut self, node : usize) -> Option<&RowSketch> {
+        let rank_opt = self.node_indexation.get_index_of(&node);
+        match rank_opt {
+            Some(rank) => { return Some(&self.sketches[rank]); }, 
+                _            => { return None;}
+        };
+    } // end of get_embdedded_node
 } // end of impl NodeSketch
 
 
