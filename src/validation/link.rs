@@ -155,8 +155,18 @@ fn estimate_precision<F : Copy, E : EmbeddingT<F> + std::marker::Sync>(csmat : &
 
 mod tests {
 
+
+
+//    cargo test csv  -- --nocapture
+//    cargo test validation::link::tests::test_name -- --nocapture
+//    RUST_LOG=graphembed::validation::link=TRACE cargo test link -- --nocapture
+
     use super::*;
-    
+
+    use crate::io::csv::*;
+
+    use std::path::{Path};
+
     #[allow(unused_imports)]  // rust analyzer pb we need it!
     use ndarray::{array};
     
@@ -164,5 +174,18 @@ mod tests {
     fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();
     }  
+
+    #[test]
+    fn test_nodesketch_lesmiserables() {
+        //
+        log_init_test();
+        //
+        log::debug!("in link.rs test_nodesketch_lesmiserables");
+        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
+        let res = csv_to_trimat::<f64>(&path, false, b' ');
+        // now we embed
+
+    }
 
 }  // end of mod tests
