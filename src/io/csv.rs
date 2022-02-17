@@ -21,11 +21,14 @@ use num_traits::{float::*};
 use annembed::tools::svdapprox::*;
 
 use sprs::{TriMatI, CsMat};
-use indexmap::IndexMap;
+use indexmap::IndexSet;
 //use petgraph::graph::{Graph, NodeIndex, IndexType};
 use petgraph::graphmap::{GraphMap, NodeTrait};
 #[allow(unused)]
 use petgraph::{Directed,EdgeType};
+
+/// maps the type N id of a node to a rank in a matrix
+pub type NodeIndexation<N> = IndexSet<N>;
 
 
 // count number of first lines beginning with '#' or '%'
@@ -168,19 +171,16 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 
 
 /// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
-/// 
-/// If there are 3 fields by record, the third is asuumed to be a weight of type F (f32 oe f64)
-/// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
-/// until we use an IndexSet (see annembed::fromhnsw::KGraph)
-pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<MatRepr<F>> 
+/// Returns the MatRepr field and a mapping from NodeId to a rank in matrix.
+pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
-    let trimat = csv_to_trimat(filepath, directed, delim);
-    if trimat.is_ok() {
-        let csrmat : CsMat<F> = trimat.unwrap().to_csr();
-        return Ok(MatRepr::from_csrmat(csrmat));
+    let res_csv = csv_to_trimat(filepath, directed, delim);
+    if res_csv.is_ok() {
+        let csrmat : CsMat<F> = res_csv.as_ref().unwrap().0.to_csr();
+        return Ok((MatRepr::from_csrmat(csrmat), res_csv.unwrap().1));
     }
     else {
-        return Err(trimat.unwrap_err());
+        return Err(res_csv.unwrap_err());
     }
 }  // end of csv_to_csrmat
 
@@ -189,19 +189,20 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 /// delim is the delimiter used in the csv file necessary for csv::ReaderBuilder
 /// If there are 3 fields by record, the third is assumed to be a weight convertible type F (morally usize, f32 or f64)
 /// nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
+/// Returns a 2-uple containing first the TriMatI and then the NodeIndexation remapping nodes into (0..nb_nodes) 
 /// 
-pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<TriMatI<F, usize>> 
+pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
     //
     // first get number of header lines
     let nb_headers_line = get_header_size(&filepath)?;
     log::info!("directed_from_csv , got header nb lines {}", nb_headers_line);
     //
-   // as nodes num in csv files are guaranteed to be numbered contiguously in 0..nb_nodes
+    // as nodes num in csv files are guaranteed to be numbered contiguously in 0..nb_nodes
     // we maintain a nodeindex. Key is nodenum as in csv file, value is node's rank in appearance order.
     // The methods get gives a rank given a num and the method get gives a num given a rank! 
-    let nodeindex = IndexMap::<usize, usize>::with_capacity(500000);
-    // hset is just to detect possible edge duplicata in csv file 
+    let mut nodeindex = NodeIndexation::<usize>::with_capacity(500000);
+    // hset is just to detect possible edge duplicata in csv file. hashmap contains nodes id by ranks!
     let mut hset = HashSet::<(usize,usize)>::new();
     //
     // get rid of potential lines beginning with # or %
@@ -236,17 +237,19 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let mut colmax : usize = 0;
     let mut nb_record = 0;
     let mut nb_fields = 0;
+    let mut nb_nodes : usize = 0;
     //
     // nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(file);
     for result in rdr.records() {
         let record = result?;
         if log::log_enabled!(Level::Info) && nb_record <= 5 {
-            log::info!("{:?}", record);
+            log::info!(" record num {:?}, {:?}", nb_record, record);
         }
         //
         if nb_record == 0 {
             nb_fields = record.len();
+            log::info!("nb fields = {}", nb_fields);
         }
         else {
             if record.len() != nb_fields {
@@ -257,23 +260,37 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         // we have 2 or 3 fields
         let field = record.get(0).unwrap();
         // decode into Ix type
-        if let Ok(idx) = field.parse::<usize>() {
-            node1 = idx;
+        if let Ok(node) = field.parse::<usize>() {
+            let already = nodeindex.get_index_of(&node);
+            match already {
+                Some(idx) => { node1 = idx},
+                None             => {   node1 = nodeindex.insert_full(node).0;
+                                        log::debug!("inserting node num : {}, rank : {}", node, node1);
+                                        nb_nodes += 1;
+                                    }
+            }
             rowmax = rowmax.max(node1);
         }
         else {
             return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
         }
         let field = record.get(1).unwrap();
-        if let Ok(idx) = field.parse::<usize>() {
-            node2 = idx;
+        if let Ok(node) = field.parse::<usize>() {
+            let already = nodeindex.get_index_of(&node);
+            match already {
+                Some(idx) => { node2 = idx},
+                None             => {   node2 = nodeindex.insert_full(node).0;
+                                        log::debug!("inserting node num : {}, rank : {}", node, node2);
+                                        nb_nodes += 1;
+                                    }
+            }            
             colmax = colmax.max(node2);
         }
         else {
             return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
         }
-        if hset.insert((node1,node2)) {
-            log::error!("2-uple ({:?}, {:?}) already present", node1, node2);
+        if !hset.insert((node1,node2)) {
+            log::error!("2-uple ({:?}, {:?}) already present, record {}", node1, node2, nb_record);
             return Err(anyhow!("2-uple ({:?}, {:?}) already present", node1, node2));
         }
         if !directed {
@@ -282,7 +299,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         }
         if nb_fields == 3 {
             // then we read a weight
-            let field = record.get(3).unwrap();
+            let field = record.get(2).unwrap();
             if let Ok(w) = field.parse::<F>() {
                 weight = w;
             }
@@ -299,7 +316,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         values.push(weight);
         if !directed {
             // store symetric point and check it was not already present
-            if hset.insert((node2,node1)) {
+            if !hset.insert((node2,node1)) {
+                log::error!("undirected case 2-uple ({:?}, {:?}) already present, record {}", node2, node1, nb_record);
                 return Err(anyhow!("2-uple ({:?}, {:?}) already present", node2, node1));
             }
             rows.push(node2);
@@ -313,9 +331,14 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         }
     }  // end of for result
     //
-    let trimat = TriMatI::<F, usize>::from_triplets((rowmax,colmax), rows, cols, values);
+    assert_eq!(rows.len(), cols.len());
+    log::info!("csv file read!, nb_record {}", nb_record);
+    log::info!("rowmax : {}, colmax : {}", rowmax, colmax);
+    let trimat = TriMatI::<F, usize>::from_triplets((rows.len(), rows.len()), rows, cols, values);
     //
-    Ok(trimat)
+    assert_eq!(nb_nodes, nodeindex.len());
+    //
+    Ok((trimat, nodeindex))
 } // end of csv_to_trimat
 
 
@@ -324,6 +347,11 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 #[cfg(test)]
 
 mod tests {
+
+//    cargo test csv  -- --nocapture
+//    cargo test csv::tests::test_name -- --nocapture
+//    RUST_LOG=graphembed::io::csv=TRACE cargo test csv -- --nocapture
+
 
 const DATADIR : &str = &"/home/jpboth/Rust/graphembed/Data";
 
@@ -364,21 +392,33 @@ fn test_directed_unweighted_csv_to_graph() {
 
 
 #[test]
-fn test_directed_weighted_csv_to_trimat() {
+fn test_weighted_csv_to_trimat() {
     // We load moreno_lesmis/out.moreno_lesmis_lesmis. It is in Data directory of the crate.
-    println!("\n\n test_undirected_weighted_from_csv");
+    println!("\n\n test_weighted_csv_to_trimat");
     log_init_test();
     // path from where we launch cargo test
     let path = Path::new(DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+    log::debug!("\n\n test_weighted_csv_to_trimat, loading file {:?}", path);
     let header_size = get_header_size(&path);
     assert_eq!(header_size.unwrap(),2);
-    println!("\n\n test_directed_weighted_csv_to_graph data : {:?}", path);
+    println!("\n\n test_weighted_csv_to_trimat, data : {:?}", path);
     //
     let trimat_res  = csv_to_trimat::<f64>(&path, false, b' ');
     if let Err(err) = &trimat_res {
         eprintln!("ERROR: {}", err);
+        assert_eq!(1,0);
     }
-} // end test test_directed_unweightedfrom_csv
+    // now we can dump some info
+    let mut trimat_iter = trimat_res.as_ref().unwrap().0.triplet_iter();
+    let nodeset = &trimat_res.as_ref().unwrap().1;
+    for _ in 0..5 {
+        let triplet = trimat_iter.next().unwrap();
+        let node1 = nodeset.get_index(triplet.1.0).unwrap();
+        let node2 = nodeset.get_index(triplet.1.1).unwrap();
+        let value = triplet.0;
+        log::debug!("node1 {}, node2 {},  value {} ", node1, node2, value);
+    }
+} // end test test_weighted_csv_to_trimat
 
 
 

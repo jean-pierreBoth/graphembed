@@ -106,13 +106,12 @@ fn one_precision_iteration<F: Copy, E : EmbeddingT<F> + std::marker::Sync>(csmat
     let f_i = |i : usize| -> Vec<Edge> {
         (0..nb_nodes).into_iter().map(|j| Edge{0:i, 1:j, 2:embedding.get_node_distance(i,j)}).collect()
     };
-    /// TODO to parallelize
     let mut row_embedded : Vec<Vec<Edge>> = (0..nb_nodes).into_par_iter().map(|i| f_i(i)).collect();
     for i in 0..nb_nodes {
         embedded_edges.append(&mut row_embedded[i]);
     }
     // sort embedded_edges in distance increasing order and keep the as many as the number we deleted. (keep the most probable)
-    embedded_edges.sort_unstable_by(|ea, eb| eb.2.partial_cmp(&ea.2).unwrap());
+    embedded_edges.sort_unstable_by(|ea, eb| ea.2.partial_cmp(&eb.2).unwrap());
     embedded_edges.truncate(deleted_edges.len());
     // find how many deleted edges are in upper part of the sorted edges.
     let nb_in = embedded_edges.iter().fold(0usize, |acc, edge| if deleted_edges.contains(&(edge.0, edge.1)) { acc+1} else {acc});
