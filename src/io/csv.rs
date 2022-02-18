@@ -181,6 +181,7 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let res_csv = csv_to_trimat(filepath, directed, delim);
     if res_csv.is_ok() {
         let csrmat : CsMat<F> = res_csv.as_ref().unwrap().0.to_csr();
+        log::debug!(" csrmat dims nb_rows {}, nb_cols {} ", csrmat.rows(), csrmat.cols());
         return Ok((MatRepr::from_csrmat(csrmat), res_csv.unwrap().1));
     }
     else {
@@ -319,6 +320,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         rows.push(node1);
         cols.push(node2);
         values.push(weight);
+        nb_record += 1;
         if !directed {
             // store symetric point and check it was not already present
             if !hset.insert((node2,node1)) {
@@ -328,8 +330,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             rows.push(node2);
             cols.push(node1);
             values.push(weight); 
+            nb_record += 1;
         }
-        nb_record += 1;
         if log::log_enabled!(Level::Info) && nb_record <= 5 {
             log::info!("{:?}", record);
             log::info!(" node1 {:?}, node2 {:?}", node1, node2);
@@ -339,7 +341,9 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     assert_eq!(rows.len(), cols.len());
     log::info!("csv file read!, nb_record {}", nb_record);
     log::info!("rowmax : {}, colmax : {}", rowmax, colmax);
-    let trimat = TriMatI::<F, usize>::from_triplets((rows.len(), rows.len()), rows, cols, values);
+    let trimat = TriMatI::<F, usize>::from_triplets((nodeindex.len(), nodeindex.len()), rows, cols, values);
+    log::debug!("trimat shape {:?}",  trimat.shape());
+    assert_eq!(trimat.shape().0,nodeindex.len());
     //
     assert_eq!(nb_nodes, nodeindex.len());
     //

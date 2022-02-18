@@ -62,6 +62,7 @@ pub struct NodeSketch {
     params : NodeSketchParams,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
+    // TODO do we need it here ?
     /// to remap node id to index in matrix. rank is found by IndexSet::get_index_of, inversely given a index nodeid is found by IndexSet::get_index
     node_indexation : NodeIndexation<usize>,
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
@@ -78,6 +79,7 @@ impl  NodeSketch {
         let params = NodeSketchParams{sketch_size, decay, parallel, nb_iter};
         // TODO can adjust weight depending on context?
         let csrmat = diagonal_augmentation(&mut trimat_indexed.0, 1.);
+        log::debug!(" NodeSketch new csrmat dims nb_rows {}, nb_cols {} ", csrmat.rows(), csrmat.cols());
         let mut sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         for _ in 0..csrmat.rows() {
@@ -128,9 +130,12 @@ impl  NodeSketch {
         let treat_row = | row : usize | {
             let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
             let col_range = self.csrmat.indptr().outer_inds_sz(row);
-            for j in col_range {
-                let w = self.csrmat.get_outer_inner(row,j).unwrap();
-                probminhash3.hash_item(j,*w);
+            log::debug!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
+            for k in col_range {
+                let j = self.csrmat.indices()[k];
+                let w = self.csrmat.data()[k];
+                log::debug!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
+                probminhash3.hash_item(j,w);
             }
             let sketch = probminhash3.get_signature();
             for j in 0..self.get_sketch_size() {
@@ -140,8 +145,10 @@ impl  NodeSketch {
 
         if !parallel {
             // We use probminhash3a, allocate a Hash structure
+            log::debug!(" not parallel case nb rows  {}",self.csrmat.rows()) ;
             for row in 0..self.csrmat.rows() {
                 if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 {
+                    log::debug!("sketching row {}", row);
                     treat_row(row);
                 }
             }
@@ -150,6 +157,7 @@ impl  NodeSketch {
             // parallel case
             (0..self.csrmat.rows()).into_par_iter().for_each(| row|  if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 { treat_row(row); })
         }
+        log::debug!("sketch_slamatrix done")
     } // end of sketch_slamatrix
 
 
@@ -157,7 +165,7 @@ impl  NodeSketch {
     /// computes the embedding 
     ///     - nb_iter  : corresponds to the number of hops we want to explore around each node.
     ///     - parallel : a flag to ask for parallel exploration of nodes neighbourhood 
-    pub fn compute_embedding(&mut self,  nb_iter:usize) -> Result<Embedding<usize>,anyhow::Error> {
+    pub fn compute_embedding(&mut self) -> Result<Embedding<usize>,anyhow::Error> {
         log::debug!("in nodesketch::compute_embedding");
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
@@ -165,7 +173,7 @@ impl  NodeSketch {
         let parallel = self.params.parallel;
         // first iteration, we fill previous sketches
         self.sketch_slamatrix(parallel);    
-        for _ in 0..nb_iter {
+        for _ in 0..self.params.nb_iter {
             if parallel {
                 self.parallel_iteration();
             }
@@ -239,7 +247,7 @@ impl  NodeSketch {
         while let Some(neighbour) = row_iter.next() {
             match v_k.get_mut(&neighbour.0) {
                 Some(val) => { *val = *val + weight * *neighbour.1; }
-                None              => { v_k.insert(neighbour.0, *neighbour.1).unwrap(); }
+                None              => { v_k.insert(neighbour.0, *neighbour.1); }
             };
             // get sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches[neighbour.0].read();
@@ -247,7 +255,7 @@ impl  NodeSketch {
                 match v_k.get_mut(&neighbour.0) {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
                     Some(val)   => { *val = *val + weight; }
-                    None                => { v_k.insert(*n, weight).unwrap(); }
+                    None                => { v_k.insert(*n, weight);}
                 };                    
             }
         }
@@ -263,14 +271,7 @@ impl  NodeSketch {
         }            
     }  // end of treat_row
 
-    /// return the embedded vector given the node id as in datafile. Not by its rank in embedded matrix
-    pub fn get_embdedded_node(&mut self, node : usize) -> Option<&RowSketch> {
-        let rank_opt = self.node_indexation.get_index_of(&node);
-        match rank_opt {
-            Some(rank) => { return Some(&self.sketches[rank]); }, 
-                _            => { return None;}
-        };
-    } // end of get_embdedded_node
+
 } // end of impl NodeSketch
 
 
@@ -279,7 +280,7 @@ impl EmbedderT<usize> for NodeSketch {
     type Output = Embedding<usize>;
     ///
     fn embed(&mut self) -> Result<Embedding<usize>, anyhow::Error > {
-        let res = self.compute_embedding(self.params.nb_iter);
+        let res = self.compute_embedding();
         match res {
             Ok(embeded) => {
                 return Ok(embeded);
@@ -300,7 +301,11 @@ mod tests {
 use log::*;
 
 #[allow(unused)]
+
 use super::*; 
+
+#[allow(unused)]
+use crate::io::csv::csv_to_trimat;
 
 
 #[allow(dead_code)]
@@ -308,7 +313,35 @@ fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
+#[test]
+fn test_nodesketch_lesmiserables() {
+    log_init_test();
+    //
+    log::debug!("in nodesketch.rs test_nodesketch_lesmiserables");
+    let path = std::path::Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+    log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
+    let res = csv_to_trimat::<f64>(&path, false, b' ');
+    if res.is_err() {
+        log::error!("test_nodesketch_lesmiserables failed in csv_to_trimat");
+        assert_eq!(1, 0);
+    }
+    let sketch_size = 150;
+    let decay = 0.001;
+    let nb_iter = 10;
+    let parallel = false;
+    // now we embed
+    let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, res.unwrap());
+    let embed_res = nodesketch.compute_embedding();
+    if embed_res.is_err() {
+        log::error!("test_nodesketch_lesmiserables failed in compute_embedding");
+        assert_eq!(1, 0);        
+    }
+    // dump a vector, compute 
+    let embed_res = embed_res.unwrap();
+    let embedded = embed_res.get_embedded();
+    log::debug!("first row {:?}", embedded.row(0));
 
+} // enf of test_nodesketch_lesmiserables
 
 
 

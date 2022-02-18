@@ -33,6 +33,7 @@ pub enum EmbeddingMode {
 
 
 /// The embedding trait.
+/// F is the type contained in embedded vectors
 pub trait EmbeddingT<F> {
     /// returns true if embedding is symetric
     fn is_symetric(&self) -> bool;
@@ -64,6 +65,10 @@ impl<F> Embedding<F> {
         Embedding{data : arr, distance : distance}
     }
 
+    /// get representation of nodes as sources
+    pub fn get_embedded(&self) -> &Array2<F> {
+        &self.data
+    }
 }  // end of impl Embedding
 
 
@@ -73,6 +78,7 @@ impl<F> EmbeddingT<F> for Embedding<F> {
     fn is_symetric(&self) -> bool {
         return true;
     }
+
 
     /// get dimension of embedding. (row size of Array)
     fn get_dimension(&self) -> usize {
@@ -86,6 +92,7 @@ impl<F> EmbeddingT<F> for Embedding<F> {
         (self.distance)(data1, data2)
     }
 
+    // TODO here nodes are rank. Must introduce nodeindexation
     /// get distance from node1 to node2 (different from distance between node2 to node1 if embedding is asymetric)
     fn get_node_distance(&self, node1: usize, node2 : usize) -> f64 {
         (self.distance)(&self.data.row(node1), &self.data.row(node2))
@@ -121,12 +128,12 @@ impl <F> EmbeddingAsym<F> {
     }
 
     /// get representation of nodes as sources
-    pub fn get_source(&self) -> &Array2<F> {
+    pub fn get_embedded_source(&self) -> &Array2<F> {
         &self.source
     }
 
     /// get representation of nodes as targets
-    pub fn get_target(&self) -> &Array2<F> {
+    pub fn get_embedded_target(&self) -> &Array2<F> {
         &self.target
     }
  
@@ -149,6 +156,7 @@ impl<F>  EmbeddingT<F> for EmbeddingAsym<F> {
         (self.distance)(data1, data2)
     }
 
+    // TODO here nodes are rank. Must introduce nodeindexation
     /// get distance FROM source node1 TO target node2 if embedding is asymetric, in symetric case there is no order) 
     fn get_node_distance(&self, node1 : usize, node2 : usize) -> f64 {
         (self.distance)(&self.source.row(node1), &self.target.row(node2))
