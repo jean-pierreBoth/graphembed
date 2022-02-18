@@ -23,7 +23,6 @@ use cpu_time::ProcessTime;
 use crate::embedding::{Embedding};
 use crate::embedder::EmbedderT;
 use super::sla::*;
-use crate::io::csv::NodeIndexation;
 
 
 /// The distance corresponding to nodesketch embedding
@@ -62,9 +61,6 @@ pub struct NodeSketch {
     params : NodeSketchParams,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
-    // TODO do we need it here ?
-    /// to remap node id to index in matrix. rank is found by IndexSet::get_index_of, inversely given a index nodeid is found by IndexSet::get_index
-    node_indexation : NodeIndexation<usize>,
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
     sketches : Vec<RowSketch>,
     ///
@@ -75,10 +71,10 @@ pub struct NodeSketch {
 impl  NodeSketch {
 
     // We pass a Trimat as we have to do self loop augmentation
-    pub fn new(sketch_size : usize, decay : f64, nb_iter : usize, parallel : bool, mut trimat_indexed :(TriMatI<f64, usize>, NodeIndexation<usize>)) -> Self {
+    pub fn new(sketch_size : usize, decay : f64, nb_iter : usize, parallel : bool, mut trimat :TriMatI<f64, usize>) -> Self {
         let params = NodeSketchParams{sketch_size, decay, parallel, nb_iter};
         // TODO can adjust weight depending on context?
-        let csrmat = diagonal_augmentation(&mut trimat_indexed.0, 1.);
+        let csrmat = diagonal_augmentation(&mut trimat, 1.);
         log::debug!(" NodeSketch new csrmat dims nb_rows {}, nb_cols {} ", csrmat.rows(), csrmat.cols());
         let mut sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
@@ -88,7 +84,7 @@ impl  NodeSketch {
             let previous_sketch = Array1::<usize>::zeros(sketch_size);
             previous_sketches.push(Arc::new(RwLock::new(previous_sketch)));
         }
-        NodeSketch{params , csrmat, node_indexation : trimat_indexed.1, sketches, previous_sketches}
+        NodeSketch{params , csrmat, sketches, previous_sketches}
     } // end of NodeSketch::new 
     
 
@@ -330,7 +326,7 @@ fn test_nodesketch_lesmiserables() {
     let nb_iter = 10;
     let parallel = false;
     // now we embed
-    let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, res.unwrap());
+    let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, res.unwrap().0);
     let embed_res = nodesketch.compute_embedding();
     if embed_res.is_err() {
         log::error!("test_nodesketch_lesmiserables failed in compute_embedding");
