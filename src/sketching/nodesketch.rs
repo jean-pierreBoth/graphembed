@@ -20,8 +20,7 @@ use std::time::{SystemTime};
 use cpu_time::ProcessTime;
 
 //
-use crate::embedding::{Embedding};
-use crate::embedder::EmbedderT;
+use crate::embedding::{Embedded, EmbedderT};
 use super::sla::*;
 
 
@@ -161,8 +160,8 @@ impl  NodeSketch {
     /// computes the embedding 
     ///     - nb_iter  : corresponds to the number of hops we want to explore around each node.
     ///     - parallel : a flag to ask for parallel exploration of nodes neighbourhood 
-    pub fn compute_embedding(&mut self) -> Result<Embedding<usize>,anyhow::Error> {
-        log::debug!("in nodesketch::compute_embedding");
+    pub fn compute_embedded(&mut self) -> Result<Embedded<usize>,anyhow::Error> {
+        log::debug!("in nodesketch::compute_Embedded");
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
         //
@@ -179,7 +178,7 @@ impl  NodeSketch {
         }
         //
         println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
-        // allocate the (symetric) embedding
+        // allocate the (symetric) Embedded
         let nbnodes = self.sketches.len();
         let dim = self.sketches[0].read().len();
         let mut embedded = Array2::<usize>::zeros((nbnodes,dim));
@@ -188,10 +187,10 @@ impl  NodeSketch {
                 embedded.row_mut(i)[j] = self.sketches[i].read()[j];
             }
         }
-        let embedding = Embedding::<usize>::new(embedded, jaccard_distance);
+        let embedded = Embedded::<usize>::new(embedded, jaccard_distance);
         //
-        Ok(embedding)
-    }  // end of compute_embedding
+        Ok(embedded)
+    }  // end of compute_embedded
 
 
     // do serial iteration on sketches
@@ -273,10 +272,10 @@ impl  NodeSketch {
 
 
 impl EmbedderT<usize> for NodeSketch {
-    type Output = Embedding<usize>;
+    type Output = Embedded<usize>;
     ///
-    fn embed(&mut self) -> Result<Embedding<usize>, anyhow::Error > {
-        let res = self.compute_embedding();
+    fn embed(&mut self) -> Result<Embedded<usize>, anyhow::Error > {
+        let res = self.compute_embedded();
         match res {
             Ok(embeded) => {
                 return Ok(embeded);
@@ -327,9 +326,9 @@ fn test_nodesketch_lesmiserables() {
     let parallel = false;
     // now we embed
     let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, res.unwrap().0);
-    let embed_res = nodesketch.compute_embedding();
+    let embed_res = nodesketch.compute_embedded();
     if embed_res.is_err() {
-        log::error!("test_nodesketch_lesmiserables failed in compute_embedding");
+        log::error!("test_nodesketch_lesmiserables failed in compute_Embedded");
         assert_eq!(1, 0);        
     }
     // dump a vector, compute 

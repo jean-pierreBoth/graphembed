@@ -28,7 +28,7 @@ use annembed::tools::svdapprox::{MatRepr, MatMode, RangeApproxMode};
 
 use super::randgsvd::{GSvdApprox};
 use super::orderingf::*;
-use crate::embedding::EmbeddingAsym;
+use crate::embedding::EmbeddedAsym;
 
 /// The distance corresponding to hope embedding. In fact it is L2
 /// TODO similarity : any decreasing function of distance for example 1/(1+d) 
@@ -145,15 +145,15 @@ impl <F> Hope<F>  where
 
 
 
-    /// computes the embedding.
+    /// computes the embedding
     /// - dampening_factor helps defining the extent to which the multi hop neighbourhood of a node is taken into account 
     ///   when using the katz index matrix or Rooted Page Rank. Factor must be between 0. and 1.
     /// 
     /// *Note that in RPR mode the matrix stored in the Hope structure is renormalized to a transition matrix!!*
     /// 
-    pub fn compute_embedding(&mut self, mode :HopeMode, approx_mode : RangeApproxMode, dampening_f : f64) -> Result<EmbeddingAsym<F>,anyhow::Error> {
+    pub fn compute_embedded(&mut self, mode :HopeMode, approx_mode : RangeApproxMode, dampening_f : f64) -> Result<EmbeddedAsym<F>,anyhow::Error> {
         //
-        log::debug!("hope::compute_embedding");
+        log::debug!("hope::compute_embedded");
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
         //
@@ -164,7 +164,7 @@ impl <F> Hope<F>  where
         // now we can approximately solve svd problem
         let gsvd_res = gsvd_pb.do_approx_gsvd(); 
         if gsvd_res.is_err() {
-            return Err(anyhow!("compute_embedding : call GSvdApprox.do_approx_gsvd failed"));
+            return Err(anyhow!("compute_embedded : call GSvdApprox.do_approx_gsvd failed"));
         }
         let gsvd_res = gsvd_res.unwrap();
         //
@@ -179,19 +179,19 @@ impl <F> Hope<F>  where
         // so we need to sort quotients of M_l/M_g eigenvalues i.e s2/s1
         let s1 : ArrayView1<F> = match gsvd_res.get_s1() {
             Some(s) =>  s,
-            _ => { return  Err(anyhow!("compute_embedding could not get s1")); },
+            _ => { return  Err(anyhow!("compute_embedded could not get s1")); },
         };
         let s2 : ArrayView1<F> = match gsvd_res.get_s2() {
             Some(s) =>  s,
-            _ => { return  Err(anyhow!("compute_embedding could not get s2")); },
+            _ => { return  Err(anyhow!("compute_embedded could not get s2")); },
         };
         let v1 : &Array2<F> = match gsvd_res.get_v1() {
             Some(s) =>  s,
-            _ => { return  Err(anyhow!("compute_embedding could not get v1")); },
+            _ => { return  Err(anyhow!("compute_embedded could not get v1")); },
         };
         let v2 : &Array2<F> = match gsvd_res.get_v2() {
             Some(s) =>  s,
-            _ => { return  Err(anyhow!("compute_embedding could not get v2")); },
+            _ => { return  Err(anyhow!("compute_embedded could not get v2")); },
         };
         //
         assert_eq!(s1.len() , s2.len());
@@ -220,7 +220,7 @@ impl <F> Hope<F>  where
         for idx in &sigma_q {
             permutation.push(idx.0);
         }
-        // Now we can construct embedding
+        // Now we can construct Embedded
         // U_source (resp. U_target) corresponds to M_global (resp. M_local) i.e  first (resp. second) component of GsvdApprox
         //
         let nb_sigma = permutation.len();
@@ -238,10 +238,10 @@ impl <F> Hope<F>  where
         log::info!("last eigen value to first : {}", sigma_q[sigma_q.len()-1].1/ sigma_q[0].1);
         self.sigma_q = Some(Array1::from_iter(sigma_q.iter().map(|x| x.1)));
         //
-        let embeddinga = EmbeddingAsym::new(source, target, hope_distance);
+        let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
         //
-        Ok(embeddinga)
-    }  // end of compute_embedding
+        Ok(embedded_a)
+    }  // end of compute_embedded
 }  // end of impl Hope
 
 

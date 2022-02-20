@@ -31,7 +31,6 @@ pub mod atp;
 pub mod sketching;
 
 pub mod embedding;
-pub mod embedder;
 
 pub mod renormalize;
 
