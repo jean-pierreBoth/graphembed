@@ -296,8 +296,10 @@ mod tests {
 use log::*;
 
 #[allow(unused)]
-
 use super::*; 
+
+#[allow(unused)]
+use crate::prelude::*;
 
 #[allow(unused)]
 use crate::io::csv::csv_to_trimat;
@@ -320,22 +322,35 @@ fn test_nodesketch_lesmiserables() {
         log::error!("test_nodesketch_lesmiserables failed in csv_to_trimat");
         assert_eq!(1, 0);
     }
+    let (trimat, node_index) = res.unwrap();
     let sketch_size = 150;
     let decay = 0.001;
     let nb_iter = 10;
     let parallel = false;
     // now we embed
-    let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, res.unwrap().0);
-    let embed_res = nodesketch.compute_embedded();
-    if embed_res.is_err() {
+    let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, trimat);
+    let sketch_embedding = Embedding::new(node_index, &mut nodesketch);
+    if sketch_embedding.is_err() {
         log::error!("test_nodesketch_lesmiserables failed in compute_Embedded");
         assert_eq!(1, 0);        
     }
-    // dump a vector, compute 
-    let embed_res = embed_res.unwrap();
-    let embedded = embed_res.get_embedded();
-    log::debug!("first row {:?}", embedded.row(0));
+    let embed_res = sketch_embedding.unwrap();
+    // compute some distances
+    // get distance between node 11 and 27 (nearest pai in file : similarity weight in file = 31)
+    let dist_11_27  = embed_res.get_node_distance(11, 27);
+    log::debug!("node (11,27)  =  rank({},{})" , embed_res.get_node_rank(11).unwrap(), embed_res.get_node_rank(27).unwrap());
+    log::debug!("distance between nodes 11 and 27 : {}, weight in file {} ", dist_11_27, 31);
+    let dist_11_33  = embed_res.get_node_distance(11, 33);
+    log::debug!("distance between nodes 11 and 33 {} , weight in file : {}", dist_11_33, 1);
 
+    // dump some vectors
+    let embedded = embed_res.get_embedded_data();
+
+    let rank = embed_res.get_node_rank(11).unwrap();
+    log::debug!(" row {:?} sketch {:?} ", rank, embedded.get_embedded().row(rank));
+    
+    let rank = embed_res.get_node_rank(27).unwrap();
+    log::debug!(" row {:?} sketch {:?} ", rank, embedded.get_embedded().row(rank));
 } // enf of test_nodesketch_lesmiserables
 
 

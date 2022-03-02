@@ -15,6 +15,16 @@
 
 
 
+/// We have 2 Embedded modes.
+/// - Hope is described by the paper :
+///     *Asymetric Transitivity Preserving Graph Embedded 2016* 
+///     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.*.
+/// 
+/// - Nodesketch
+///     it is described by the paper <https://dl.acm.org/doi/10.1145/3292500.3330951>
+/// 
+
+
 use ndarray::{Array2, ArrayView1};
 use indexmap::IndexSet;
 
@@ -22,13 +32,6 @@ use indexmap::IndexSet;
 /// to represent the distance in embedded space between 2 vectors
 type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
 
-/// We have 2 Embedded modes.
-/// - Hope is described by the paper :
-///     *Asymetric Transitivity Preserving Graph Embedded 2016* 
-///     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.*.
-/// 
-/// - Nodesketch
-///     it is described by the paper [https://dl.acm.org/doi/10.1145/3292500.3330951]
 pub enum EmbeddingMode {
     Hope, 
     Nodesketch,
@@ -77,7 +80,8 @@ impl<F> Embedded<F> {
     }
 
     pub fn get_distance(&self) ->  &fn(&ArrayView1<F>, &ArrayView1<F>) -> f64 {
-        &self.distance}
+        &self.distance
+    }
 }  // end of impl Embedded
 
 
@@ -168,7 +172,7 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     // TODO here nodes are rank. Must introduce nodeindexation
     /// In this interface nodes are identified by their rank in the embedding, not their original identity
     /// So ranks must be less than number of nodes.
-    /// To get an interface get to the Embedding trait with depend also on the mapping from node_id to node_rank
+    /// To get an interface original nodes id,  use the Embedding structure wwhich has a mapping from node_id to node_rank
     /// get distance FROM source node_rank1 TO target node_rank2 if Embedded is asymetric, in symetric case there is no order) 
     fn get_noderank_distance(&self, node_rank1 : usize, node_rank2 : usize) -> f64 {
         (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2))
@@ -198,13 +202,12 @@ pub trait EmbedderT<F>  {
 //==============================================================================
 
 /// The sructure collecting the result of the embedding process
-///     - nodeindexation : an IndexSet storing Node identifier (as in datafile) and associatiing to it a rank in Array representing 
-///                         embedded nodes
+///     - nodeindexation : an IndexSet storing Node identifier (as in datafile) and associating it to a rank in Array representing embedded nodes
 ///                      given a node id we get its rank in Array using IndexSet::get_index_of
 ///                      given a rank we get original node id by using IndexSet::get_index
 ///     - embbeded : the embedded data of type EmbeddedData. At present time Embedded<F> or EmbeddedAsym<F>
 pub struct Embedding<F,  EmbeddedData : EmbeddedT<F> >  {
-    /// association of nodeid to a rank
+    /// association of nodeid to a rank. To be made generic to not restrict node id to usize
     nodeindexation : IndexSet<usize>,
     ///
     embedded : EmbeddedData,
@@ -229,14 +232,28 @@ impl <EmbeddedData,F> Embedding<F, EmbeddedData >  where  EmbeddedData: Embedded
     } // end of new
 
 
-    /// to retrive the indexation
+    /// to retrieve the indexation
     pub fn get_node_indexation(&self) -> &IndexSet<usize> {
         return &self.nodeindexation
     } // end of get_node_indexation
 
-
+    /// retrives the embedding asked for
     pub fn get_embedded_data(&self) -> &EmbeddedData {
         return &self.embedded
     } // end of get_embedded_data
+
+
+    /// get distance between nodes, given their original node id
+    pub fn get_node_distance(&self, node1 : usize, node2 : usize) -> f64 {
+        let rank1 = self.nodeindexation.get_index_of(&node1).unwrap();
+        let rank2 = self.nodeindexation.get_index_of(&node2).unwrap();
+        self.embedded.get_noderank_distance(rank1, rank2)
+    } // get_noderank_distance
+
+
+    /// get rank of a node_id. 
+    pub fn get_node_rank(&self, node_id: usize) -> Option<usize>  {
+        self.nodeindexation.get_index_of(&node_id)
+    }
 
  } // end of impl Embedding

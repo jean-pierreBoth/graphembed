@@ -4,4 +4,4 @@
 
 pub use crate::io::csv::*;
 
-pub use crate::Embedded::*;
+pub use crate::embedding::*;
