@@ -1,7 +1,7 @@
 //! This module is dedicated to graph kernels implementations
 //! 
 //! To be implmeented 
-//!     - The base 1-Weisfeiler-Lehman rooted subtree algorithm 
+//!     - The base 1-Weisfeiler-Lehman rooted subtree algorithm and an optimal assignment version
 //!     - A Hashed version to get a continuous attribute  WL version
 //!
 //!  
@@ -9,10 +9,13 @@
 //! 
 //! - Graph Kernels : A survey. Nikolentzos-Siglidis-Vazirgiannis 2021
 //!     panorama of graphs kernels. links with  GNN. Examples et perfs GNN et Graph Kernels comparées.
-//!     Core Weisfeiler-Lehman and Vertex Histogram excellent sur unlabeled  or discrete labeled node graph
-//!     Multiscale laplacian is OK for continuous labeled vertex graph but more cpu intensive
+//!     Core Weisfeiler-Lehman and Optimal Assignement Vertex Histogram are OK on unlabeled  or discrete labeled node graph
+//!     
 //! 
-//! - Graph Kernels : State of the art and futures challenges 2020.
+//! - Graph Kernels : State of the art and futures challenges  Borgwart 2020.
+//!     Taxonomy of graph kernels according to directed/undirected edges continuous/discrete labelling of nodes or edges.
+//!         Message passing Kernels of Nikolentsos seems good and covers the directed/undirected graphs and labelled/continuous nodes.
+//!         (but not edges labelling)
 //!
 //!  
 // The first paper : 

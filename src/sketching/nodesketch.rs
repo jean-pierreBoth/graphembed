@@ -125,11 +125,11 @@ impl  NodeSketch {
         let treat_row = | row : usize | {
             let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
             let col_range = self.csrmat.indptr().outer_inds_sz(row);
-            log::debug!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
+            log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
             for k in col_range {
                 let j = self.csrmat.indices()[k];
                 let w = self.csrmat.data()[k];
-                log::debug!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
+                log::trace!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
                 probminhash3.hash_item(j,w);
             }
             let sketch = probminhash3.get_signature();
@@ -143,7 +143,7 @@ impl  NodeSketch {
             log::debug!(" not parallel case nb rows  {}",self.csrmat.rows()) ;
             for row in 0..self.csrmat.rows() {
                 if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 {
-                    log::debug!("sketching row {}", row);
+                    log::trace!("sketching row {}", row);
                     treat_row(row);
                 }
             }
@@ -234,23 +234,24 @@ impl  NodeSketch {
             return;
         }
         let row_vec = row_vec.unwrap();
-        // new neighbourhood for current iteration 
+        // new neighbourhood for row at current iteration. Store neighbours of row with a weight. 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
         let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
         while let Some(neighbour) = row_iter.next() {
+            // neighbour.0 is a neighbour of row,corresponds to sla component
             match v_k.get_mut(&neighbour.0) {
-                Some(val) => { *val = *val + weight * *neighbour.1; }
-                None              => { v_k.insert(neighbour.0, *neighbour.1); }
+                Some(val) => { *val = *val + weight * *neighbour.1;}
+                None    => { v_k.insert(neighbour.0, *neighbour.1); }
             };
-            // get sketch of neighbour
+            // get component due to previous sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches[neighbour.0].read();
             for n in neighbour_sketch {
-                match v_k.get_mut(&neighbour.0) {
+                match v_k.get_mut(n) {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
                     Some(val)   => { *val = *val + weight; }
-                    None                => { v_k.insert(*n, weight);}
+                    None                =>  { v_k.insert(*n, weight);}
                 };                    
             }
         }
@@ -324,7 +325,7 @@ fn test_nodesketch_lesmiserables() {
     }
     let (trimat, node_index) = res.unwrap();
     let sketch_size = 150;
-    let decay = 0.001;
+    let decay = 0.1;
     let nb_iter = 10;
     let parallel = false;
     // now we embed
@@ -336,7 +337,7 @@ fn test_nodesketch_lesmiserables() {
     }
     let embed_res = sketch_embedding.unwrap();
     // compute some distances
-    // get distance between node 11 and 27 (nearest pai in file : similarity weight in file = 31)
+    // get distance between node 11 and 27 (largest edge proximity weight in file = 31)
     let dist_11_27  = embed_res.get_node_distance(11, 27);
     log::debug!("node (11,27)  =  rank({},{})" , embed_res.get_node_rank(11).unwrap(), embed_res.get_node_rank(27).unwrap());
     log::debug!("distance between nodes 11 and 27 : {}, weight in file {} ", dist_11_27, 31);
@@ -347,10 +348,22 @@ fn test_nodesketch_lesmiserables() {
     let embedded = embed_res.get_embedded_data();
 
     let rank = embed_res.get_node_rank(11).unwrap();
-    log::debug!(" row {:?} sketch {:?} ", rank, embedded.get_embedded().row(rank));
-    
+    log::debug!("\n\n row {:?} sketch {:?} ", rank, embedded.get_embedded().row(rank));
+
     let rank = embed_res.get_node_rank(27).unwrap();
-    log::debug!(" row {:?} sketch {:?} ", rank, embedded.get_embedded().row(rank));
+    log::trace!("\n\n row {:?} sketch {:?} ", rank, embedded.get_embedded().row(rank));
+    // nodeid  21 and 23 have the same neighbourhoods with very similar weights.
+    let dist_21_23 =  embed_res.get_node_distance(21,23);
+    log::debug!("embedded distance between nodes 21 and 23 : {:3.e}", dist_21_23);
+    let rank = 48;
+    log::trace!("\n\n row {:?} , node_id {:?}, sketch {:?} ", rank, embed_res.get_node_id(rank) ,embedded.get_embedded().row(rank));
+    let rank = 50;
+    log::trace!("\n\n row {:?},  node_id {:?}, sketch {:?} ", rank, embed_res.get_node_id(rank) ,embedded.get_embedded().row(rank));
+    // check for rank 26 27 nodes (35,36) same neighborhood, same weights , must have dist <= 0.05
+    let node_of_rank_26 = *embed_res.get_node_id(26).unwrap();
+    let node_of_rank_27 = *embed_res.get_node_id(27).unwrap();
+    let dist = embed_res.get_node_distance(node_of_rank_26,node_of_rank_27);
+    log::debug!("distance between nodes n1 : {} n2 : {}, dist : {:3.e}", node_of_rank_26, node_of_rank_27, dist);
 } // enf of test_nodesketch_lesmiserables
 
 

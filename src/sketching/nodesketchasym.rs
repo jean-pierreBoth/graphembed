@@ -25,7 +25,7 @@ use std::sync::Arc;
 use std::time::{SystemTime};
 use cpu_time::ProcessTime;
 
-use crate::embedding::EmbeddingAsym;
+use crate::embedding::EmbeddedAsym;
 use crate::io::csv::NodeIndexation;
 
 use super::sla::*;
@@ -199,7 +199,7 @@ impl NodeSketchAsym {
             // get sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches_in[neighbour.0].read();
             for n in neighbour_sketch {
-                match v_k.get_mut(&neighbour.0) {
+                match v_k.get_mut(n) {
                    // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
                    Some(val)   => { *val = *val + weight; }
                    None                => { v_k.insert(*n, weight).unwrap(); }
@@ -219,12 +219,12 @@ impl NodeSketchAsym {
     } // end of treat_row
 
 
-    /// computes the embedding. 
+    /// computes the Embedded. 
     ///  - nb_iter  : corresponds to number of hops explored around a node.  
     ///  - parallel : if true each iteration treats node in parallel
-    pub fn compute_embedding(&mut self, nb_iter:usize, parallel : bool) -> Result<EmbeddingAsym<usize>, anyhow::Error> {
+    pub fn compute_embedded(&mut self, nb_iter:usize, parallel : bool) -> Result<EmbeddedAsym<usize>, anyhow::Error> {
         //
-        log::debug!("NodeSketchAsym compute_embedding");
+        log::debug!("NodeSketchAsym compute_Embedded");
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();        
         // first iteration, we fill previous sketches
@@ -237,11 +237,11 @@ impl NodeSketchAsym {
                 self.iteration(); 
             }
         }
-        println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
-        // allocate the asymetric embedding
+        println!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        // allocate the asymetric Embedded
         //
         return Err(anyhow!("not yet implemented"));
-    } // end of compute_embedding
+    } // end of compute_Embedded
 
 
     /// return the embedded vector given the node id as in datafile seen as a target

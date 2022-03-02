@@ -256,4 +256,9 @@ impl <EmbeddedData,F> Embedding<F, EmbeddedData >  where  EmbeddedData: Embedded
         self.nodeindexation.get_index_of(&node_id)
     }
 
+    /// get node_id given its rank in indexation (and matrix representation)
+    pub fn get_node_id(&self, rank: usize) -> Option<&usize> {
+        self.nodeindexation.get_index(rank)
+    }
+
  } // end of impl Embedding
