@@ -1,14 +1,17 @@
-//! a simple link prediction to test embeddings
+//! a simple link prediction to test Embeddeds
 
 #![allow(unused)]
 
 
-/// The scoring function for similarity is based upon the distance relative to the embedding being tested
+/// The scoring function for similarity is based upon the distance relative to the Embedded being tested
 /// Jaccard for nodesketch and L2 for Atp
 /// We first implement precision measure as described in 
 ///       - Link Prediction in complex Networks : A survey
 ///             Lü, Zhou. Physica 2011
-
+///
+///  Another reference is :
+///       - Link prediction problem for social networks
+///             David Liben-Nowell, J Kleinberg 2007
 
 use log::*;
 use anyhow::{anyhow};
@@ -17,7 +20,7 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use rand_xoshiro::rand_core::SeedableRng;
 use rand::distributions::{Uniform, Distribution};
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use sprs::{TriMatI, CsMatI};
 use ndarray::{Array1, Array2};
@@ -25,17 +28,18 @@ use ndarray::{Array1, Array2};
 use rayon::prelude::*;
 use parking_lot::RwLock;
 
-use crate::embedding::{Embedding, EmbeddingT};
-use crate::embedder::EmbedderT;
+use crate::embedding::{Embedded, EmbeddedT, EmbedderT};
 use crate::sketching::{nodesketch::*, nodesketchasym};
 use crate::atp::*;
 
 // filter out edge with proba delete_proba
+// TODO currently avoid deleting diagonal terms (for Nodesketch) to parametrize
 // The return a tuple containing the matrix of the graph with some edge deleted and a perfect hash on deleted edges
 fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bool, rng : &mut Xoshiro256PlusPlus) -> (TriMatI::<F, usize>, HashSet<(usize,usize)>)
     where F: Copy {
     //
     assert!(delete_proba < 1. && delete_proba > 0.);
+    log::trace!("filter_csmat delete_proba : {}", delete_proba);
     // get total in + out degree
     let mut degree = csrmat.degrees();
     let nb_nodes = csrmat.rows();
@@ -54,11 +58,14 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let mut csmat_iter = csrmat.iter();
     let mut discard = false;
     let mut discarded = 0usize;
-    //
-    while let Some((value,(row, col))) = csmat_iter.next()  {
+    let nb_to_discard = ((nb_edge - nb_nodes) as f64 * delete_proba) as usize;
+    // 
+    log::debug!("csrmat nb edge : {}", nb_edge);
+    // TODO must loop until we have deleted excatly the required number of edges
+    while let Some((value,(row, col))) = csmat_iter.next() {
         let xsi = uniform.sample(rng);
         discard = false;
-        if xsi < delete_proba {
+        if xsi < delete_proba && row < col {
             discard = true;
             // we must check we do not make an isolated node
             if degree[row] <= 1 || degree[col] <= 1 {
@@ -78,11 +85,12 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
             discarded += 1;
             if symetric {
                 deleted_edge.insert((col, row));
+                discarded += 1;
             }
         }
     }  // end while
     //
-    log::info!(" ratio discarded = {:}", discarded as f64/ nb_nodes as f64);
+    log::info!(" ratio discarded = {:}", discarded as f64/ (nb_edge - nb_nodes) as f64);
     log::info!(" not discarded due to low degree {:?}", not_discarded);
     //
     let trimat = TriMatI::<F, usize>::from_triplets((nb_nodes,nb_nodes), rows, cols, values);
@@ -90,44 +98,85 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     (trimat, deleted_edge)
 } // end of filter_csmat
 
+
+
 // local edge type corresponding to node1, ndde2 , distance from node1 to node2
+#[derive(Copy, Clone, Debug)]
 struct Edge(usize,usize,f64);
+
+
+
+
 
 
 /// filters the full graph matrix edges with with rate delete_proba.
 /// embed the filtered and sort all (seen and not seen) edges 
-/// according to embedding similarity function and return. 
+/// according to Embedded similarity function and return. 
 /// ratio of really filtered out / over the number of deleted edges (i.e precision of the iteration)
 /// type G is necessary beccause we embed in possibly different type than F. (for example in Array<usize> with nodesketch)
-fn one_precision_iteration<F: Copy, G, E : EmbeddingT<G> + std::marker::Sync>(csmat : &CsMatI<F, usize>, delete_proba : f64, 
-            symetric : bool, embedder : &dyn Fn(TriMatI<F, usize>) -> E, rng : &mut Xoshiro256PlusPlus) -> f64 {
+/// 
+/// return (precision, recall)
+fn one_precision_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bool, 
+            embedder : &dyn Fn(TriMatI<F, usize>) -> E, rng : &mut Xoshiro256PlusPlus) -> (f64 , f64)
+            where   F: Copy + std::marker::Sync ,
+                    E : EmbeddedT<G> + std::marker::Sync {
     // filter
     let (mut trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
-    // embed (to be passed as a closure)
-    let embedding = &embedder(trimat);
-    // compute all similarities betwen nodes pairs and sort
-    let nb_nodes = embedding.get_nb_nodes();
+    // We construct the list of edges not in reduced graph
+    let nb_nodes = csmat.shape().0;
+    let max_degree = csmat.degrees().into_iter().max().unwrap();
     let mut embedded_edges = Vec::<Edge>::with_capacity(nb_nodes*nb_nodes);
+    // filter out self loops and edges in trimat.
     let f_i = |i : usize| -> Vec<Edge> {
-        (0..nb_nodes).into_iter().map(|j| Edge{0:i, 1:j, 2:embedding.get_node_distance(i,j)}).collect()
+        let mut edges_i = Vec::<Edge>::with_capacity(max_degree);
+        for j in 0..nb_nodes {
+            if j!= i && (&trimat).find_locations(i,j).len() == 0usize {
+                edges_i.push(Edge{0:i, 1:j, 2:0f64});
+            }
+        }
+        edges_i                       
     };
     let mut row_embedded : Vec<Vec<Edge>> = (0..nb_nodes).into_par_iter().map(|i| f_i(i)).collect();
     for i in 0..nb_nodes {
+        log::trace!("row i : {}, row_embedded {:?}", i, row_embedded[i]);
         embedded_edges.append(&mut row_embedded[i]);
     }
-    // sort embedded_edges in distance increasing order and keep the as many as the number we deleted. (keep the most probable)
-    embedded_edges.sort_unstable_by(|ea, eb| ea.2.partial_cmp(&eb.2).unwrap());
-    embedded_edges.truncate(deleted_edges.len());
+    log::debug!(" nb remaining edges after random deletion : {}", embedded_edges.len());
+    //
+    // embed (to be passed as a closure)
+    //
+    let embedded = &embedder(trimat);
+    // now we can compute all edge valuation (similarities betwen nodes pairs) and sort in increasing order
     // find how many deleted edges are in upper part of the sorted edges.
-    let nb_in = embedded_edges.iter().fold(0usize, |acc, edge| if deleted_edges.contains(&(edge.0, edge.1)) { acc+1} else {acc});
-    // for edge in embedded_edges {
-    //     let is_in = deleted_edges.contains(&(edge.0, edge.1));
-    // }
+    for edge in &mut embedded_edges {
+        edge.2 = embedded.get_noderank_distance(edge.0, edge.1);
+    }
+    embedded_edges.sort_unstable_by(|ea, eb| ea.2.partial_cmp(&eb.2).unwrap());
+    log::debug!("nb embedded edges : {}, smallest : {:?}, largest : {:?}", embedded_edges.len(),embedded_edges[0], embedded_edges[embedded_edges.len()-1]);
+    let retrieved = 80usize;
+    embedded_edges.truncate(retrieved);
+    log::debug!("\n smallest non diagonal edges remaining {:?} ... {:?}", embedded_edges[0], embedded_edges[embedded_edges.len()-1]);
     //
-    let precision = nb_in as f64/ deleted_edges.len() as f64;
-    log::debug!("one_precision_iteration : precison {}, nb_deleted : {}", precision, deleted_edges.len());
+    let mut h_edges = HashMap::<(usize,usize), f64>::with_capacity(embedded_edges.len());
+    for edge in embedded_edges {
+        h_edges.insert((edge.0, edge.1), edge.2);
+    }
+    log::debug!("h_edges contains : {} edges ", h_edges.len());
+    let mut nb_in = 0;
+    for edge in &deleted_edges {
+        if h_edges.contains_key(&(edge.0, edge.1)) {
+            nb_in += 1;
+        }
+        if symetric && h_edges.contains_key(&(edge.1, edge.0)) {
+            nb_in += 1;
+        }
+    }
     //
-    precision
+    let recall = nb_in as f64/ deleted_edges.len() as f64;
+    let precision = nb_in as f64/ retrieved as f64;
+    log::debug!("one_precision_iteration : precison {:3.e}, recall : {:3.e} nb_deleted : {}, nb_retrieved : {}", precision, recall, deleted_edges.len(), retrieved);
+    //
+    (precision,recall)
 } // end of one_precision_iteration
 
 
@@ -140,20 +189,22 @@ fn one_precision_iteration<F: Copy, G, E : EmbeddingT<G> + std::marker::Sync>(cs
 /// AUC instead samples, for each deleted edge, a random inexistant edge from the original graph and compute its probability in the embedded graph
 /// count number of times the deleted edge is more probable than the deleted.
 /// 
-pub fn estimate_precision<F : Copy, G, E : EmbeddingT<G> + std::marker::Sync>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, 
-                    symetric : bool, embedder : & dyn Fn(TriMatI<F, usize>) -> E) -> Vec<f64> {
+pub fn estimate_precision<F : Copy + Sync, G, E : EmbeddedT<G> + std::marker::Sync>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, 
+                    symetric : bool, embedder : & dyn Fn(TriMatI<F, usize>) -> E) -> (Vec<f64>, Vec<f64>) {
     let rng = Xoshiro256PlusPlus::seed_from_u64(0);
     //
     let mut precision = Vec::<f64>::with_capacity(nbiter);
+    let mut recall = Vec::<f64>::with_capacity(nbiter);
     // TODO can be made //
     for _ in 0..nbiter {
         let mut new_rng = rng.clone();
         new_rng.jump();
-        let prec = one_precision_iteration(csmat, delete_proba,  symetric, embedder, &mut new_rng);
-        precision.push(prec);
+        let (iter_prec, iter_recall) = one_precision_iteration(csmat, delete_proba,  symetric, embedder, &mut new_rng);
+        precision.push(iter_prec);
+        recall.push(iter_recall);
     }
     //
-    precision
+    (precision,recall)
 } // end of estimate_precision
 
 
@@ -172,7 +223,7 @@ mod tests {
 
     use crate::io::csv::*;
     use crate::sketching::nodesketch::*;
-    use crate::embedding::{Embedding};
+    use crate::embedding::{Embedded};
 
     use sprs::{TriMatI, CsMatI};
 
@@ -187,17 +238,17 @@ mod tests {
     }  
 
     // TODO should use the embedder trait
-    // makes a (symetric) nodesketch embedding to be sent to precision computations
-    fn nodesketch_embedding(trimat : TriMatI<f64, usize>) -> Embedding<usize> {
-        let sketch_size = 150;
+    // makes a (symetric) nodesketch Embedded to be sent to precision computations
+    fn nodesketch_get_embedded(trimat : TriMatI<f64, usize>) -> Embedded<usize> {
+        let sketch_size = 300;
         let decay = 0.001;
-        let nb_iter = 10;
+        let nb_iter = 4;
         let parallel = false;
         // now we embed
         let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, trimat);
-        let embed_res = nodesketch.compute_embedding();
+        let embed_res = nodesketch.compute_embedded();
         embed_res.unwrap()
-    } // end nodesketch_embedding
+    } // end nodesketch_Embedded
 
 
 
@@ -218,7 +269,9 @@ mod tests {
             let trimat_indexed = res.unwrap();
             let csrmat  : CsMatI<f64, usize> = trimat_indexed.0.to_csr();
             let symetric = true;
-            let precision = estimate_precision(&csrmat, 10, 0.1, symetric, &nodesketch_embedding);
+            let precision = estimate_precision(&csrmat, 10, 0.2, symetric, &nodesketch_get_embedded);
+            log::info!("precision : {:?}", precision.0);
+            log::info!("recall : {:?}", precision.1);
         };
 
     }  // end of test_nodesketch_lesmiserables
