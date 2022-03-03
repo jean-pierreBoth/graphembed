@@ -21,6 +21,7 @@ use rand_xoshiro::rand_core::SeedableRng;
 use rand::distributions::{Uniform, Distribution};
 
 use std::collections::{HashSet, HashMap};
+use indexmap::IndexSet;
 
 use sprs::{TriMatI, CsMatI};
 use ndarray::{Array1, Array2};
@@ -35,7 +36,7 @@ use crate::atp::*;
 // filter out edge with proba delete_proba
 // TODO currently avoid deleting diagonal terms (for Nodesketch) to parametrize
 // The return a tuple containing the matrix of the graph with some edge deleted and a perfect hash on deleted edges
-fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bool, rng : &mut Xoshiro256PlusPlus) -> (TriMatI::<F, usize>, HashSet<(usize,usize)>)
+fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bool, rng : &mut Xoshiro256PlusPlus) -> (TriMatI::<F, usize>, IndexSet<(usize,usize)>)
     where F: Copy {
     //
     assert!(delete_proba < 1. && delete_proba > 0.);
@@ -45,7 +46,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let nb_nodes = csrmat.rows();
     let nb_edge = csrmat.nnz();
     let mut deleted_pairs = Vec::<(usize, usize)>::with_capacity((nb_edge as f64 * delete_proba).round() as usize);
-    let mut deleted_edge = HashSet::with_capacity((nb_edge as f64 * delete_proba).round() as usize);
+    let mut deleted_edge = IndexSet::with_capacity((nb_edge as f64 * delete_proba).round() as usize);
     //
     log::info!("mean degree : {}", degree.iter().sum::<usize>() as f64/ nb_nodes as f64);
     //
@@ -131,7 +132,7 @@ fn one_precision_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f6
         let mut edges_i = Vec::<Edge>::with_capacity(max_degree);
         for j in 0..nb_nodes {
             if j!= i && (&trimat).find_locations(i,j).len() == 0usize {
-                edges_i.push(Edge{0:i, 1:j, 2:0f64});
+                edges_i.push(Edge{0:i, 1:j, 2: 0f64});
             }
         }
         edges_i                       
@@ -209,6 +210,90 @@ pub fn estimate_precision<F : Copy + Sync, G, E : EmbeddedT<G> + std::marker::Sy
 
 
 
+
+
+/// estimate AUC as described in Link Prediction in complex Networks : A survey
+///             Lü, Zhou. Physica 2011
+fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bool, 
+            embedder : &dyn Fn(TriMatI<F, usize>) -> E, rng : &mut Xoshiro256PlusPlus) -> f64
+            where   F : Copy + std::marker::Sync,
+                    E : EmbeddedT<G> + std::marker::Sync {
+        //
+    let mut auc : f64 = 0.;
+    let nb_sample = 1000;
+    let nbgood_order = 0;
+    //
+    // compute score of all non observed edges (ie.  nb_nodes*(nb_nodes-1)/2 - filtered out)
+    // sample nb_sample 2-uples of edges one from the deleted edge and one inexistent (not in csmat)
+    // count the number of times the distance of the first is less than the second.
+    // filter
+    let (mut trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
+    // need to store trimat index before move to embedding
+    let mut trimat_set = HashSet::<(usize,usize)>::with_capacity(trimat.nnz());
+    for triplet in trimat.triplet_iter() {
+        trimat_set.insert((triplet.1.0, triplet.1.1));
+    }               
+    //
+    // embed (to be passed as a closure)
+    //
+    let embedded = &embedder(trimat);
+    let mut good = 0.;
+    //
+    let nb_deleted = deleted_edges.len();
+    let nb_nodes = csmat.shape().0;
+    // as we can have large graph , mostly sparse to sample an inexistent edge we sample until we are outside csmat edges
+    let del_uniform = Uniform::<usize>::from(0..nb_deleted);
+    let node_random = Uniform::<usize>::from(0..nb_nodes);
+    for k in 0..nb_sample {
+        let del_edge = deleted_edges.get_index(del_uniform.sample(rng)).unwrap();
+        let no_edge = loop {
+            let i = node_random.sample(rng);
+            let j = node_random.sample(rng);
+            if i != j && !trimat_set.contains(&(i,j)) && deleted_edges.get_index_of(&(i,j)).is_none() {
+                // edge (i,j) not on diagonal and neither in trimat set neither in deleted_edges, so inexistent edge
+                break (i,j);
+            }
+        };
+        let dist_del_edge = embedded.get_noderank_distance(del_edge.0,del_edge.1);
+        let dist_no_edge = embedded.get_noderank_distance(no_edge.0,no_edge.1);
+        if dist_del_edge < dist_no_edge {
+            good += 1.;
+        }
+        else if dist_del_edge == dist_no_edge {
+            good += 0.5;
+        }
+    }
+    let auc = good / nb_sample as f64;
+    log::debug!(" auc = {:3.e}", auc);
+    //
+    return auc;
+} // end of one_auc_iteration
+
+
+
+pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, symetric : bool, 
+            embedder : &dyn Fn(TriMatI<F, usize>) -> E) -> Vec<f64>
+    where   F : Copy + std::marker::Sync,
+            E : EmbeddedT<G> + std::marker::Sync {
+        //
+        let rng = Xoshiro256PlusPlus::seed_from_u64(0);
+        //
+        let mut auc = Vec::<f64>::with_capacity(nbiter);
+        // TODO can be made //
+        for _ in 0..nbiter {
+            let mut new_rng = rng.clone();
+            new_rng.jump();
+            let iter_auc = one_auc_iteration(csmat, delete_proba,  symetric, embedder, &mut new_rng);
+            auc.push(iter_auc);
+        }
+        //
+        auc
+} // end of estimate_auc
+
+
+
+//================================================================================================================
+
 mod tests {
 
 
@@ -253,7 +338,7 @@ mod tests {
 
 
     #[test]
-    fn test_link_nodesketch_lesmiserables() {
+    fn test_link_precision_nodesketch_lesmiserables() {
         //
         log_init_test();
         //
@@ -273,7 +358,31 @@ mod tests {
             log::info!("precision : {:?}", precision.0);
             log::info!("recall : {:?}", precision.1);
         };
+    }  // end of test_link_precision_nodesketch_lesmiserables
 
-    }  // end of test_nodesketch_lesmiserables
+
+
+    #[test]
+    fn test_link_auc_nodesketch_lesmiserables() {
+        //
+        log_init_test();
+        //
+        log::debug!("in link.rs test_nodesketch_lesmiserables");
+        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
+        let res = csv_to_trimat::<f64>(&path, false, b' ');
+        if res.is_err() {
+            log::error!("test_nodesketch_lesmiserables failed in csv_to_trimat");
+            assert_eq!(1, 0);
+        }
+        else {
+            let trimat_indexed = res.unwrap();
+            let csrmat  : CsMatI<f64, usize> = trimat_indexed.0.to_csr();
+            let symetric = true;
+            let auc = estimate_auc(&csrmat, 10, 0.2, symetric, &nodesketch_get_embedded);
+            log::info!("auc : {:?}", auc);
+        };
+    }  // end of test_link_auc_nodesketch_lesmiserables
+
 
 }  // end of mod tests
