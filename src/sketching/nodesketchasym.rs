@@ -11,7 +11,7 @@
 
 use anyhow::{anyhow};
 
-use ndarray::{Array1};
+use ndarray::{Array1, Array2};
 use sprs::{TriMatI, CsMatI};
 
 use ahash::{AHasher};
@@ -243,7 +243,7 @@ impl NodeSketchAsym {
         while let Some(neighbour) = row_iter.next() {
             match v_k.get_mut(&neighbour.0) {
                 Some(val) => { *val = *val + weight * *neighbour.1; }
-                None              => { v_k.insert(neighbour.0, *neighbour.1).unwrap(); }
+                None              => { v_k.insert(neighbour.0, *neighbour.1); }
             };
             // get sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches_out[neighbour.0].read();
@@ -251,7 +251,7 @@ impl NodeSketchAsym {
                 match v_k.get_mut(n) {
                    // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
                    Some(val)   => { *val = *val + weight; }
-                   None                => { v_k.insert(*n, weight).unwrap(); }
+                   None                => { v_k.insert(*n, weight); }
                 };                    
             }
         }
@@ -283,7 +283,7 @@ impl NodeSketchAsym {
         while let Some(neighbour) = row_iter.next() {
             match v_k.get_mut(&neighbour.0) {
                 Some(val) => { *val = *val + weight * *neighbour.1; }
-                None              => { v_k.insert(neighbour.0, *neighbour.1).unwrap(); }
+                None              => { v_k.insert(neighbour.0, *neighbour.1); }
             };
             // get sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches_in[neighbour.0].read();
@@ -291,7 +291,7 @@ impl NodeSketchAsym {
                 match v_k.get_mut(n) {
                    // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
                    Some(val)   => { *val = *val + weight; }
-                   None                => { v_k.insert(*n, weight).unwrap(); }
+                   None                => { v_k.insert(*n, weight); }
                 };                    
             }
         }
@@ -328,10 +328,22 @@ impl NodeSketchAsym {
                 self.iteration(); 
             }
         }
+        log::info!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         println!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         // allocate the asymetric Embedded
+        let nbnodes = self.sketches_in.len();
+        let embedded_dim = self.sketches_in[0].read().len();
+        let mut embedded_source = Array2::<usize>::zeros((nbnodes,embedded_dim));
+        let mut embedded_target = Array2::<usize>::zeros((nbnodes,embedded_dim));
+        for i in 0..nbnodes {
+            for j in 0..self.get_sketch_size() {
+                embedded_target.row_mut(i)[j] = self.sketches_in[i].read()[j];
+                embedded_source.row_mut(i)[j] = self.sketches_out[i].read()[j];
+            }
+        }
+        let embedded = EmbeddedAsym::<usize>::new(embedded_source, embedded_target, super::nodesketch::jaccard_distance);
         //
-        return Err(anyhow!("not yet implemented"));
+        Ok(embedded)
     } // end of compute_Embedded
 
 
@@ -383,27 +395,28 @@ use super::*;
 #[test]
 fn test_nodesketchasym_wiki() {
     log_init_test();
-    //
+    // Nodes: 7115 Edges: 103689
     log::debug!("in nodesketchasym  : test_nodesketchasym_wiki");
     let path = std::path::Path::new(crate::DATADIR).join("wiki-Vote.txt");
     log::info!("\n\n test_nodesketchasym_wiki, loading file {:?}", path);
     let res = csv_to_trimat::<f64>(&path, true, b'\t');
     if res.is_err() {
-        log::error!("error : {:?}", &res.as_ref().err());
+        log::error!("error : {:?}", res.as_ref().err());
         log::error!("test_nodesketchasym_wiki failed in csv_to_trimat");
         assert_eq!(1, 0);
     }
     let (trimat, node_index) = res.unwrap();
     let sketch_size = 150;
     let decay = 0.1;
-    let nb_iter = 10;
+    let nb_iter = 2;
     let parallel = false;
     let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
      // now we embed
     let mut nodesketch = NodeSketchAsym::new(params, trimat);   
     let sketch_embedding = Embedding::new(node_index, &mut nodesketch);
     if sketch_embedding.is_err() {
-        log::error!("test_nodesketch_lesmiserables failed in compute_Embedded");
+        log::error!("error : {:?}", sketch_embedding.as_ref().err());
+        log::error!("test_nodesketchasym_wiki failed in compute_Embedded");
         assert_eq!(1, 0);        
     }
     let _embed_res = sketch_embedding.unwrap();

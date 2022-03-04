@@ -351,8 +351,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     assert_eq!(trimat.shape().0,nodeindex.len());
     //
     assert_eq!(nb_nodes, nodeindex.len());
-    log::info!("\n\ncsv file read!, nb_record {}", nb_record);
-    log::info!("rowmax : {}, colmax : {}", rowmax, colmax);
+    log::info!("\n\n csv file read!, nb_record {}", nb_record);
+    log::info!("rowmax : {}, colmax : {}, nb_edges : {}", rowmax, colmax, trimat.nnz());
     //
     Ok((trimat, nodeindex))
 } // end of csv_to_trimat
