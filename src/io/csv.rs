@@ -204,7 +204,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let nb_headers_line = get_header_size(&filepath)?;
     log::info!("directed_from_csv , got header nb lines {}", nb_headers_line);
     //
-    // as nodes num in csv files are guaranteed to be numbered contiguously in 0..nb_nodes
+    // as nodes num in csv files are not guaranteed to be numbered contiguously in 0..nb_nodes
     // we maintain a nodeindex. Key is nodenum as in csv file, value is node's rank in appearance order.
     // The methods get gives a rank given a num and the method get gives a num given a rank! 
     let mut nodeindex = NodeIndexation::<usize>::with_capacity(500000);
@@ -256,6 +256,10 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         if nb_record == 0 {
             nb_fields = record.len();
             log::info!("nb fields = {}", nb_fields);
+            if nb_fields < 2 {
+                log::error!("found only one field in record, check the delimitor , got {:?} as delimitor ", delim as char);
+                return Err(anyhow!("found only one field in record, check the delimitor , got {:?} as delimitor ", delim as char));
+            }
         }
         else {
             if record.len() != nb_fields {
@@ -278,6 +282,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             rowmax = rowmax.max(node1);
         }
         else {
+            log::debug!("error decoding field 1 of record {}", nb_record+1);
             return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
         }
         let field = record.get(1).unwrap();
@@ -293,6 +298,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             colmax = colmax.max(node2);
         }
         else {
+            log::debug!("error decoding field 2 of record {}", nb_record+1);
             return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
         }
         if !hset.insert((node1,node2)) {
@@ -310,7 +316,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
                 weight = w;
             }
             else {
-                return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
+                log::debug!("error decoding field 3 of record {}", nb_record+1);
+                return Err(anyhow!("error decoding field 3 of record  {}",nb_record+1)); 
             }
         }
         else {
@@ -324,8 +331,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         if !directed {
             // store symetric point and check it was not already present
             if !hset.insert((node2,node1)) {
-                log::error!("undirected case 2-uple ({:?}, {:?}) already present, record {}", node2, node1, nb_record);
-                return Err(anyhow!("2-uple ({:?}, {:?}) already present", node2, node1));
+                log::error!("undirected mode 2-uple ({:?}, {:?}) already present, record {}", node2, node1, nb_record);
+                return Err(anyhow!("undirected mode  : 2-uple ({:?}, {:?}) already present", node2, node1));
             }
             rows.push(node2);
             cols.push(node1);
@@ -339,13 +346,13 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     }  // end of for result
     //
     assert_eq!(rows.len(), cols.len());
-    log::info!("csv file read!, nb_record {}", nb_record);
-    log::info!("rowmax : {}, colmax : {}", rowmax, colmax);
     let trimat = TriMatI::<F, usize>::from_triplets((nodeindex.len(), nodeindex.len()), rows, cols, values);
     log::debug!("trimat shape {:?}",  trimat.shape());
     assert_eq!(trimat.shape().0,nodeindex.len());
     //
     assert_eq!(nb_nodes, nodeindex.len());
+    log::info!("\n\ncsv file read!, nb_record {}", nb_record);
+    log::info!("rowmax : {}, colmax : {}", rowmax, colmax);
     //
     Ok((trimat, nodeindex))
 } // end of csv_to_trimat

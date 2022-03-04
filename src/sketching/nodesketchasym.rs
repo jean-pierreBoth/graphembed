@@ -319,7 +319,8 @@ impl NodeSketchAsym {
         // first iteration, we fill previous sketches
         let parallel = self.params.get_parallel();
         self.sketch_slamatrix(parallel);    
-        for _ in 0.. self.params.get_nb_iter() {
+        for i in 0.. self.params.get_nb_iter() {
+            log::debug!("compute_embedded , iteration {}", i);
             if parallel {
                 self.parallel_iteration();
             }
@@ -359,6 +360,9 @@ impl EmbedderT<usize> for NodeSketchAsym {
 
 mod tests {
  
+ 
+//    cargo test validation::link::tests::test_name -- --nocapture
+//    RUST_LOG=graphembed::sketching=TRACE cargo test test_nodesketchasym_wiki -- --nocapture
 #[allow(unused)]
 use log::*;
 
@@ -382,9 +386,10 @@ fn test_nodesketchasym_wiki() {
     //
     log::debug!("in nodesketchasym  : test_nodesketchasym_wiki");
     let path = std::path::Path::new(crate::DATADIR).join("wiki-Vote.txt");
-    log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
-    let res = csv_to_trimat::<f64>(&path, false, b' ');
+    log::info!("\n\n test_nodesketchasym_wiki, loading file {:?}", path);
+    let res = csv_to_trimat::<f64>(&path, true, b'\t');
     if res.is_err() {
+        log::error!("error : {:?}", &res.as_ref().err());
         log::error!("test_nodesketchasym_wiki failed in csv_to_trimat");
         assert_eq!(1, 0);
     }
