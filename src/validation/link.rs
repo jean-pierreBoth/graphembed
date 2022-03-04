@@ -1,6 +1,5 @@
 //! a simple link prediction to test Embeddeds
 
-#![allow(unused)]
 
 
 /// The scoring function for similarity is based upon the distance relative to the Embedded being tested
@@ -13,8 +12,6 @@
 ///       - Link prediction problem for social networks
 ///             David Liben-Nowell, J Kleinberg 2007
 
-use log::*;
-use anyhow::{anyhow};
 
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand_xoshiro::rand_core::SeedableRng;
@@ -24,14 +21,12 @@ use std::collections::{HashSet, HashMap};
 use indexmap::IndexSet;
 
 use sprs::{TriMatI, CsMatI};
-use ndarray::{Array1, Array2};
 
 use rayon::prelude::*;
-use parking_lot::RwLock;
 
-use crate::embedding::{Embedded, EmbeddedT, EmbedderT};
-use crate::sketching::{nodesketch::*, nodesketchasym};
-use crate::atp::*;
+use crate::embedding::{EmbeddedT};
+use crate::sketching::{nodesketch::*};
+// use crate::atp::*;
 
 // filter out edge with proba delete_proba
 // TODO currently avoid deleting diagonal terms (for Nodesketch) to parametrize
@@ -45,7 +40,6 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let mut degree = csrmat.degrees();
     let nb_nodes = csrmat.rows();
     let nb_edge = csrmat.nnz();
-    let mut deleted_pairs = Vec::<(usize, usize)>::with_capacity((nb_edge as f64 * delete_proba).round() as usize);
     let mut deleted_edge = IndexSet::with_capacity((nb_edge as f64 * delete_proba).round() as usize);
     //
     log::info!("mean degree : {}", degree.iter().sum::<usize>() as f64/ nb_nodes as f64);
@@ -57,15 +51,14 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     //
     let mut not_discarded = 0usize;
     let mut csmat_iter = csrmat.iter();
-    let mut discard = false;
     let mut discarded = 0usize;
-    let nb_to_discard = ((nb_edge - nb_nodes) as f64 * delete_proba) as usize;
+    let _nb_to_discard = ((nb_edge - nb_nodes) as f64 * delete_proba) as usize;
     // 
     log::debug!("csrmat nb edge : {}", nb_edge);
     // TODO must loop until we have deleted excatly the required number of edges
     while let Some((value,(row, col))) = csmat_iter.next() {
         let xsi = uniform.sample(rng);
-        discard = false;
+        let mut discard = false;
         if xsi < delete_proba && row < col {
             discard = true;
             // we must check we do not make an isolated node
@@ -122,7 +115,7 @@ fn one_precision_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f6
             where   F: Copy + std::marker::Sync ,
                     E : EmbeddedT<G> + std::marker::Sync {
     // filter
-    let (mut trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
+    let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
     // We construct the list of edges not in reduced graph
     let nb_nodes = csmat.shape().0;
     let max_degree = csmat.degrees().into_iter().max().unwrap();
@@ -212,22 +205,20 @@ pub fn estimate_precision<F : Copy + Sync, G, E : EmbeddedT<G> + std::marker::Sy
 
 
 
-/// estimate AUC as described in Link Prediction in complex Networks : A survey
-///             Lü, Zhou. Physica 2011
+
+/// type G is necessary beccause we embed in possibly different type than F. (for example in Array<usize> with nodesketch)
 fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bool, 
             embedder : &dyn Fn(TriMatI<F, usize>) -> E, rng : &mut Xoshiro256PlusPlus) -> f64
             where   F : Copy + std::marker::Sync,
                     E : EmbeddedT<G> + std::marker::Sync {
         //
-    let mut auc : f64 = 0.;
     let nb_sample = 1000;
-    let nbgood_order = 0;
     //
     // compute score of all non observed edges (ie.  nb_nodes*(nb_nodes-1)/2 - filtered out)
     // sample nb_sample 2-uples of edges one from the deleted edge and one inexistent (not in csmat)
     // count the number of times the distance of the first is less than the second.
     // filter
-    let (mut trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
+    let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
     // need to store trimat index before move to embedding
     let mut trimat_set = HashSet::<(usize,usize)>::with_capacity(trimat.nnz());
     for triplet in trimat.triplet_iter() {
@@ -244,7 +235,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
     // as we can have large graph , mostly sparse to sample an inexistent edge we sample until we are outside csmat edges
     let del_uniform = Uniform::<usize>::from(0..nb_deleted);
     let node_random = Uniform::<usize>::from(0..nb_nodes);
-    for k in 0..nb_sample {
+    for _ in 0..nb_sample {
         let del_edge = deleted_edges.get_index(del_uniform.sample(rng)).unwrap();
         let no_edge = loop {
             let i = node_random.sample(rng);
@@ -270,6 +261,10 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
 } // end of one_auc_iteration
 
 
+/// estimate AUC as described in Link Prediction in complex Networks : A survey
+///             Lü, Zhou. Physica 2011
+/// 
+/// type G is necessary beccause we embed in a possibly different type than F. (for example in Array<usize> with nodesketch)
 
 pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, symetric : bool, 
             embedder : &dyn Fn(TriMatI<F, usize>) -> E) -> Vec<f64>
@@ -304,15 +299,13 @@ mod tests {
 
     use super::*;
 
-    use indexmap::IndexSet;
+    #[allow(unused_imports)] 
+   use crate::io::csv::*;
 
-    use crate::io::csv::*;
-    use crate::sketching::nodesketch::*;
-    use crate::embedding::{Embedded};
+    use crate::prelude::*;
 
-    use sprs::{TriMatI, CsMatI};
+    use sprs::{TriMatI};
 
-    use std::path::{Path};
 
     #[allow(unused_imports)]  // rust analyzer pb we need it!
     use ndarray::{array};
@@ -323,14 +316,16 @@ mod tests {
     }  
 
     // TODO should use the embedder trait
+    #[allow(unused)]
     // makes a (symetric) nodesketch Embedded to be sent to precision computations
     fn nodesketch_get_embedded(trimat : TriMatI<f64, usize>) -> Embedded<usize> {
         let sketch_size = 300;
         let decay = 0.001;
         let nb_iter = 4;
         let parallel = false;
+        let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
         // now we embed
-        let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, trimat);
+        let mut nodesketch = NodeSketch::new(params, trimat);
         let embed_res = nodesketch.compute_embedded();
         embed_res.unwrap()
     } // end nodesketch_Embedded
@@ -343,7 +338,7 @@ mod tests {
         log_init_test();
         //
         log::debug!("in link.rs test_nodesketch_lesmiserables");
-        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        let path = std::path::Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
         log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
         let res = csv_to_trimat::<f64>(&path, false, b' ');
         if res.is_err() {
@@ -368,7 +363,7 @@ mod tests {
         log_init_test();
         //
         log::debug!("in link.rs test_nodesketch_lesmiserables");
-        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        let path = std::path::Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
         log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
         let res = csv_to_trimat::<f64>(&path, false, b' ');
         if res.is_err() {
