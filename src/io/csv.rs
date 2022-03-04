@@ -379,15 +379,14 @@ fn load_undirected() {
 
 #[test]
 fn test_directed_unweighted_csv_to_graph() {
-    // We load CA-GrQc.txt taken from Snap data directory. It is in Data directory of the crate.
+    // We load  wiki-Vote.txt taken from Snap data directory. It is in Data directory of the crate.
     log_init_test();
     // path from where we launch cargo test
-    let path = Path::new(crate::DATADIR).join("ca-GrQc.txt");
-    //
+    let path = Path::new(crate::DATADIR).join("wiki-Vote.txt");
+    //  # Nodes: 7115 Edges: 103689
     let header_size = get_header_size(&path);
     assert_eq!(header_size.unwrap(),4);
     println!("\n\n test_directed_unweighted_csv_to_graph data : {:?}", path);
-    // we must have 28979 edges as we have 28979 records.
     let graph = directed_unweighted_csv_to_graph::<u32, Directed>(&path, b'\t');
     if let Err(err) = &graph {
         eprintln!("ERROR: {}", err);

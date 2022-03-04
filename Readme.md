@@ -29,16 +29,16 @@ as described in
 
 1. Symetric graphs 
 
-* Les miserables  http://konect.cc/   
+* Les miserables  <http://konect.cc/>   
     les miserables  co occurence de mots dans un chapitre
 
 * Cora : http://konect.cc/networks/subelj_cora
     citation network 23166 neoeuds 91500 aretes  no loop  dout max 104 d in max = 376 (weighted)
 
+* CA-GrQc.txt       <https://snap.stanford.edu/data/ca-GrQc.html>
 
 2. Asymetric graphs
    
-* CA-GrQc.txt       <https://snap.stanford.edu/data/ca-GrQc.html>
 *   wiki-vote       <https://snap.stanford.edu/data/wiki-Vote.html>
 *   soc-epinions    <https://snap.stanford.edu/data/soc-Epinions1.html>
    

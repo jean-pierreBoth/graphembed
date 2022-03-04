@@ -5,3 +5,5 @@
 pub use crate::io::csv::*;
 
 pub use crate::embedding::*;
+
+pub use crate::sketching::params::{NodeSketchParams};

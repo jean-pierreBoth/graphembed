@@ -18,17 +18,17 @@ use ahash::{AHasher};
 use std::collections::HashMap;
 use probminhash::probminhasher::*;
 
-use rayon::iter::{ParallelIterator,IntoParallelRefIterator};
+use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
 
 use std::time::{SystemTime};
 use cpu_time::ProcessTime;
 
-use crate::embedding::EmbeddedAsym;
-use crate::io::csv::NodeIndexation;
 
-use super::sla::*;
+use super::{sla::*, params::NodeSketchParams};
+use crate::embedding::{EmbeddedAsym, EmbedderT};
+
 
 
 pub type RowSketch = Arc<RwLock<Array1<usize>>>;
@@ -37,14 +37,10 @@ pub type RowSketch = Arc<RwLock<Array1<usize>>>;
 /// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
 /// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
 pub struct NodeSketchAsym {
-    /// size of the skecth
-    sketch_size: usize,
+    /// specific arguments
+    params : NodeSketchParams,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
-    /// node from indexation original node id to an index in matrix
-    node_indexation : NodeIndexation<usize>,
-    /// exponential decay coefficient for reducing weight of 
-    decay : f64,
     /// The matrix storing all sketches along iterations for neighbours directed toward current node
     sketches_in : Vec<RowSketch>,
     ///
@@ -59,13 +55,14 @@ pub struct NodeSketchAsym {
 
 impl NodeSketchAsym {
 
-    pub fn new(sketch_size : usize, decay : f64, mut trimat_indexed : (TriMatI<f64, usize>, NodeIndexation<usize>)) -> Self {
-        // TODO can adjust weight depending on context?
-        let csrmat = diagonal_augmentation(&mut trimat_indexed.0, 1.);
+    pub fn new(params : NodeSketchParams ,mut trimat : TriMatI<f64, usize>) -> Self {
+        //
+        let csrmat = diagonal_augmentation(&mut trimat, 1.);
         let mut sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
+        let sketch_size = params.get_sketch_size();
         for _ in 0..csrmat.rows() {
             // incoming edges
             let sketch = Array1::<usize>::zeros(sketch_size);
@@ -78,19 +75,19 @@ impl NodeSketchAsym {
             let previous_sketch_out = Array1::<usize>::zeros(sketch_size);
             previous_sketches_out.push(Arc::new(RwLock::new(previous_sketch_out)));            
         }
-        NodeSketchAsym{sketch_size, decay, csrmat, node_indexation : trimat_indexed.1, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
+        NodeSketchAsym{params, csrmat, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
     }  // end of for NodeSketchAsym::new
     
 
     /// get sketch_size 
     pub fn get_sketch_size(&self) -> usize {
-        self.sketch_size
+        self.params.sketch_size
     } // end of get_nb_nodes
 
 
     /// get decay weight for multi hop neighbours
     pub fn get_decay_weight(&self) -> f64 {
-        self.decay
+        self.params.decay
     } // end of get_decay_weight
 
 
@@ -99,11 +96,89 @@ impl NodeSketchAsym {
         self.csrmat.rows()
     }  // end of get_nb_nodes
     
-    /// sketch of a row of initial self loop augmented matrix. Returns a vector of size self.sketch_size
-    fn sketch_slamatrix(&mut self) {
-        panic!("not yet implemented");
-    } // end of sketch_slamatrix
 
+
+    /// We must initialize self.previous_sketches_out
+    fn sketch_slamatrix_out(&mut self, parallel : bool) {
+        // a closure to work on previous_sketches_out
+        let treat_row_out = | row : usize | {
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
+            let col_range = self.csrmat.indptr().outer_inds_sz(row);
+            log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
+            for k in col_range {
+                let j = self.csrmat.indices()[k];
+                let w = self.csrmat.data()[k];
+                log::trace!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
+                probminhash3.hash_item(j,w);
+            }
+            let sketch = probminhash3.get_signature();
+            for j in 0..self.get_sketch_size() {
+                self.previous_sketches_out[row].write()[j] = sketch[j];
+            }
+        };
+
+        if !parallel {
+            log::debug!(" not parallel case nb rows  {}",self.csrmat.rows()) ;
+            for row in 0..self.csrmat.rows() {
+                if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 {
+                    log::trace!("sketching row {}", row);
+                    treat_row_out(row);
+                }
+            }
+        } 
+        else {
+            // parallel case
+            (0..self.csrmat.rows()).into_par_iter().for_each(| row|  if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 { treat_row_out(row); })
+        }
+        //
+        log::debug!("sketch_slamatrix_out done");
+    } // end of sketch_slamatrix_out
+
+
+    /// We must initialize self.previous_sketches_in
+    fn sketch_slamatrix_in(&mut self, parallel : bool) {
+        //
+        let transposed_mat = self.csrmat.transpose_view();
+        // a closure to treat rows but working on transposed_mat instead of self.csrmat as in sketch_slamatrix_out
+        let treat_row_in = | row : usize | {
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
+            let col_range = transposed_mat.indptr().outer_inds_sz(row);
+            log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
+            for k in col_range {
+                let j = transposed_mat.indices()[k];
+                let w = transposed_mat.data()[k];
+                log::trace!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
+                probminhash3.hash_item(j,w);
+            }
+            let sketch = probminhash3.get_signature();
+            for j in 0..self.get_sketch_size() {
+                self.previous_sketches_in[row].write()[j] = sketch[j];
+            }
+        };
+        if !parallel {
+            log::debug!(" not parallel case nb rows  {}",self.csrmat.rows()) ;
+            for row in 0..transposed_mat.rows() {
+                if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 {
+                    log::trace!("sketch_slamatrix_in sketching row {}", row);
+                    treat_row_in(row);
+                }
+            }
+        } 
+        else {
+            // parallel case
+            (0..transposed_mat.rows()).into_par_iter().for_each(| row|  if transposed_mat.indptr().nnz_in_outer_sz(row) > 0 { treat_row_in(row); })
+        }
+        //
+        log::debug!("sketch_slamatrix_in done");        
+    } // end of sketch_sla_matrix_in
+
+
+
+    /// We must initialize self.previous_sketches_in and self.previous_sketches_out
+    fn sketch_slamatrix(&mut self, parallel : bool) {
+        self.sketch_slamatrix_out(parallel);
+        self.sketch_slamatrix_in(parallel);
+    } // end of sketch_slamatrix
 
 
     // do iteration on sketches separately for in neighbours and out neighbours
@@ -132,7 +207,22 @@ impl NodeSketchAsym {
 
     // do iteration on sketches separately for in neighbours and out neighbours
     fn parallel_iteration(&mut self) {
-        panic!("not yet implemented");
+        log::debug!("nodesketchasym : parallel_iteration");
+        // now we repeatedly merge csrmat (loop augmented matrix) with sketches
+        (0..self.csrmat.rows()).into_par_iter().for_each( |row| self.treat_row_and_col(&row));
+        // transfer sketches into previous sketches
+        for i in 0..self.get_nb_nodes() { 
+            let mut row_write = self.previous_sketches_out[i].write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = self.sketches_out[i].read()[j];
+            }           
+        }
+        for i in 0..self.get_nb_nodes() { 
+            let mut row_write = self.previous_sketches_in[i].write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = self.sketches_in[i].read()[j];
+            }           
+        }        
     } // end of parallel_iteration
 
 
@@ -147,7 +237,7 @@ impl NodeSketchAsym {
         let row_vec = row_vec.unwrap();
         // out treatment new neighbourhood for current iteration 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
-        let weight = self.decay/self.sketch_size as f64;
+        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
         while let Some(neighbour) = row_iter.next() {
@@ -158,7 +248,7 @@ impl NodeSketchAsym {
             // get sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches_out[neighbour.0].read();
             for n in neighbour_sketch {
-                match v_k.get_mut(&neighbour.0) {
+                match v_k.get_mut(n) {
                    // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
                    Some(val)   => { *val = *val + weight; }
                    None                => { v_k.insert(*n, weight).unwrap(); }
@@ -167,7 +257,7 @@ impl NodeSketchAsym {
         }
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.sketch_size, 0);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), 0);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch
@@ -188,7 +278,6 @@ impl NodeSketchAsym {
         let row_vec = row_vec.unwrap();
         // in treatment new neighbourhood for current iteration 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
-        let weight = self.decay/self.sketch_size as f64;
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
         while let Some(neighbour) = row_iter.next() {
@@ -208,7 +297,7 @@ impl NodeSketchAsym {
         }
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.sketch_size, 0);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), 0);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch
@@ -222,14 +311,15 @@ impl NodeSketchAsym {
     /// computes the Embedded. 
     ///  - nb_iter  : corresponds to number of hops explored around a node.  
     ///  - parallel : if true each iteration treats node in parallel
-    pub fn compute_embedded(&mut self, nb_iter:usize, parallel : bool) -> Result<EmbeddedAsym<usize>, anyhow::Error> {
+    pub fn compute_embedded(&mut self) -> Result<EmbeddedAsym<usize>, anyhow::Error> {
         //
         log::debug!("NodeSketchAsym compute_Embedded");
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();        
         // first iteration, we fill previous sketches
-        self.sketch_slamatrix();    
-        for _ in 0..nb_iter {
+        let parallel = self.params.get_parallel();
+        self.sketch_slamatrix(parallel);    
+        for _ in 0.. self.params.get_nb_iter() {
             if parallel {
                 self.parallel_iteration();
             }
@@ -244,28 +334,24 @@ impl NodeSketchAsym {
     } // end of compute_Embedded
 
 
-    /// return the embedded vector given the node id as in datafile seen as a target
-    /// The acces is made by the original id in datafile, not by its rank in embedded matrix
-    pub fn get_embdedded_node_in(&mut self, node : usize) -> Option<&RowSketch> {
-        let rank_opt = self.node_indexation.get_index_of(&node);
-        match rank_opt {
-            Some(rank) => { return Some(&self.sketches_in[rank]); }, 
-                _            => { return None;}
-        };
-    } // end of get_embdedded_node_in
-
-    /// return the embedded vector given the node id as in datafile seen as a source
-    /// The acces is made by the original id in datafile, not by its rank in embedded matrix
-    pub fn get_embdedded_node_out(&mut self, node : usize) -> Option<&RowSketch> {
-        let rank_opt = self.node_indexation.get_index_of(&node);
-        match rank_opt {
-            Some(rank) => { return Some(&self.sketches_out[rank]); }, 
-                _            => { return None;}
-        };
-    } // end of get_embdedded_node_in
 } // end of impl NodeSketchAsym
 
 
+
+
+impl EmbedderT<usize> for NodeSketchAsym {
+    type Output = EmbeddedAsym<usize>;
+    ///
+    fn embed(&mut self) -> Result<EmbeddedAsym<usize>, anyhow::Error > {
+        let res = self.compute_embedded();
+        match res {
+            Ok(embeded) => {
+                return Ok(embeded);
+            },
+            Err(err) => { return Err(err);}
+        }
+    } // end of embed
+} // end of impl<f64> EmbedderT<f64>
 
 
 
@@ -276,7 +362,11 @@ mod tests {
 #[allow(unused)]
 use log::*;
 
+#[allow(unused)]
+use crate::io::csv::csv_to_trimat;
 
+#[allow(unused)]
+use crate::prelude::*;
 
 #[allow(unused)]
 fn log_init_test() {
@@ -286,6 +376,33 @@ fn log_init_test() {
 #[allow(unused)]
 use super::*; 
 
+#[test]
+fn test_nodesketchasym_wiki() {
+    log_init_test();
+    //
+    log::debug!("in nodesketchasym  : test_nodesketchasym_wiki");
+    let path = std::path::Path::new(crate::DATADIR).join("wiki-Vote.txt");
+    log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
+    let res = csv_to_trimat::<f64>(&path, false, b' ');
+    if res.is_err() {
+        log::error!("test_nodesketchasym_wiki failed in csv_to_trimat");
+        assert_eq!(1, 0);
+    }
+    let (trimat, node_index) = res.unwrap();
+    let sketch_size = 150;
+    let decay = 0.1;
+    let nb_iter = 10;
+    let parallel = false;
+    let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
+     // now we embed
+    let mut nodesketch = NodeSketchAsym::new(params, trimat);   
+    let sketch_embedding = Embedding::new(node_index, &mut nodesketch);
+    if sketch_embedding.is_err() {
+        log::error!("test_nodesketch_lesmiserables failed in compute_Embedded");
+        assert_eq!(1, 0);        
+    }
+    let _embed_res = sketch_embedding.unwrap();
+} // end test_nodesketchasym_wiki
 
 
 

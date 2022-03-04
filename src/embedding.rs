@@ -169,10 +169,9 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
         (self.distance)(data1, data2)
     }
 
-    // TODO here nodes are rank. Must introduce nodeindexation
     /// In this interface nodes are identified by their rank in the embedding, not their original identity
     /// So ranks must be less than number of nodes.
-    /// To get an interface original nodes id,  use the Embedding structure wwhich has a mapping from node_id to node_rank
+    /// To get an interface with original nodes id,  use the Embedding structure wwhich has a mapping from node_id to node_rank
     /// get distance FROM source node_rank1 TO target node_rank2 if Embedded is asymetric, in symetric case there is no order) 
     fn get_noderank_distance(&self, node_rank1 : usize, node_rank2 : usize) -> f64 {
         (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2))

@@ -21,7 +21,7 @@ use cpu_time::ProcessTime;
 
 //
 use crate::embedding::{Embedded, EmbedderT};
-use super::sla::*;
+use super::{sla::*, params::NodeSketchParams};
 
 
 /// The distance corresponding to nodesketch embedding
@@ -38,17 +38,6 @@ pub fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
 pub type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 
-#[derive(Debug, Copy, Clone)]
-pub struct NodeSketchParams {
-    /// size of the skecth
-    pub sketch_size: usize,    
-    /// exponential decay coefficient for reducing weight of 
-    pub decay : f64,
-    /// parallel mode
-    pub parallel : bool,
-    ///
-    pub nb_iter : usize
-} // end of NodeSketchParams
 
 
 
@@ -70,17 +59,16 @@ pub struct NodeSketch {
 impl  NodeSketch {
 
     // We pass a Trimat as we have to do self loop augmentation
-    pub fn new(sketch_size : usize, decay : f64, nb_iter : usize, parallel : bool, mut trimat :TriMatI<f64, usize>) -> Self {
-        let params = NodeSketchParams{sketch_size, decay, parallel, nb_iter};
+    pub fn new(params : NodeSketchParams, mut trimat :TriMatI<f64, usize>) -> Self {
         // TODO can adjust weight depending on context?
         let csrmat = diagonal_augmentation(&mut trimat, 1.);
         log::debug!(" NodeSketch new csrmat dims nb_rows {}, nb_cols {} ", csrmat.rows(), csrmat.cols());
         let mut sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         for _ in 0..csrmat.rows() {
-            let sketch = Array1::<usize>::zeros(sketch_size);
+            let sketch = Array1::<usize>::zeros(params.get_sketch_size());
             sketches.push(Arc::new(RwLock::new(sketch)));
-            let previous_sketch = Array1::<usize>::zeros(sketch_size);
+            let previous_sketch = Array1::<usize>::zeros(params.get_sketch_size());
             previous_sketches.push(Arc::new(RwLock::new(previous_sketch)));
         }
         NodeSketch{params , csrmat, sketches, previous_sketches}
@@ -139,7 +127,6 @@ impl  NodeSketch {
         };
 
         if !parallel {
-            // We use probminhash3a, allocate a Hash structure
             log::debug!(" not parallel case nb rows  {}",self.csrmat.rows()) ;
             for row in 0..self.csrmat.rows() {
                 if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 {
@@ -328,8 +315,9 @@ fn test_nodesketch_lesmiserables() {
     let decay = 0.1;
     let nb_iter = 10;
     let parallel = false;
+    let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
     // now we embed
-    let mut nodesketch = NodeSketch::new(sketch_size, decay, nb_iter, parallel, trimat);
+    let mut nodesketch = NodeSketch::new(params, trimat);
     let sketch_embedding = Embedding::new(node_index, &mut nodesketch);
     if sketch_embedding.is_err() {
         log::error!("test_nodesketch_lesmiserables failed in compute_Embedded");
