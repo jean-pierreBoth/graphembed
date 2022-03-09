@@ -25,7 +25,7 @@ use sprs::{TriMatI, CsMatI};
 use rayon::prelude::*;
 
 use crate::embedding::{EmbeddedT};
-use crate::sketching::{nodesketch::*};
+
 // use crate::atp::*;
 
 // filter out edge with proba delete_proba
@@ -289,6 +289,7 @@ pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_p
 
 //================================================================================================================
 
+#[cfg(test)]
 mod tests {
 
 
@@ -299,18 +300,15 @@ mod tests {
 
     use super::*;
 
-    #[allow(unused_imports)] 
-   use crate::io::csv::*;
+    use crate::io::csv::*;
 
     use crate::prelude::*;
 
     use sprs::{TriMatI};
 
+    use crate::sketching::{nodesketch::*};
 
-    #[allow(unused_imports)]  // rust analyzer pb we need it!
-    use ndarray::{array};
     
-    #[allow(unused)]
     fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();
     }  
