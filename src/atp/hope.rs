@@ -21,14 +21,14 @@ use num_traits::float::*;
 // use num_traits::cast::FromPrimitive;
 
 use sprs::prod;
-use sprs::{CsMat, TriMatBase};
+use sprs::{CsMat, TriMatI, TriMatBase};
 
 
 use annembed::tools::svdapprox::{MatRepr, MatMode, RangeApproxMode};
 
 use super::randgsvd::{GSvdApprox};
 use super::orderingf::*;
-use crate::embedding::EmbeddedAsym;
+use crate::embedding::{EmbeddedAsym, EmbedderT};
 
 /// The distance corresponding to hope embedding. In fact it is L2
 /// TODO similarity : any decreasing function of distance for example 1/(1+d) 
@@ -43,6 +43,7 @@ pub fn hope_distance<F>(v1:&ArrayView1<F>, v2 : &ArrayView1<F>) -> f64
 
 // TODO add Resource Allocator (that is called AdamicAdar in Hope Paper and RA in references mentionned in validation module)
 /// To specify if we run with Katz index or in Rooted Page Rank 
+#[derive(Copy,Clone, Debug)]
 pub enum HopeMode {
     /// Katz index mode
     KATZ,
@@ -51,11 +52,44 @@ pub enum HopeMode {
 } // end of HopeMode
 
 
+
+#[derive(Copy, Clone, Debug)]
+pub struct HopeParams {
+    /// describe mode
+    hope_m : HopeMode,
+    /// describe range approximation mode
+    range_m: RangeApproxMode,
+    /// decay factor taking account number of hops away from a node
+    decay_f : f64
+} // 
+
+
+impl HopeParams {
+
+pub fn new(hope_m : HopeMode, range_m : RangeApproxMode, decay_f : f64) -> Self {
+    HopeParams{hope_m, range_m, decay_f}
+} // end of new 
+
+pub fn get_hope_mode(&self) ->  HopeMode { self.hope_m}
+
+pub fn get_decay_weight(&self) -> f64 {self.decay_f}
+
+pub fn get_range_mode(&self) -> RangeApproxMode {self.range_m}
+
+} // end of impl HopeParams
+
+
+//============================================================
+
+
+
 /// Structure for graph asymetric embedding with approximate random generalized svd to get an estimate of rank necessary
 /// to get a required precision in the SVD. 
 /// The structure stores the adjacency matrix in a full (ndarray) or compressed row storage format (using crate sprs).
 //
 pub struct Hope<F> {
+    /// 
+    params : HopeParams,
     /// the graph as a matrix
     mat : MatRepr<F>,
     /// store the eigenvalue weighting the eigenvectors. This give information on precision.
@@ -67,10 +101,14 @@ pub struct Hope<F> {
 impl <F> Hope<F>  where
     F: Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + Default {
 
+    pub fn new(params : HopeParams, trimat : TriMatI<F, usize>) -> Self {
+        Hope::<F>{params, mat : MatRepr::from_csrmat(trimat.to_csr()), sigma_q : None}
+    }
+
     /// instantiate a Hope problem with the adjacency matrix
-    pub fn from_ndarray(mat : Array2<F>) -> Self {
+    pub fn from_ndarray(params : HopeParams, mat : Array2<F>) -> Self {
         let mat = MatRepr::from_array2(mat);
-        Hope::<F> {mat, sigma_q : None}
+        Hope::<F> {params, mat, sigma_q : None}
     }
 
     pub fn get_nb_nodes(&self) -> usize {
@@ -93,11 +131,14 @@ impl <F> Hope<F>  where
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
     ///     factor must be between 0. and 1.
     fn make_katz_problem(&self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> {
+        //
+        log::debug!("hope::make_katz_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         // enforce rule on factor
         let radius = match self.mat.get_data() {
             MatMode::FULL(mat) =>  { estimate_spectral_radius_fullmat(&mat) },
             MatMode::CSR(csmat) =>  { estimate_spectral_radius_csmat(&csmat)},
-        };        
+        };   
+        log::debug!("make katz_problem : got spectral radius : {}", radius);     
         //  defining beta ensures that the matrix (Mg) in Hope paper is inversible.
         let beta = factor / radius;
         // now we can define a GSvdApprox problem
@@ -151,15 +192,15 @@ impl <F> Hope<F>  where
     /// 
     /// *Note that in RPR mode the matrix stored in the Hope structure is renormalized to a transition matrix!!*
     /// 
-    pub fn compute_embedded(&mut self, mode :HopeMode, approx_mode : RangeApproxMode, dampening_f : f64) -> Result<EmbeddedAsym<F>,anyhow::Error> {
+    pub fn compute_embedded(&mut self) -> Result<EmbeddedAsym<F>,anyhow::Error> {
         //
         log::debug!("hope::compute_embedded");
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
         //
-        let gsvd_pb = match mode {
-            HopeMode::KATZ => { self.make_katz_problem(dampening_f, approx_mode) },
-            HopeMode::RPR => { self.make_rooted_pagerank_problem(dampening_f, approx_mode) },
+        let gsvd_pb = match self.params.hope_m {
+            HopeMode::KATZ => { self.make_katz_problem(self.params.get_decay_weight(), self.params.get_range_mode()) },
+            HopeMode::RPR => { self.make_rooted_pagerank_problem(self.params.get_decay_weight(), self.params.get_range_mode()) },
         };
         // now we can approximately solve svd problem
         let gsvd_res = gsvd_pb.do_approx_gsvd(); 
@@ -174,6 +215,8 @@ impl <F> Hope<F>  where
         log::debug!(" k : {}", k);
         if k > 0 {
             println!("k = {}, should be zero!", k);
+            log::error!("hope::compute_embedded k = {}, should be zero!", k);
+            std::process::exit(1);
         }
         // Recall M_g is the first matrix, M_l the second of the Gsvd problem.
         // so we need to sort quotients of M_l/M_g eigenvalues i.e s2/s1
@@ -245,6 +288,30 @@ impl <F> Hope<F>  where
 }  // end of impl Hope
 
 
+
+//====================================================================================
+
+
+/// implement EmbedderT trait for Hope<F> where F is f64 or f32
+impl <F> EmbedderT<F> for Hope<F>  
+    where F : Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + Default {
+    type Output = EmbeddedAsym<F>;
+    ///
+    fn embed(&mut self) -> Result<EmbeddedAsym<F>, anyhow::Error > {
+        let res = self.compute_embedded();
+        match res {
+            Ok(embeded) => {
+                return Ok(embeded);
+            },
+            Err(err) => { return Err(err);}
+        }
+    } // end of embed
+} // end of impl<F> EmbedderT<F>
+
+
+
+//                  Some utilities
+// =================================================
 
    // iterate in positive unit norm vector. mat is compressed row matrix and has all coefficients positive
 fn estimate_spectral_radius_csmat<F>(mat : &CsMat<F>) -> f64 
@@ -361,7 +428,7 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
                     values.push(F::one()); 
                 }                   
             }
-            let trimat = TriMatBase::<Vec<usize>, Vec<F>>::from_triplets((4,5),rows, cols, values);
+            let trimat = TriMatBase::<Vec<usize>, Vec<F>>::from_triplets((n,n),rows, cols, values);
             let csr_mat : CsMat<F> = trimat.to_csr();
             return MatRepr::from_csrmat(csr_mat);
         },
@@ -374,12 +441,19 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
 //========================================================================================
 
 
+#[cfg(test)]
 mod tests {
 
-#[allow(unused)]
+    //    RUST_LOG=graphembed::hope=DEBUG cargo test test_name -- --nocapture
+
 use super::*;
 
-#[allow(unused)]
+use crate::io::csv::csv_to_trimat;
+
+use annembed::tools::svdapprox::{RangeRank};
+
+use crate::prelude::*;
+
 use sprs::{CsMat, TriMatBase};
 
 #[allow(dead_code)]
@@ -453,6 +527,39 @@ fn test_spectral_radius_csr() {
 
 
 }  // enf of test_spectral_radius_csr
+
+
+#[test]
+fn test_hope_wiki() {
+    log_init_test();
+    log::info!("in hope::test_wiki"); 
+    // Nodes: 7115 Edges: 103689
+    log::debug!("in hope::tests::test_wiki ");
+    let path = std::path::Path::new(crate::DATADIR).join("wiki-Vote.txt");
+    log::info!("\n\n test_nodesketchasym_wiki, loading file {:?}", path);
+    let res = csv_to_trimat::<f64>(&path, true, b'\t');
+    if res.is_err() {
+        log::error!("error : {:?}", res.as_ref().err());
+        log::error!("hope::tests::test_wiki failed in csv_to_trimat");
+        assert_eq!(1, 0);
+    }
+    let (trimat, node_index) = res.unwrap();
+    let hope_m = HopeMode::KATZ;
+    let decay_f = 0.1;
+    let range_m = RangeApproxMode::RANK(RangeRank::new(100, 5));
+    let params = HopeParams::new(hope_m, range_m, decay_f);
+     // now we embed
+    let mut hope = Hope::new(params, trimat); 
+    let hope_embedding = Embedding::new(node_index, &mut hope);
+    if hope_embedding.is_err() {
+        log::error!("error : {:?}", hope_embedding.as_ref().err());
+        log::error!("test_wiki failed in compute_Embedded");
+        assert_eq!(1, 0);        
+    }
+    //    
+    let _embed_res = hope_embedding.unwrap();
+
+} // end of test_wiki
 
 
 

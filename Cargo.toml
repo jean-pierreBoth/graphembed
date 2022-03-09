@@ -1,5 +1,5 @@
 [package]
-name = "graphembed"
+name = "graphite"
 version = "0.0.1"
 authors = ["jeanpierre.both@gmail.com"]
 #repository = "https://gitlab.com/jpboth/archaea"

@@ -141,15 +141,15 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     /// get S1 vector of eigenvalues in ]0., 1.[  of first matrix
     /// if S2 is vector  eigenvalues in ]0., 1.[  of second matrix we have S1**2 + S2**2 = 1
     pub fn get_s1(&self) -> Option<ArrayView1<F>> {
-        if (self.m - self.k - self.l) as i64 >= 0 {
-            log::debug!("m-k-l >= 0");
+        if self.m  >=  self.k + self.l {
+            log::debug!("atp::gsvd::get_s1 : m-k-l >= 0");
             // s1 is alpha[k .. k+l-1] and   s2 is beta[k .. k+l-1], 
             assert!(self.l > 0);
             let s1_v = self.alpha.as_ref().unwrap().slice(s![self.k as usize ..(self.k+self.l) as usize]);
             return Some(s1_v);
         } 
         else {
-            log::debug!("m-k-l < 0");
+            log::debug!("atp::gsvd::get_s1 : m-k-l < 0");
             // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(self.m >= self.k);
             let s1_v = self.alpha.as_ref().unwrap().slice(s![self.k as usize..(self.m as usize)]);
@@ -161,15 +161,15 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     /// get S2 vector of eigenvalues in ]0., 1.[  of second matrix
     /// if S1 is vector eigenvalues in ]0., 1.[  of first matrix we have S1**2 + S2**2 = 1
     pub fn get_s2(&self) -> Option<ArrayView1<F>> {
-        if (self.m - self.k - self.l) as i64 >= 0 {
-            log::debug!("m-k-l >= 0");
+        if self.m >= self.k + self.l  {
+            log::debug!("atp::gsvd::get_s2 : m-k-l >= 0");
             // s2 is beta[k .. k+l-1], 
             assert!(self.l > 0);
             let s2_v = self.beta.as_ref().unwrap().slice(s![self.k as usize ..(self.k+self.l) as usize]);
             return Some(s2_v);
         } 
         else {
-            log::debug!("m-k-l < 0");
+            log::debug!("atp::gsvd::get_s2 : m-k-l < 0");
             // s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(self.m >= self.k);
             let s2_v = self.beta.as_ref().unwrap().slice(s![self.k as usize..(self.m as usize)]);
