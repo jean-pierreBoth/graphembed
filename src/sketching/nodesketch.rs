@@ -277,23 +277,18 @@ impl EmbedderT<usize> for NodeSketch {
 
 //=====================================================================================================
 
+#[cfg(test)]
 mod tests {
 
 
-#[allow(unused)]
-use log::*;
 
-#[allow(unused)]
 use super::*; 
 
-#[allow(unused)]
 use crate::prelude::*;
 
-#[allow(unused)]
 use crate::io::csv::csv_to_trimat;
 
 
-#[allow(dead_code)]
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }

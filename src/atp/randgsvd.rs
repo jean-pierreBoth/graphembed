@@ -106,6 +106,8 @@ impl  <F> GSvdApprox<F>
 
     /// 
     pub fn do_approx_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
+        //
+        log::debug!("entering apt::do_approx_gsvd");
         // We construct an approximation first for mat1 and then for mat2 and with the same precision 
         // criterion
         let r_approx1 = RangeApprox::new(&self.mat1, self.target);
@@ -149,7 +151,7 @@ impl  <F> GSvdApprox<F>
         if gsvd_res.is_err() {
             return Err(anyhow!("Gsvd failed")); 
         }
-
+        log::debug!("exiting apt::do_approx_gsvd");
         gsvd_res
     }  // end of do_approx_gsvd
 
