@@ -370,26 +370,22 @@ impl EmbedderT<usize> for NodeSketchAsym {
 
 //=====================================================================================================
 
+#[cfg(test)]
 mod tests {
  
  
 //    cargo test validation::link::tests::test_name -- --nocapture
 //    RUST_LOG=graphembed::sketching=TRACE cargo test test_nodesketchasym_wiki -- --nocapture
-#[allow(unused)]
-use log::*;
 
-#[allow(unused)]
+
 use crate::io::csv::csv_to_trimat;
 
-#[allow(unused)]
 use crate::prelude::*;
 
-#[allow(unused)]
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-#[allow(unused)]
 use super::*; 
 
 #[test]

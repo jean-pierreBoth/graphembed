@@ -547,6 +547,8 @@ fn test_hope_wiki() {
     let hope_m = HopeMode::KATZ;
     let decay_f = 0.1;
     let range_m = RangeApproxMode::RANK(RangeRank::new(100, 5));
+    let epsil_m = RangePrecision::new(0.05, 10, 100);
+    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::EPSIL(target_epsil),  None);
     let params = HopeParams::new(hope_m, range_m, decay_f);
      // now we embed
     let mut hope = Hope::new(params, trimat); 
