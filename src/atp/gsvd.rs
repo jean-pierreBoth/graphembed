@@ -2,13 +2,19 @@
 //! 
 //! 
 
+#[allow(unused)]
+use log::Level::{Debug,Trace};
 
-use log::Level::Debug;
 use log::{log_enabled};
+
+#[allow(unused)]
 use anyhow::{anyhow};
 
+use std::time::{SystemTime};
+use cpu_time::ProcessTime;
 
 use num_traits::float::*;
+use num_traits::cast::FromPrimitive;
 
 use ndarray_linalg::{Scalar, Lapack};
 use std::any::TypeId;
@@ -62,7 +68,7 @@ pub struct GSvd<'a, F: Scalar> {
     b : &'a mut Array2<F>,
     /// optional parameters
     opt_params : Option<GSvdOptParams>,
-}   // end of struct GsvdApprox
+}   // end of struct Gsvd
 
 
 
@@ -83,7 +89,7 @@ pub struct GSvd<'a, F: Scalar> {
 /// 
 /// - beta : increasing eigenvalues of mat1. eigenvalues are between 0. and 1.
 ///          
-/// If the first matrix is invrsible (and so m=n) we have k+l = m = n
+/// If the first matrix is inversible (and so m=n) we have k+l = m = n
 /// If the second matrix is inversible (and so p=n) we have k=0, l = p = n
 pub struct GSvdResult<F: Float + Scalar> {
     ///
@@ -92,22 +98,25 @@ pub struct GSvdResult<F: Float + Scalar> {
     n : usize,
     ///
     p : usize,
-    /// in the 0..k range we have 1 eigenvalues for the first matrix
+    /// in the 0..k range we have 1. eigenvalues for the first matrix
     k : usize,
     /// in the (k+l)..m range we have 1 eigenvalues for the second matrix.
     l : usize,
-    /// left eigenvectors for first matrix. U  (m,m) orithogonal matrix where r is rank asked for and m the number of data
+    /// left eigenvectors for first matrix. U  (m,m) orthogonal matrix where m is rank asked for and m the number of data
     pub(crate)  v1 : Option<Array2<F>>,
-    /// left eigenvectors. (p,p) orthogonal matrix where r is rank asked for and p the number of data.
+    /// left eigenvectors. (p,p) orthogonal matrix where p is rank asked for and p the number of data.
     pub(crate)  v2 : Option<Array2<F>>,
-    /// 
+    /// size n
     pub(crate) alpha : Option<Array1<F>>,
-    ///
+    /// size n 
     pub(crate) beta : Option<Array1<F>>,
-    /// first (diagonal matrix) eigenvalues
+    /// first (diagonal matrix) eigenvalues. size (k+l).min(m) - k 
     pub(crate)  s1 : Option<Array1<F>>,
-    /// second (diagonal matrix) eigenvalues
+    /// second (diagonal matrix) eigenvalues. size (k+l).min(m) - k
     pub(crate)  s2 : Option<Array1<F>>,
+    /// Array of size (k+l).min(m) - k (i.e same size as s1 and s2)
+    /// permutation of the index range (0..(k+l).min(m)) so that s1[alpha_decreasing[i]] is decreasing (so s2 increasing)
+    pub(crate) decreasing_s1 : Option<Array1<usize>>,
     /// common right term of mat1 and mat2 factorization if asked for
     pub(crate) _commonx : Option<Array2<F>>
 } // end of struct SvdResult<F> 
@@ -116,7 +125,8 @@ pub struct GSvdResult<F: Float + Scalar> {
 impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOperand + sprs::MulAcc  {
 
     pub(crate) fn new() -> Self {
-        GSvdResult{ m : 0, n : 0, p : 0, k:0, l:0, v1 :None, v2 : None, s1 : None, s2 : None, alpha : None, beta : None, _commonx :None}
+        GSvdResult{ m : 0, n : 0, p : 0, k:0, l:0, v1 :None, v2 : None, s1 : None, s2 : None, alpha : None, beta : None, 
+                        decreasing_s1 : None, _commonx :None}
     }
 
     /// returns the dimension of the first matrix
@@ -198,6 +208,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         s
     } // end of get_beta
 
+    
     // debug utility for small tests
     #[allow(unused)]
     pub(crate) fn debug_print(&self) {
@@ -209,7 +220,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         let beta = self.beta.as_ref().unwrap();
         
         println!("\n eigen values    alpha          beta \n");
-        for i in 0..alpha.len() {
+        for i in 0..alpha.len().min(100) {
             println!(" i : {},       {:.3e}        {:.3e}    ", i, alpha[i], beta[i]);
         }
     } // end of debug_print
@@ -217,9 +228,9 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
 
 
     // reconstruct result from the out parameters of lapack. For us u and v are always asked for
-    // (m,n) is dimension of A. p is number of rows of B. k and l oare lapack output  
+    // (m,n) is dimension of A. p is number of rows of B. k and l are lapack output  
     pub(crate) fn init_from_lapack(&mut self, m : i64, n : i64, p : i64, u : Array2<F>, v : Array2<F>, k : i64 ,l : i64 , 
-                alpha : Array1<F>, beta : Array1<F>, _permuta : Array1<i32>) {
+                alpha : Array1<F>, beta : Array1<F>, permuta : Array1<i32>) {
         self.v1 = Some(u);
         self.v2 = Some(v);
         // now we must decode depending upon k and l values, we use the lapack doc at :
@@ -239,58 +250,57 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         //
         let s1_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
         let s2_v : ArrayBase<ViewRepr<&F>, Dim<[usize;1]>>;
-        // on 0..k  alpha = 1. beta = 0.
+        // s1_v and s2_v values are in the range k..s
+        let s = m.min(k+l) as usize;
         if m-k-l >= 0 {
             log::debug!("m-k-l >= 0");
             // s1 is alpha[k .. k+l-1] and   s2 is beta[k .. k+l-1], 
             assert!(l > 0);
-            assert!(k >= 0);
-            s1_v = alpha.slice(s![k as usize ..(k+l) as usize]);
-            s2_v = beta.slice(s![k as usize ..(k+l) as usize]);
         }
         else {
             log::debug!("m-k-l < 0");
             // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
-            assert!(k >= 0);           
             assert!(m >= k);
-            s1_v = alpha.slice(s![k as usize..(m as usize)]);
-            s2_v = beta.slice(s![k as usize..(m as usize)]);
         }
+        s1_v = alpha.slice(s![k as usize ..s]);
+        s2_v = beta.slice(s![k as usize ..s]);
         // a dump if log Debug enabled we dump alpha, beta and C and S in the middle range of alpha and beta
-        if log_enabled!(Debug) {
+        if log_enabled!(log::Level::Trace) {
             for i in 0..k as usize {
-                log::debug!(" i {}, alpha[i] {:.3e},  beta[i] {:.3e}", i, alpha[i], beta[i]);
+                log::trace!(" i {}, alpha[i] {:.3e},  beta[i] {:.3e}", i, alpha[i], beta[i]);
             }
             for i in 0..s1_v.len() {
-                log::debug!(" i {}, C[i] {:.3e},  S[i] {:.3e}", i, s1_v[i], s2_v[i]);
+                log::trace!(" i {}, C[i] {:.3e},  S[i] {:.3e}", i, s1_v[i], s2_v[i]);
             }
             for i in (k+l).min(m) as usize..n as usize {
-                log::debug!(" i {}, alpha[i] {:.3e},  beta[i] {:.3e}", i, alpha[i], beta[i]);
+                log::trace!(" i {}, alpha[i] {:.3e},  beta[i] {:.3e}", i, alpha[i], beta[i]);
             }
         }
         // some checks
         let check : Vec<F> = s1_v.iter().zip(s2_v.iter()).map(| x |  *x.0 * *x.0 + *x.1 * *x.1).collect();
         for v in check {
             let epsil = (1. - v.to_f64().unwrap()).abs();
-            log::debug!(" epsil (should be very small) = {:.3e}", epsil);
-            assert!(epsil < 1.0E-5 );
+            if epsil > 1.0E-5 {
+                log::error!(" epsil (should be very small < 1.E-5) = {:.3e}", epsil);
+            }
         }
-
-        let k_1 = k as usize;
-        let s = m.min(k+l) as usize;
-        // sorting
-        /* 
-        let mut alpha_sorted = alpha.clone();
-        for i in k_1..s {
-            log::debug!("i {} , permuta[i] {}", i , permuta[i]);
-            alpha_sorted.swap(i, permuta[i] as usize);
-        }  */
-        // It seems alpha is sorted. we check
-        for i in k_1+1..s {
-            if alpha[i] > alpha[i-1] {
-                log::error!("alpha non decreasing at i : {}  {}  {}", i, alpha[i], alpha[i-1]);
+        let k_u = k as usize;
+        // We check permutation making alpha increasing
+        let decreasing_alpha : Array1::<usize> = (k_u..s).into_iter().map(|i| usize::from_i32(permuta[i]).unwrap() - k_u - 1).collect();
+        //
+        log::trace!("permuta : {:?}", permuta);
+        log::trace!("decreasing_alpha : {:?}", decreasing_alpha);
+        //
+        for i in (k_u+1)..s {
+            if s1_v[decreasing_alpha[i]] > s1_v[decreasing_alpha[i-1]] {
+                log::error!("alpha non decreasing at i : {}  {}  {}", i, s1_v[decreasing_alpha[i]], 
+                        s1_v[decreasing_alpha[i-1]]);
                 panic!("non sorted alpha");
             }
+        }
+        if decreasing_alpha.len() > 0 {
+            log::debug!(" greatest alpha < 1. : {:.3e}, smallest alpha > 0. : {:.3e}", s1_v[decreasing_alpha[0]], 
+                        s1_v[decreasing_alpha[decreasing_alpha.len() -1]]);
         }
         // we clone s1 and s2
         self.s1 = Some(s1_v.to_owned());
@@ -298,6 +308,9 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         //
         self.alpha = Some(alpha);
         self.beta = Some(beta);
+        if decreasing_alpha.len() > 0 {
+            self.decreasing_s1 = Some(decreasing_alpha)
+        }
         // possibly commonx (or Q in Lapack docs) but here we do not keep it
     }  // end of GSvdResult::init_from_lapack
 
@@ -309,6 +322,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
             _                                  => None
         }        
     }  // end of get_v1
+
 
     /// returns the left eigen vectors corresponding to s2 
     pub fn get_v2(&self) -> Option<&Array2<F>> {
@@ -341,7 +355,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         }
         if self.v2.is_some() {
             let v = self.v2.as_ref().unwrap();
-            if log_enabled!(Debug) {
+            if log_enabled!(Trace) {
                 println!("\n\n dumping v");
                 dump::<F>(&v.view());
             }
@@ -375,7 +389,7 @@ pub(crate) fn check_orthogonality<F>(u: &Array2<F>) -> Result<(),()>
     let epsil = 1.0E-5;
     //
     let id : Array2<F> = u.dot(&u.t()); 
-    if log_enabled!(Debug) {
+    if log_enabled!(Trace) {
         println!("\n\n\n dump a*t(a)");
         dump::<F>(&id.view());
     }
@@ -434,7 +448,10 @@ impl  <'a, F> GSvd<'a, F>
 
     /// 
     pub fn do_gsvd(&mut self) -> Result<GSvdResult<F>, anyhow::Error> {
-
+        //
+        log::debug!("entering hope::gsvd do_gsvd");
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n
         // We are at step iv) of algo 2.4 of Wei and al.
         // See rust doc https://docs.rs/lapacke/latest/lapacke/fn.dggsvd3.html and
@@ -556,8 +573,14 @@ impl  <'a, F> GSvd<'a, F>
             log::error!("do_approx_gsvd only implemented for f32 and f64");
             panic!();
         }
+        //
+        log::debug!("do_gsvd{:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        if log_enabled!(log::Level::Debug) {
+            gsvdres.debug_print();
+        }
+        //
         Ok(gsvdres)
-    }  // end of do_approx_gsvd
+    }  // end of do_gsvd
 
 } // end of impl block for Gsvd
 
@@ -565,14 +588,14 @@ impl  <'a, F> GSvd<'a, F>
 //===============================================================================
 
 // Run with for example : RUST_LOG=DEBUG cargo test test_lapack_gsvd_array_2 -- --nocapture
+
+#[cfg(test)]
 mod tests {
 
 use super::*;
 
-#[allow(unused_imports)]  // rust analyzer pb we need it!
 use ndarray::{array};
 
-#[allow(unused)]
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }  
@@ -580,7 +603,6 @@ fn log_init_test() {
 
 // with more rows than columns.run in precision mode
 
-#[allow(unused)]
 fn small_lapack_gsvd(a: &mut Array2<f64>, b : &mut Array2<f64>) -> GSvdResult::<f64> {
     //
     let (a_nbrow, a_nbcol) = a.dim();

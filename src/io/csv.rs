@@ -275,7 +275,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             match already {
                 Some(idx) => { node1 = idx},
                 None             => {   node1 = nodeindex.insert_full(node).0;
-                                        log::debug!("inserting node num : {}, rank : {}", node, node1);
+                                        log::trace!("inserting node num : {}, rank : {}", node, node1);
                                         nb_nodes += 1;
                                     }
             }
@@ -291,7 +291,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             match already {
                 Some(idx) => { node2 = idx},
                 None             => {   node2 = nodeindex.insert_full(node).0;
-                                        log::debug!("inserting node num : {}, rank : {}", node, node2);
+                                        log::trace!("inserting node num : {}, rank : {}", node, node2);
                                         nb_nodes += 1;
                                     }
             }            

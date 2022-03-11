@@ -18,6 +18,7 @@ pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where
     //
     let (nb_row, _ ) = csr_mat.shape();
     let mut range_i : std::ops::Range<usize>;
+    let mut nb_null_row = 0usize;
     for i in 0..nb_row {
         let mut sum_i : F;
         {  // the borrow checker do not let us access csr_mat.indptr() and csr_mat.data_mut() simultaneously
@@ -29,26 +30,38 @@ pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where
             }
         }   
         // we sum of row i
-        assert!(sum_i > F::zero());
-        let data = csr_mat.data_mut();
-        for j in range_i {
-            data[j] = data[j]/sum_i;
+        if !(sum_i > F::zero()) {
+            log::trace!("csr_row_normalization null sum of row i {}", i);
+            nb_null_row += 1;
+        } else {
+            let data = csr_mat.data_mut();
+            for j in range_i {
+                data[j] = data[j]/sum_i;
+            }
         }
     } // end of for i
-
+    log::debug!("csr_row_normalization nb row with null sum : {}", nb_null_row);
 } // end of csr_row_normalization
 
 
 /// do a Row normalization of Csr Mat, to get a transition matrix from an adjacency matrix.
 pub fn dense_row_normalization<F>(mat : &mut Array2<F>) 
     where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> {
+    //
     let (nb_row, _) = mat.dim();
+    let mut nb_null_row = 0usize;
     for i in 0..nb_row {
         let mut row = mat.row_mut(i);
         let sum_i = row.sum();
-        assert!(sum_i > F::zero());
-        row.map_mut(|x| *x = *x/sum_i);
+        if!(sum_i > F::zero()) {
+            row.map_mut(|x| *x = *x/sum_i);
+        }
+        else {
+            nb_null_row += 1;
+            log::trace!("dense_row_normalization null sum of row i {}", i);
+        }
     }
+    log::debug!("dense_row_normalization nb row with null sum : {}", nb_null_row);
 }  // end of for dense_row_normalization
 
 

@@ -24,6 +24,9 @@
 
 use anyhow::{anyhow};
 
+use std::time::{SystemTime};
+use cpu_time::ProcessTime;
+
 use num_traits::float::*;
 //use num_traits::cast::FromPrimitive;
 
@@ -108,6 +111,9 @@ impl  <F> GSvdApprox<F>
     pub fn do_approx_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
         //
         log::debug!("entering apt::do_approx_gsvd");
+        //
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
         // We construct an approximation first for mat1 and then for mat2 and with the same precision 
         // criterion
         let r_approx1 = RangeApprox::new(&self.mat1, self.target);
@@ -151,7 +157,10 @@ impl  <F> GSvdApprox<F>
         if gsvd_res.is_err() {
             return Err(anyhow!("Gsvd failed")); 
         }
+        println!("do_approx_gsvd{:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        log::debug!("do_approx_gsvd{:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         log::debug!("exiting apt::do_approx_gsvd");
+        //
         gsvd_res
     }  // end of do_approx_gsvd
 

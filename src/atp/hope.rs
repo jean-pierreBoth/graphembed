@@ -149,6 +149,13 @@ impl <F> Hope<F>  where
         mat_g.scale(F::from_f64(beta).unwrap());
         // 
         let mat_l = compute_1_minus_beta_mat(&self.mat, beta, true);
+        if log::log_enabled!(log::Level::Debug) {
+            let new_radius = match mat_l.get_data() {
+                MatMode::FULL(mat_l_full) =>  { estimate_spectral_radius_fullmat(&mat_l_full) },
+                MatMode::CSR(csmat_l) =>  { estimate_spectral_radius_csmat(&csmat_l)},
+            };
+            log::debug!("make katz_problem : I - beta * A , got new spectral radius : {}", new_radius);     
+        }
         let gsvdapprox = GSvdApprox::new(mat_g, mat_l, approx_mode, None);
         //
         return gsvdapprox;
@@ -195,6 +202,7 @@ impl <F> Hope<F>  where
     pub fn compute_embedded(&mut self) -> Result<EmbeddedAsym<F>,anyhow::Error> {
         //
         log::debug!("hope::compute_embedded");
+        //
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
         //
@@ -212,12 +220,12 @@ impl <F> Hope<F>  where
         println!(" gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         // get k. How many eigenvalues for first matrix are 1. (The part in alpha before s1)
         let k = gsvd_res.get_k();
-        log::debug!(" k : {}", k);
-        if k > 0 {
-            println!("k = {}, should be zero!", k);
-            log::error!("hope::compute_embedded k = {}, should be zero!", k);
-            std::process::exit(1);
-        }
+        log::debug!(" number (k) of eigenvalues of first matrix that are equal to 1. : {}", k);
+        // if k > 0 {
+        //     println!("k = {}, should be zero!", k);
+        //     log::error!("hope::compute_embedded k = {}, should be zero!", k);
+        //     std::process::exit(1);
+        // }
         // Recall M_g is the first matrix, M_l the second of the Gsvd problem.
         // so we need to sort quotients of M_l/M_g eigenvalues i.e s2/s1
         let s1 : ArrayView1<F> = match gsvd_res.get_s1() {
@@ -380,6 +388,7 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
     //
     match mat.get_data() {
         MatMode::FULL(mat) => {
+            log::debug!("atp::hope compute_1_minus_beta_mat full case , beta : {:?}, transpose : {:?}", beta, transpose);
             let (nbrow, nbcol) = mat.dim();
             assert_eq!(nbrow, nbcol);
             let mut new_mat = ndarray::Array2::<F>::eye(nbrow);
@@ -393,7 +402,7 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
         },
         // 
         MatMode::CSR(mat)  => { 
-            log::trace!("compute_1_minus_beta_mat");
+            log::debug!("atp::hope compute_1_minus_beta_mat csr case , beta : {:?}, transpose : {:?}", beta, transpose);
             assert_eq!(mat.rows(), mat.cols());
             let n = mat.rows();
             let nnz = mat.nnz();
@@ -450,7 +459,8 @@ use super::*;
 
 use crate::io::csv::csv_to_trimat;
 
-use annembed::tools::svdapprox::{RangeRank};
+#[allow(unused)]
+use annembed::tools::svdapprox::{RangePrecision, RangeRank};
 
 use crate::prelude::*;
 
@@ -531,8 +541,10 @@ fn test_spectral_radius_csr() {
 
 #[test]
 fn test_hope_wiki() {
+    //
     log_init_test();
     log::info!("in hope::test_wiki"); 
+    //
     // Nodes: 7115 Edges: 103689
     log::debug!("in hope::tests::test_wiki ");
     let path = std::path::Path::new(crate::DATADIR).join("wiki-Vote.txt");
@@ -544,11 +556,10 @@ fn test_hope_wiki() {
         assert_eq!(1, 0);
     }
     let (trimat, node_index) = res.unwrap();
-    let hope_m = HopeMode::KATZ;
-    let decay_f = 0.1;
-    let range_m = RangeApproxMode::RANK(RangeRank::new(100, 5));
-    let epsil_m = RangePrecision::new(0.05, 10, 100);
-    let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::EPSIL(target_epsil),  None);
+    let hope_m = HopeMode::RPR;
+    let decay_f = 0.3;
+    let range_m = RangeApproxMode::RANK(RangeRank::new(6000, 3));
+//    let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.05, 10, 100));
     let params = HopeParams::new(hope_m, range_m, decay_f);
      // now we embed
     let mut hope = Hope::new(params, trimat); 
