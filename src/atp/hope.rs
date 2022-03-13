@@ -134,12 +134,13 @@ impl <F> Hope<F>  where
         //
         log::debug!("hope::make_katz_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         // enforce rule on factor
-        let radius = match self.mat.get_data() {
+ /*        let radius = match self.mat.get_data() {
             MatMode::FULL(mat) =>  { estimate_spectral_radius_fullmat(&mat) },
             MatMode::CSR(csmat) =>  { estimate_spectral_radius_csmat(&csmat)},
         };   
-        log::debug!("make katz_problem : got spectral radius : {}", radius);     
+        log::debug!("make katz_problem : got spectral radius : {}", radius);      */
         //  defining beta ensures that the matrix (Mg) in Hope paper is inversible.
+        let radius = 1.;
         let beta = factor / radius;
         // now we can define a GSvdApprox problem
         // We must now define  A and B in Wei-Zhang paper or mat_g (global) and mat_l (local in Ou paper)
@@ -149,13 +150,13 @@ impl <F> Hope<F>  where
         mat_g.scale(F::from_f64(beta).unwrap());
         // 
         let mat_l = compute_1_minus_beta_mat(&self.mat, beta, true);
-        if log::log_enabled!(log::Level::Debug) {
+/*         if log::log_enabled!(log::Level::Debug) {
             let new_radius = match mat_l.get_data() {
                 MatMode::FULL(mat_l_full) =>  { estimate_spectral_radius_fullmat(&mat_l_full) },
                 MatMode::CSR(csmat_l) =>  { estimate_spectral_radius_csmat(&csmat_l)},
             };
             log::debug!("make katz_problem : I - beta * A , got new spectral radius : {}", new_radius);     
-        }
+        } */
         let gsvdapprox = GSvdApprox::new(mat_g, mat_l, approx_mode, None);
         //
         return gsvdapprox;
@@ -169,6 +170,8 @@ impl <F> Hope<F>  where
     // In fact we go to the Gsvd with the pair (transpose((1. - β) * I)), transpose(I - β P))
     fn make_rooted_pagerank_problem(&mut self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> where
                     for<'r> F: std::ops::MulAssign<&'r F>  {
+        //
+        log::debug!("hope::make_rooted_pagerank_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         //
         crate::renormalize::matrepr_row_normalization(& mut self.mat);
         // Mg is I - alfa * P where P is normalizez adjacency matrix to a probability matrix
@@ -286,11 +289,19 @@ impl <F> Hope<F>  where
             }
         } 
         //
-        log::info!("last eigen value to first : {}", sigma_q[sigma_q.len()-1].1/ sigma_q[0].1);
+        if sigma_q.len() > 0 {
+            log::info!("last eigen value to first : {}", sigma_q[sigma_q.len()-1].1/ sigma_q[0].1);
+        }
+        else {
+            log::error!("compute_embedded : did not found eigenvalues in interval ]0., 1.[");
+            return Err(anyhow!("compute_embedded : did not found eigenvalues in interval ]0., 1.["));
+        }
         self.sigma_q = Some(Array1::from_iter(sigma_q.iter().map(|x| x.1)));
         //
         let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
         //
+        log::info!(" gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+
         Ok(embedded_a)
     }  // end of compute_embedded
 }  // end of impl Hope
@@ -322,6 +333,7 @@ impl <F> EmbedderT<F> for Hope<F>
 // =================================================
 
    // iterate in positive unit norm vector. mat is compressed row matrix and has all coefficients positive
+#[allow(unused)]
 fn estimate_spectral_radius_csmat<F>(mat : &CsMat<F>) -> f64 
         where F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc  {
         //
@@ -342,7 +354,7 @@ fn estimate_spectral_radius_csmat<F>(mat : &CsMat<F>) -> f64
         let delta = Scalar::sqrt(w.dot(&w));
         iter += 1;
         if iter >= 1000 || delta < epsil {
-            log::info!(" estimated radius at iter {} {}", iter, radius.to_f64().unwrap());
+            log::debug!(" estimated radius at iter {} {}  delta {} ", iter, radius.to_f64().unwrap(), delta);
             break;
         }
         v1.assign(&v2);
@@ -351,7 +363,7 @@ fn estimate_spectral_radius_csmat<F>(mat : &CsMat<F>) -> f64
 }   // end of estimate_spectral_radius_csmat
 
 
-
+#[allow(unused)]
 fn estimate_spectral_radius_fullmat<F>(mat : &Array2<F>) -> f64 
         where F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc {
     let dims = mat.dim();
@@ -556,10 +568,10 @@ fn test_hope_wiki() {
         assert_eq!(1, 0);
     }
     let (trimat, node_index) = res.unwrap();
-    let hope_m = HopeMode::RPR;
-    let decay_f = 0.3;
-    let range_m = RangeApproxMode::RANK(RangeRank::new(6000, 3));
-//    let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.05, 10, 100));
+    let hope_m = HopeMode::KATZ;
+    let decay_f = 0.5;
+//    let range_m = RangeApproxMode::RANK(RangeRank::new(500, 2));
+    let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.1, 10, 3000));
     let params = HopeParams::new(hope_m, range_m, decay_f);
      // now we embed
     let mut hope = Hope::new(params, trimat); 

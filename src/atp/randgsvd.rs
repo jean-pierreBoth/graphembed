@@ -116,6 +116,7 @@ impl  <F> GSvdApprox<F>
         let sys_start = SystemTime::now();
         // We construct an approximation first for mat1 and then for mat2 and with the same precision 
         // criterion
+        // TODO must parallelize the 2 approximations
         let r_approx1 = RangeApprox::new(&self.mat1, self.target);
         let  approx1_res = r_approx1.get_approximator();
         if approx1_res.is_none() {
@@ -157,8 +158,8 @@ impl  <F> GSvdApprox<F>
         if gsvd_res.is_err() {
             return Err(anyhow!("Gsvd failed")); 
         }
-        println!("do_approx_gsvd{:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
-        log::debug!("do_approx_gsvd{:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        println!("do_approx_gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        log::info!("do_approx_gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         log::debug!("exiting apt::do_approx_gsvd");
         //
         gsvd_res

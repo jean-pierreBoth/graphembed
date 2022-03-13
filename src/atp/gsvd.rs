@@ -92,11 +92,11 @@ pub struct GSvd<'a, F: Scalar> {
 /// If the first matrix is inversible (and so m=n) we have k+l = m = n
 /// If the second matrix is inversible (and so p=n) we have k=0, l = p = n
 pub struct GSvdResult<F: Float + Scalar> {
-    ///
+    /// number of row of first matrix
     m : usize, 
-    ///
+    /// number of columns of first and second matrix
     n : usize,
-    ///
+    /// number of row of second matrix
     p : usize,
     /// in the 0..k range we have 1. eigenvalues for the first matrix
     k : usize,
@@ -245,6 +245,9 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         assert!(l >= 0);
         assert!(k >= 0);
         //
+        self.m = usize::try_from(m).unwrap();
+        self.n = usize::try_from(n).unwrap();
+        self.p = usize::try_from(p).unwrap();
         self.k = k as usize;
         self.l = l as usize;
         //
@@ -312,6 +315,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
             self.decreasing_s1 = Some(decreasing_alpha)
         }
         // possibly commonx (or Q in Lapack docs) but here we do not keep it
+        log::debug!("exiting GSvdResult::init_from_lapack m : {}, n : {}, p : {}, k : {},  l : {}", m, n, p, k, l)
     }  // end of GSvdResult::init_from_lapack
 
 
@@ -574,7 +578,7 @@ impl  <'a, F> GSvd<'a, F>
             panic!();
         }
         //
-        log::debug!("do_gsvd{:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        log::info!("do_gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
         if log_enabled!(log::Level::Debug) {
             gsvdres.debug_print();
         }
