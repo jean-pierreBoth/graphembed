@@ -552,26 +552,24 @@ fn test_spectral_radius_csr() {
 
 
 #[test]
-fn test_hope_wiki() {
+fn test_hope_gnutella09() {
     //
     log_init_test();
-    log::info!("in hope::test_wiki"); 
-    //
-    // Nodes: 7115 Edges: 103689
-    log::debug!("in hope::tests::test_wiki ");
-    let path = std::path::Path::new(crate::DATADIR).join("wiki-Vote.txt");
+    log::info!("in hope::test_hope_gnutella09"); 
+    // Nodes: 8114 Edges: 26013
+    let path = std::path::Path::new(crate::DATADIR).join("p2p-Gnutella09.txt");
     log::info!("\n\n test_nodesketchasym_wiki, loading file {:?}", path);
     let res = csv_to_trimat::<f64>(&path, true, b'\t');
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
-        log::error!("hope::tests::test_wiki failed in csv_to_trimat");
+        log::error!("hope::tests::test_hope_gnutella09 failed in csv_to_trimat");
         assert_eq!(1, 0);
     }
     let (trimat, node_index) = res.unwrap();
     let hope_m = HopeMode::KATZ;
     let decay_f = 0.5;
 //    let range_m = RangeApproxMode::RANK(RangeRank::new(500, 2));
-    let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.1, 10, 3000));
+    let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.1, 10, 300));
     let params = HopeParams::new(hope_m, range_m, decay_f);
      // now we embed
     let mut hope = Hope::new(params, trimat); 

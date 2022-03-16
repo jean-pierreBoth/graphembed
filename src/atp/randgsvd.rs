@@ -230,6 +230,7 @@ fn test_gsvd_dense_precision_1() {
 
 
 // The same test as test_gsvd_full_1 but with matrix described in csr mode, run in precision mode
+// small example from https://fr.mathworks.com/help/matlab/ref/gsvd.html
 #[test]
 fn test_gsvd_csr_precision_1() {
     log_init_test();
@@ -242,7 +243,7 @@ fn test_gsvd_csr_precision_1() {
     let a = MatRepr::from_csrmat(csr_a);
     let b = MatRepr::from_csrmat(csr_b);
     //
-    let precision = RangePrecision::new(0.1, 10, 3);
+    let precision = RangePrecision::new(0.1, 2, 3);
     let approx_svd = GSvdApprox::<f64>::new(a,b, RangeApproxMode::EPSIL(precision),  None);
     //
     let res = approx_svd.do_approx_gsvd();
@@ -255,6 +256,7 @@ fn test_gsvd_csr_precision_1() {
 
 
 // we have full matrix we can test in rank mode
+// small example from https://fr.mathworks.com/help/matlab/ref/gsvd.html
 #[test]
 fn test_gsvd_dense_rank_1() {
     log_init_test();

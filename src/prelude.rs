@@ -5,5 +5,9 @@
 pub use crate::io::csv::*;
 
 pub use crate::embedding::*;
+pub use crate::atp::hope::*;
+
+pub use annembed::tools::svdapprox::*;
+
 
 pub use crate::sketching::params::{NodeSketchParams};
