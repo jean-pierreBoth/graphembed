@@ -1,7 +1,7 @@
 //  test for datafiles
 
 
-use clap::{Arg,Command};
+use clap::{Arg, ArgGroup, Command, arg};
 
 use graphite::prelude::*;
 use crate::{nodesketch::*};
@@ -16,32 +16,33 @@ pub fn main() {
     //
     let matches = Command::new("embed")
         .arg(Arg::new("csvfile")
-            .long("csv")
+            .long("csv")    
             .takes_value(true)
             .required(true)
             .help("expecting a csv file"))
         .arg(Arg::new("embedder")
             .long("embedder")
-            .short('e')
-            .required(true)
+            .required(false)
             .takes_value(true)
             .help("specify \"hope\" or \"sketching\" "))
-        .arg(Arg::new("sketching")
-            .long("sketch")
-            .short('s')
-            .takes_value(true)
-            .help("expecting dimension of sketching"))
-        .subcommand_value_name("hope")
-            .arg(Arg::new("mode")
-                .long("mode")
-                .takes_value(true)
-                .help("expecting hope arguments"))
-        .subcommand_value_name("sketching")
-            .arg(Arg::new("dim")
-            .takes_value(true)
-            .required(true)
-            .help("expectiong embedding dimension"))
-
+        .subcommand(Command::new("hope")
+            .subcommand(Command::new("precision")
+                .args(&[
+                    arg!(--maxrank <maxrank> "maximum rank expected"),
+                    arg!(--blockiter <blockiter> "integer between 2 and 5"),
+                    arg!(-e --epsil <precision> "precision between 0. and 1."),
+                ]))
+            .subcommand(Command::new("rank")
+                .args(&[
+                    arg!(--targetrank <targetrank> "expected rank"),
+                    arg!(--nbiter <nbiter> "integer between 2 and 5"),
+                ]))
+        )
+        .subcommand(Command::new("sketching")
+            .args(&[
+                arg!(-d --dim <dim> "the embedding dimension"),
+            ])
+        )
     .get_matches();
 
     // decode args
@@ -57,30 +58,26 @@ pub fn main() {
             log::info!("input file : {:?}", csv_file.clone());
             fname = csv_file.clone();
         }
-    }
+    };
 
     let mode;
-    if matches.is_present("embedder") {
-        let mode_str = matches.value_of("embedder").ok_or("").unwrap().parse::<String>().unwrap();
-        match mode_str.as_str() {
-            "hope" =>  {
-                println!("got hope mode");
-                mode = EmbeddingMode::Hope;
-            }
-            "sketching" => {
-                println!("got sketching mode");
-                std::process::exit(1);
-            }
-            _           => {
-                println!("got sketching mode neither hope nor sketching");
-                std::process::exit(1);
-            } 
-        } // end match 
-    } 
-    else {
-        println!("embedding argument necessary");
-        std::process::exit(1);
-    }
+    match matches.subcommand() {
+        Some(("hope", sub_m)) => {
+            log::debug!("got hope mode");
+            mode = EmbeddingMode::Hope;
+        },
+
+        Some(("sketch", sub_m )) => {
+            log::debug!("got sketching mode");
+            mode = EmbeddingMode::Nodesketch;
+        }
+        _  => {
+            log::error!("expected subcommand hope or nodesketch");
+            std::process::exit(1);
+        }
+    }  // end match subcommand
+
+
 
 
     let mut sketch_dimension : usize = 0;
