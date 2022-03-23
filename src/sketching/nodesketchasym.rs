@@ -7,7 +7,6 @@
 // For a directed graph we suppose the Csr matrix so that mat[[i,j]] is edge from i to j.
 
 
-//#![allow(unused)]
 
 use anyhow::{anyhow};
 

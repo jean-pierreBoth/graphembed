@@ -117,18 +117,22 @@ impl  <F> GSvdApprox<F>
         // We construct an approximation first for mat1 and then for mat2 and with the same precision 
         // criterion
         // TODO must parallelize the 2 approximations
+        log::debug!("\n\n do_approx_gsvd approximating mat1");
         let r_approx1 = RangeApprox::new(&self.mat1, self.target);
         let  approx1_res = r_approx1.get_approximator();
         if approx1_res.is_none() {
             return Err(anyhow!("approximation of matrix 1 failed"));
         }
         let approx1_res = approx1_res.unwrap();
+        //
+        log::debug!("\n\n do_approx_gsvd approximating mat2");
         let r_approx2 = RangeApprox::new(&self.mat2, self.target);
         let  approx2_res = r_approx2.get_approximator();
         if approx2_res.is_none() {
             return Err(anyhow!("approximation of matrix 2 failed"));
         }
         let approx2_res = approx2_res.unwrap();
+        //
         // We must not check for the ranks of approx1_res and approx2_res.
         // We want the 2 matrices to have the same weights but if we ran in precision mode we must
         // enforce that.
@@ -136,18 +140,20 @@ impl  <F> GSvdApprox<F>
         // we get  approx1_res = (m1, l1)  and (m2, l2).
         // We must now construct reduced matrix approximating mat1 and mat2 i.e t(approx1_res)* mat1 
         // and t(approx2_res)* mat2 and get matrices (l1,n) and (l2,n)
+        //
+        log::debug!("\n\n remultiplying by transpose of approximator");
         let mut a = match self.mat1.get_data() {
             MatMode::FULL(mat) => { approx1_res.t().dot(mat)},
             MatMode::CSR(mat)  => { 
                                     log::trace!("direct_svd got csr matrix");
-                                    small_transpose_dense_mult_csr(&approx1_res, mat)
+                                    transpose_dense_mult_csr(&approx1_res, mat)
                                 },
         };
         let mut b = match self.mat2.get_data() {
             MatMode::FULL(mat) => { approx2_res.t().dot(mat)},
             MatMode::CSR(mat)  => { 
                                     log::trace!("direct_svd got csr matrix");
-                                    small_transpose_dense_mult_csr(&approx2_res, mat)
+                                    transpose_dense_mult_csr(&approx2_res, mat)
                                 },
         };
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n

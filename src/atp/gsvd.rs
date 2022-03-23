@@ -60,7 +60,22 @@ impl GSvdOptParams {
 } // end of impl GSvdOptParams
 
 
-
+#[cfg_attr(doc, katexit::katexit)]
+///
+/// A Standard Gvsd problem gives the following representation of a pair of matrix mat_1 (m,n) and mat_2 (p,n)
+/// 
+///
+/// $$ V_{1}^{t} \cdot mat1 \cdot X = \Sigma_{1}$$  and 
+///    $$V_{2}^{t} \cdot mat2 \cdot X = \Sigma_{2} $$
+/// 
+/// where :
+///   - $V_{1}$,  $V_{2}$ and X are orthogonal matrices
+///       
+///  - $\Sigma_{1}$ and $\Sigma_{1}$ where are 2 diagonal matrrices  
+/// 
+/// 
+/// If mat2 is non-singular the Gsvd gives the following svd
+///  $$  mat_1  \cdot {mat_2}^{-1} = V_1 \cdot (\Sigma_{1} /\Sigma_{2} ) \cdot V_{2}^{t} $$
 pub struct GSvd<'a, F: Scalar> {
     /// first matrix we want to approximate range of
     a : &'a mut Array2<F>,
@@ -73,6 +88,9 @@ pub struct GSvd<'a, F: Scalar> {
 
 
 #[cfg_attr(doc, katexit::katexit)]
+///
+/// see [lapack](http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html)
+/// 
 /// For a Standard Gvsd problem described by the pair of matrix mat_1 (m,n) and mat_2 (p,n)
 /// we get:  
 /// 
@@ -81,15 +99,21 @@ pub struct GSvd<'a, F: Scalar> {
 ///  - 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$  
 /// 
 ///  - one non singular matrix X such that:
-/// $$ V_{1}^{t} * mat1 * X = \Sigma_{1} \space and \space
-///    V_{2}^{t} * mat2 * X = \Sigma_{2} $$
+/// $$ V_{1}^{t} \cdot mat1 \cdot X = \Sigma_{1}$$  and 
+///    $$V_{2}^{t} \cdot mat2 \cdot X = \Sigma_{2} $$
 /// 
-/// - alpha : decreasing sorted eigenvalues of mat1. eigenvalues are between 1. and 0.
+/// 
+/// If mat2 is non-singular the Gsvd gives the following svd
+///  $$  mat_1  \cdot {mat_2}^{-1} = V_1 \cdot (\Sigma_{1} /\Sigma_{2} ) \cdot V_{2}^{t} $$
+/// 
+/// - alpha : decreasing sorted eigenvalues of mat1.  
+///           Eigenvalues are between 1. and 0.
 ///           The first k eigenvalues are equal to 1.
 /// 
-/// - beta : increasing eigenvalues of mat1. eigenvalues are between 0. and 1.
+/// - beta : increasing eigenvalues of mat2.  
+///          Eigenvalues are between 0. and 1.
 ///          
-/// If the first matrix is inversible (and so m=n) we have k+l = m = n
+/// If the first matrix is inversible (and so m=n) we have k+l = m = n  
 /// If the second matrix is inversible (and so p=n) we have k=0, l = p = n
 pub struct GSvdResult<F: Float + Scalar> {
     /// number of row of first matrix
@@ -115,7 +139,7 @@ pub struct GSvdResult<F: Float + Scalar> {
     /// second (diagonal matrix) eigenvalues. size (k+l).min(m) - k
     pub(crate)  s2 : Option<Array1<F>>,
     /// Array of size (k+l).min(m) - k (i.e same size as s1 and s2)
-    /// permutation of the index range (0..(k+l).min(m)) so that s1[alpha_decreasing[i]] is decreasing (so s2 increasing)
+    /// permutation of the index range (0..(k+l).min(m)) so that s1\[alpha_decreasing\[i\]\] is decreasing (so s2 increasing)
     pub(crate) decreasing_s1 : Option<Array1<usize>>,
     /// common right term of mat1 and mat2 factorization if asked for (Q in lapack doc)
     pub(crate) _commonx : Option<Array2<F>>
@@ -432,7 +456,7 @@ pub(crate) fn check_orthogonality<F>(u: &Array2<F>) -> Result<(),()>
 
 impl  <'a, F> GSvd<'a, F>  
     where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc {
-    /// We impose the RangePrecision mode for now.
+    /// argumnt a corresponds to mat_1, argument b corresponds to mat_2 in [GSvd]
     pub fn new(a : &'a mut Array2<F>, b : &'a mut Array2<F>) -> Self {
         // for now we assume standard layout but this is to change
         assert!(a.is_standard_layout());
@@ -607,7 +631,7 @@ mod tests {
 
 use super::*;
 
-use ndarray::{array};
+use ndarray::{array, ArrayBase};
 
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -722,6 +746,8 @@ fn test_lapack_gsvd_array_2() {
     let res = gsvdres.check_uv_orthogonal();
     let s1 = gsvdres.get_s1().unwrap();
     let s2 = gsvdres.get_s2().unwrap();
+
+    log::debug!("s.len() : {}", s1.len());
     for i in 0..s1.len() {
         log::debug!("s1[i] : {:.5e}, s2[i] : {:.5e}", s1[i], s2[i]);
     }
@@ -731,6 +757,41 @@ fn test_lapack_gsvd_array_2() {
 } // end of test_lapack_gsvd_array_2
 
 
+
+use rand_distr::{StandardNormal};
+use rand_xoshiro::Xoshiro256PlusPlus;
+use rand_xoshiro::rand_core::SeedableRng;
+use rand::Rng;
+
+#[test]
+fn test_lapack_gsvd_random() {
+    //
+    log_init_test();
+    //
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(4664397);
+    let stdnormal = StandardNormal{};
+    let dima = [ 3, 70];
+    let mut a : Array2::<f64> = ArrayBase::from_shape_fn(dima, |_| {
+        rng.sample(stdnormal)
+    });
+
+    let dimb = [ 22, 70];
+    let mut b : Array2::<f64> = ArrayBase::from_shape_fn(dimb, |_| {
+        rng.sample(stdnormal)
+    });
+    //
+    let gsvdres = small_lapack_gsvd(&mut a, &mut b);
+    // dump results
+    gsvdres.dump_u();
+    gsvdres.dump_v();
+    //
+    let _res = gsvdres.check_uv_orthogonal();
+    let s1 = gsvdres.get_s1().unwrap();
+    let s2 = gsvdres.get_s2().unwrap();
+    for i in 0..s1.len() {
+        log::debug!("s1[i] : {:.5e}, s2[i] : {:.5e}", s1[i], s2[i]);
+    }
+}
 
 }  // end of mod tests
 

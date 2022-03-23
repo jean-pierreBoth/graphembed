@@ -127,7 +127,7 @@ impl <F> Hope<F>  where
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β A, β A). 
     // We must check that beta is less than the spectral radius of adjacency matrix so that M_g is inversible.
     // In fact we go to the Gsvd with the pair (transpose(β A), transpose(I - β A))
-
+    // as we search a representation of inverse(I - β P) * (β A)
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
     ///     factor must be between 0. and 1.
     fn make_katz_problem(&self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> {
@@ -146,10 +146,10 @@ impl <F> Hope<F>  where
         // We must now define  A and B in Wei-Zhang paper or mat_g (global) and mat_l (local in Ou paper)
         // mat_g is beta * transpose(self.mat) but we must send it transpose to Gsvd  * transpose(self.mat)
         // For mat_l it is I - beta * &self.mat, but ust send transposed to Gsvd
-        let mut mat_g = self.mat.transpose_owned();
-        mat_g.scale(F::from_f64(beta).unwrap());
+        let mut mat_l = self.mat.transpose_owned();
+        mat_l.scale(F::from_f64(beta).unwrap());
         // 
-        let mat_l = compute_1_minus_beta_mat(&self.mat, beta, true);
+        let mat_g = compute_1_minus_beta_mat(&self.mat, beta, true);
 /*         if log::log_enabled!(log::Level::Debug) {
             let new_radius = match mat_l.get_data() {
                 MatMode::FULL(mat_l_full) =>  { estimate_spectral_radius_fullmat(&mat_l_full) },
@@ -157,7 +157,7 @@ impl <F> Hope<F>  where
             };
             log::debug!("make katz_problem : I - beta * A , got new spectral radius : {}", new_radius);     
         } */
-        let gsvdapprox = GSvdApprox::new(mat_g, mat_l, approx_mode, None);
+        let gsvdapprox = GSvdApprox::new(mat_l, mat_g, approx_mode, None);
         //
         return gsvdapprox;
     } // end of make_katz_pair
@@ -167,14 +167,16 @@ impl <F> Hope<F>  where
     /// Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β P, (1. - β) * I). 
     /// Has a good performance on link prediction Cf [https://dl.acm.org/doi/10.1145/3012704]
     /// A survey of link prediction in complex networks. Martinez, Berzal ACM computing Surveys 2016.
+    /// 
     // In fact we go to the Gsvd with the pair (transpose((1. - β) * I)), transpose(I - β P))
+    // as we search a representation of inverse(I - β P) * (1. - β) * I
     fn make_rooted_pagerank_problem(&mut self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> where
                     for<'r> F: std::ops::MulAssign<&'r F>  {
         //
         log::debug!("hope::make_rooted_pagerank_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         //
         crate::renormalize::matrepr_row_normalization(& mut self.mat);
-        // Mg is I - alfa * P where P is normalizez adjacency matrix to a probability matrix
+        // Mg is I - alfa * P where P is the normalized adjacency matrix to a probability matrix
         let mat_g = compute_1_minus_beta_mat(&self.mat, factor, true);
         // compute Ml = (1-alfa) I
         let mat_l = match self.mat.get_data() {
@@ -189,7 +191,7 @@ impl <F> Hope<F>  where
                     MatRepr::<F>::from_csrmat(id)
                 }
         };
-        let gsvdapprox = GSvdApprox::new(mat_g, mat_l , approx_mode, None);
+        let gsvdapprox = GSvdApprox::new(mat_l, mat_g , approx_mode, None);
         //
         return gsvdapprox;
     } // end of make_rooted_pagerank_problem
