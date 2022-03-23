@@ -1,7 +1,7 @@
 //  test for datafiles
 
 use anyhow::{anyhow};
-use clap::{Arg, ArgMatches, Command, arg};
+use clap::{Arg, ArgGroup, ArgMatches, Command, arg};
 
 use graphite::prelude::*;
 use crate::{nodesketch::*};
@@ -59,7 +59,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
     let mut epsil : f64 = 0.;
     let mut maxrank : usize = 0;
     let mut blockiter = 0;
-    let mut decay = 0.;
+    let decay;
     // get approximation mode
     let hope_mode = match matches.value_of("proximity") {
         Some("KATZ") => { HopeMode::KATZ},
@@ -69,7 +69,20 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                             return Err(anyhow!("did not get proximity used, KATZ or RPR"));
                         },
     };
-    //
+    // get decay
+    match matches.value_of("decay") {
+        Some(str) =>  { 
+                let res = str.parse::<f64>();
+                match res {
+                    Ok(val) => { decay = val},
+                    _       => { return Err(anyhow!("could not parse Hope decay"));},
+                } 
+        } 
+        _      => { return Err(anyhow!("could not parse decay"));}
+
+    };                         
+    
+    
     match matches.subcommand() {
         Some(("precision", sub_m)) =>  {
             if let Some(str) = sub_m.value_of("epsil") {
@@ -97,15 +110,6 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                     _              => { return Err(anyhow!("could not parse Hope blockiter"));},
                 }        
             }
-
-            // get decay_w;
-            if let Some(str) = sub_m.value_of("decay") {
-                let res = str.parse::<f64>();
-                match res {
-                    Ok(val) => { decay = val;},
-                    _              => { return Err(anyhow!("could not parse Hope decay"));},
-                }
-            }
             //
             let range = RangeApproxMode::EPSIL(RangePrecision::new(epsil, blockiter, maxrank));
             let params = HopeParams::new(hope_mode, range, decay);
@@ -114,7 +118,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
 
 
         Some(("rank", sub_m)) => {
-            if let Some(str) = sub_m.value_of("maxrank") {
+            if let Some(str) = sub_m.value_of("targetrank") {
                 let res = str.parse::<usize>();
                 match res {
                     Ok(val) => { maxrank = val;},
@@ -123,7 +127,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
             }
 
             // get blockiter
-            if let Some(str) = sub_m.value_of("blockiter") {
+            if let Some(str) = sub_m.value_of("nbiter") {
                 let res = str.parse::<usize>();
                 match res {
                     Ok(val) => { blockiter = val ; },
@@ -152,6 +156,8 @@ pub fn main() {
     log::info!("logger initialized"); 
     //
     let matches = Command::new("embed")
+        .subcommand_required(true)
+        .arg_required_else_help(true)
         .arg(Arg::new("csvfile")
             .long("csv")    
             .takes_value(true)
@@ -163,25 +169,37 @@ pub fn main() {
             .takes_value(true)
             .help("specify \"hope\" or \"sketching\" "))
         .subcommand(Command::new("hope")
+            .subcommand_required(true)
+            .arg_required_else_help(true)
             .arg(Arg::new("proximity")
-            .long("approx")
-            .required(true)
-            .takes_value(true)
-            .help("specify KATZ or RPR"))
+                .long("approx")
+                .required(true)
+                .takes_value(true)
+                .help("specify KATZ or RPR"))
+            .arg(Arg::new("decay")
+                .long("decay")
+                .takes_value(true)
+                .required(true)
+                .help("give a small value between 0. and 1.")
+            )
             .subcommand(Command::new("precision")
+                .arg_required_else_help(true)
                 .args(&[
                     arg!(--maxrank <maxrank> "maximum rank expected"),
                     arg!(--blockiter <blockiter> "integer between 2 and 5"),
-                    arg!(-e --epsil <precision> "precision between 0. and 1."),
-                ]))
+                    arg!(-e --epsil <epsil> "precision between 0. and 1."),
+                ])
+            )
             .subcommand(Command::new("rank")
+                .arg_required_else_help(true)
                 .args(&[
                     arg!(--targetrank <targetrank> "expected rank"),
                     arg!(--nbiter <nbiter> "integer between 2 and 5"),
-                ]))
-                
+                ])
+            )
         )
         .subcommand(Command::new("sketching")
+            .arg_required_else_help(true)
             .args(&[
                 arg!(-d --dim <dim> "the embedding dimension"),
                 arg!(--decay <decay> "decay coefficient"),
@@ -252,28 +270,28 @@ pub fn main() {
     // we have our graph in trimat format
     //
     if hope_params.is_some() {
-            log::info!("embedding mode : Hope");
-            // now we embed
-            let mut hope = Hope::new(hope_params.unwrap(), trimat); 
-            let embedding = Embedding::new(node_index, &mut hope);
-            if embedding.is_err() {
-                log::error!("error : {:?}", embedding.as_ref().err());
-                log::error!("test_wiki failed in compute_Embedded");
-                assert_eq!(1, 0);        
-            };
-            let _embed_res = embedding.unwrap();
+        log::info!("embedding mode : Hope");
+        // now we embed
+        let mut hope = Hope::new(hope_params.unwrap(), trimat); 
+        let embedding = Embedding::new(node_index, &mut hope);
+        if embedding.is_err() {
+            log::error!("error : {:?}", embedding.as_ref().err());
+            log::error!("test_wiki failed in compute_Embedded");
+            assert_eq!(1, 0);        
+        };
+        let _embed_res = embedding.unwrap();
     }  // end case Hope
     else if sketching_params.is_some() {
-            log::info!("embedding mode : Sketching");
-            // now we embed
-            let mut nodesketch = NodeSketch::new(sketching_params.unwrap(), trimat);
-            let embedding = Embedding::new(node_index, &mut nodesketch);
-            if embedding.is_err() {
-                log::error!("error : {:?}", embedding.as_ref().err());
-                log::error!("test_wiki failed in compute_Embedded");
-                assert_eq!(1, 0);        
-            };
-            let _embed_res = embedding.unwrap();
+        log::info!("embedding mode : Sketching");
+        // now we embed
+        let mut nodesketch = NodeSketch::new(sketching_params.unwrap(), trimat);
+        let embedding = Embedding::new(node_index, &mut nodesketch);
+        if embedding.is_err() {
+            log::error!("error : {:?}", embedding.as_ref().err());
+            log::error!("test_wiki failed in compute_Embedded");
+            assert_eq!(1, 0);        
+        };
+        let _embed_res = embedding.unwrap();
     }
     //    
 }  // end fo main
