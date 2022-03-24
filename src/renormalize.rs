@@ -1,11 +1,14 @@
-//! some utilities
+//! some utilities related to matrix renormalization
+//! -  go from adjacency matrix to probability transition matrix
+//! - from adjacency matrix to adamic adar normalization
 
+use anyhow::{anyhow};
 
 use ndarray_linalg::{Scalar, Lapack};
 use num_traits::float::Float;
 
-use ndarray::{Array2};
-use sprs::{CsMat};
+use ndarray::{Array1, Array2, ArrayView2};
+use sprs::{CsMat, TriMatBase};
 
 use annembed::tools::svdapprox::*;
 
@@ -77,6 +80,79 @@ pub fn matrepr_row_normalization<F> (mat : &mut MatRepr<F>)
     }
 } // end of matrepr_row_normalization
 
+
+/// do adamic adar renormalization for full matrix and return modified matrix.
+/// Matrix must be square
+pub fn adamic_adar_normalization_full<F> (mat : &mut Array2<F>) -> Result<(), anyhow::Error>
+    where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default
+{
+    let (nb_row, nb_col) = mat.dim();
+    assert_eq!(nb_row, nb_col);
+    //
+    let mut diagonal = Array1::<F>::zeros(nb_row);
+    for i in 0..nb_row {
+        diagonal[i] += mat.row(i).sum();
+    }
+    let tmat = mat.t();
+    for i in 0..nb_row {
+        diagonal[i] += tmat.row(i).sum();
+    }
+    // 
+    for i in 0..nb_row {
+        if diagonal[i] <= F::zero() {
+            log::error!("adamic_adar_normalization_full , cannot do adamic transform,  null coeff at index  {}", i);
+            return Err(anyhow!("adamic_adar_normalization_full , cannot do adamic transform,  null coeff at index  {}", i));
+        }
+        // TODO possibly we can set term to 0! as it means a node is isolated and cannot appear in multplication of matrix
+        diagonal[i] = F::one()/diagonal[i];
+    }
+    // compute Diag*mat
+    let mut adamat = mat.clone().to_owned(); 
+    for i in 0..nb_row {
+        adamat.row_mut(i).map_inplace( |x|  { *x = *x * diagonal[i];});
+    }
+    // compute mat * (adamat) = mat * (diagonal * mat)
+    *mat = mat.dot(&adamat);
+    //
+    return Ok(());
+}  // end of adamic_adar_normalization
+
+
+// return a Csmat with adamic adar renormalization
+pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), anyhow::Error>
+    where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default
+{
+    let (nb_row, nb_col) = mat.shape();
+    assert_eq!(nb_row, nb_col);
+    //
+    let nnz = mat.nnz();
+    let mut diagonal = Array1::<F>::zeros(nb_row);
+    // allocate triplets for adamic adamar transform
+    let mut rows : Vec<usize> = Vec::<usize>::with_capacity(2*nnz);
+    let mut cols : Vec<usize> = Vec::<usize>::with_capacity(2*nnz);
+    let mut values : Vec<F> = Vec::<F>::with_capacity(2*nnz);
+    //
+    let mut cs_iter = mat.iter();
+    while let Some(item) = cs_iter.next() {
+        let row = item.1.0;
+        let col = item.1.1;
+        diagonal[row] += *item.0;
+        diagonal[col] += *item.0;
+        rows.push(row);
+        cols.push(col);
+        values.push(*item.0);
+    }
+    // fill in TriMatBase corresponding to DA
+    for i in 0..values.len() {
+        let row = rows[i];
+        values[i] = values[i] / diagonal[row];
+    }
+    let tri_da = TriMatBase::from_triplets((nb_row, nb_col), rows, cols, values);
+    // now we have compute D*mat in tri_da, must compute mat * tri_da to get adar in trimat format a.k.a tri_adar
+
+    //
+    return Err(anyhow!("not yet implemented"));
+}  // end of adamic_adar_normalization_csmat
 
 //===============================================================
 

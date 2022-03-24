@@ -49,6 +49,8 @@ pub enum HopeMode {
     KATZ,
     /// Rooted Page Rank
     RPR,
+    /// Adamic Adar or Resource allocator
+    ADA,
 } // end of HopeMode
 
 
@@ -130,7 +132,7 @@ impl <F> Hope<F>  where
     // as we search a representation of inverse(I - β P) * (β A)
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
     ///     factor must be between 0. and 1.
-    fn make_katz_problem(&self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> {
+    fn make_katz_problem(&self, factor : f64, approx_mode : RangeApproxMode) -> Result<GSvdApprox<F>, anyhow::Error> {
         //
         log::debug!("hope::make_katz_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         // enforce rule on factor
@@ -159,8 +161,8 @@ impl <F> Hope<F>  where
         } */
         let gsvdapprox = GSvdApprox::new(mat_l, mat_g, approx_mode, None);
         //
-        return gsvdapprox;
-    } // end of make_katz_pair
+        return Ok(gsvdapprox);
+    } // end of make_katz_problem
 
 
 
@@ -170,8 +172,8 @@ impl <F> Hope<F>  where
     /// 
     // In fact we go to the Gsvd with the pair (transpose((1. - β) * I)), transpose(I - β P))
     // as we search a representation of inverse(I - β P) * (1. - β) * I
-    fn make_rooted_pagerank_problem(&mut self, factor : f64, approx_mode : RangeApproxMode) -> GSvdApprox<F> where
-                    for<'r> F: std::ops::MulAssign<&'r F>  {
+    fn make_rooted_pagerank_problem(&mut self, factor : f64, approx_mode : RangeApproxMode) -> Result<GSvdApprox<F>, anyhow::Error> 
+            where for<'r> F: std::ops::MulAssign<&'r F>  {
         //
         log::debug!("hope::make_rooted_pagerank_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         //
@@ -193,7 +195,18 @@ impl <F> Hope<F>  where
         };
         let gsvdapprox = GSvdApprox::new(mat_l, mat_g , approx_mode, None);
         //
-        return gsvdapprox;
+        return Ok(gsvdapprox);
+    } // end of make_rooted_pagerank_problem
+
+
+    // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I, adamic_ada transform of matrep) 
+    // so we do not need Gsvd, a simple approximated svd is sufficient
+    fn make_adamic_adar_problem(&mut self, approx_mode : RangeApproxMode) -> Result<GSvdApprox<F>, anyhow::Error>
+             where for<'r> F: std::ops::MulAssign<&'r F> 
+    {
+        log::debug!("hope::make_adamicadar_problem approx_mode : {:?}", approx_mode);
+        
+        panic!("not yet implemented");
     } // end of make_rooted_pagerank_problem
 
 
@@ -214,9 +227,10 @@ impl <F> Hope<F>  where
         let gsvd_pb = match self.params.hope_m {
             HopeMode::KATZ => { self.make_katz_problem(self.params.get_decay_weight(), self.params.get_range_mode()) },
             HopeMode::RPR => { self.make_rooted_pagerank_problem(self.params.get_decay_weight(), self.params.get_range_mode()) },
+            HopeMode::ADA => { self.make_adamic_adar_problem(self.params.get_range_mode())},
         };
         // now we can approximately solve svd problem
-        let gsvd_res = gsvd_pb.do_approx_gsvd(); 
+        let gsvd_res = gsvd_pb.unwrap().do_approx_gsvd(); 
         if gsvd_res.is_err() {
             return Err(anyhow!("compute_embedded : call GSvdApprox.do_approx_gsvd failed"));
         }
