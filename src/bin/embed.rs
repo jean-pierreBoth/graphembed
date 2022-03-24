@@ -1,7 +1,18 @@
-//  test for datafiles
+//! an executable for embedding graph
+//! example usage:
+//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "RPR" precision --epsil 0.1 --maxrank 1000 --blockiter 3
+//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "RPR" rank --targetrank 1000 --nbiter 3
+//! embedder --csv "p2p-Gnutella09.txt" nodesketch --decay 0.1  --dim 500 --nbiter 3
+//! 
+//!  hope or nodesketch are differents algorithms for embedding see related docs
+//!  for hope algorithms different modes of approximations are possible : KATZ, RPR (rooted page rank), ADA (adamic adar)
+//!  
+
+
+
 
 use anyhow::{anyhow};
-use clap::{Arg, ArgGroup, ArgMatches, Command, arg};
+use clap::{Arg, ArgMatches, Command, arg};
 
 use graphite::prelude::*;
 use crate::{nodesketch::*};
@@ -262,8 +273,8 @@ pub fn main() {
     let res = csv_to_trimat::<f64>(&path, true, b'\t');
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
-        log::error!("hope::tests::test_hope_gnutella09 failed in csv_to_trimat");
-        assert_eq!(1, 0);
+        log::error!("embedder failed in csv_to_trimat, reading {:?}", &path);
+        std::process::exit(1);
     }
     let (trimat, node_index) = res.unwrap();
     //
@@ -276,8 +287,8 @@ pub fn main() {
         let embedding = Embedding::new(node_index, &mut hope);
         if embedding.is_err() {
             log::error!("error : {:?}", embedding.as_ref().err());
-            log::error!("test_wiki failed in compute_Embedded");
-            assert_eq!(1, 0);        
+            log::error!("hope embedding failed");
+            std::process::exit(1);
         };
         let _embed_res = embedding.unwrap();
     }  // end case Hope
@@ -288,8 +299,8 @@ pub fn main() {
         let embedding = Embedding::new(node_index, &mut nodesketch);
         if embedding.is_err() {
             log::error!("error : {:?}", embedding.as_ref().err());
-            log::error!("test_wiki failed in compute_Embedded");
-            assert_eq!(1, 0);        
+            log::error!("nodesketch embedding failed");
+            std::process::exit(1);
         };
         let _embed_res = embedding.unwrap();
     }
