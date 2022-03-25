@@ -128,9 +128,9 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
     let nnz = mat.nnz();
     let mut diagonal = Array1::<F>::zeros(nb_row);
     // allocate triplets for adamic adamar transform
-    let mut rows : Vec<usize> = Vec::<usize>::with_capacity(2*nnz);
-    let mut cols : Vec<usize> = Vec::<usize>::with_capacity(2*nnz);
-    let mut values : Vec<F> = Vec::<F>::with_capacity(2*nnz);
+    let mut rows : Vec<usize> = Vec::<usize>::with_capacity(nnz);
+    let mut cols : Vec<usize> = Vec::<usize>::with_capacity(nnz);
+    let mut values : Vec<F> = Vec::<F>::with_capacity(nnz);
     //
     let mut cs_iter = mat.iter();
     while let Some(item) = cs_iter.next() {
@@ -149,7 +149,25 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
     }
     let tri_da = TriMatBase::from_triplets((nb_row, nb_col), rows, cols, values);
     // now we have compute D*mat in tri_da, must compute mat * tri_da to get adar in trimat format a.k.a tri_adar
-
+    let mut tri_ada = TriMatBase::<Vec<usize>, Vec<F>>::with_capacity((nb_row, nb_col), 2 * nnz);    
+    // TODO must be made //
+    for i in 0..nb_row {
+        // TODO check the unwrap but cannot happen
+        let row_i = mat.outer_view(i).unwrap();
+        for j in 0..nb_row {
+            let mut row_i_iter= row_i.iter();
+            while  let Some((k, &val_ik)) = row_i_iter.next() {
+                // now we have our k in matrix multiplication a_ij = sum a_ik * b_kj
+                let location_kj = tri_da.find_locations(k, j);
+                let term_kj : F = location_kj.iter().map(|l | tri_da.data()[l.0]).sum();
+                if term_kj != F::zero() {
+                   tri_ada.add_triplet(i,j, val_ik * term_kj);
+                }
+            } // end of while
+        }  // end of for j
+        // must reset row_vec  !!!!!!!!!!!!!!!!!
+    } // end of for i
+    let csmat_ada : CsMat<F> = tri_ada.to_csr();
     //
     return Err(anyhow!("not yet implemented"));
 }  // end of adamic_adar_normalization_csmat
