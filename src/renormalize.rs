@@ -8,9 +8,10 @@ use ndarray_linalg::{Scalar, Lapack};
 use num_traits::float::Float;
 
 use rayon::iter::{ParallelIterator, IntoParallelIterator};
+use std::collections::HashMap;
 
-use ndarray::{Array1, Array2, ArrayView2};
-use sprs::{CsMat, TriMatBase, TriMatI};
+use ndarray::{Array1, Array2};
+use sprs::{CsMat,TriMatI};
 
 use annembed::tools::svdapprox::*;
 
@@ -75,10 +76,10 @@ pub fn dense_row_normalization<F>(mat : &mut Array2<F>)
 pub fn matrepr_row_normalization<F> (mat : &mut MatRepr<F>)
     where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
     match &mut mat.get_data_mut() {
-        MatMode::FULL(mat) => { dense_row_normalization(mat) }, 
+        MatMode::FULL(mat) => { dense_row_normalization(mat); }, 
         MatMode::CSR(csrmat) =>  { 
                     assert!(csrmat.is_csr());
-                    csr_row_normalization(csrmat) }
+                    csr_row_normalization(csrmat); }
     }
 } // end of matrepr_row_normalization
 
@@ -125,15 +126,19 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
     where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> +
      Default + Send + Sync
 {
+    log::debug!("entering adamic_adar_normalization_csmat");
+    //
     let (nb_row, nb_col) = mat.shape();
     assert_eq!(nb_row, nb_col);
     //
     let nnz = mat.nnz();
+    log::debug!("original matrix nrow = {}, nnz = {}", nb_row, nnz);
     let mut diagonal = Array1::<F>::zeros(nb_row);
     // allocate triplets for adamic adamar transform
     let mut rows : Vec<usize> = Vec::<usize>::with_capacity(nnz);
     let mut cols : Vec<usize> = Vec::<usize>::with_capacity(nnz);
     let mut values : Vec<F> = Vec::<F>::with_capacity(nnz);
+    //
     //
     let mut cs_iter = mat.iter();
     while let Some(item) = cs_iter.next() {
@@ -145,31 +150,43 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
         cols.push(col);
         values.push(*item.0);
     }
-    // fill in TriMatBase corresponding to DA
+    // fill in TriMatBase corresponding to DA in a Hash structure
+    let mut tri_dah  = HashMap::<(usize,usize), F>::with_capacity(nnz); 
     for i in 0..values.len() {
         let row = rows[i];
+        assert!(diagonal[row] != F::zero());
         values[i] = values[i] / diagonal[row];
+        match tri_dah.insert((rows[i], cols[i]),values[i]) {
+            Some(_) => { log::debug!(" non unique item({}, {}", rows[i], cols[i]) ;},
+            _       => {  },
+        }
     }
-    let tri_da = TriMatBase::from_triplets((nb_row, nb_col), rows, cols, values);
     //
     log::debug!("computing all triplets");
     let f_i = | i : usize | -> Vec::<(usize, usize , F)> {
         let mut triplets = Vec::<(usize, usize , F)>::new();
+        if i % 1000 == 0 {
+            log::debug!("treating row {}", i);
+        }
         let row_i = mat.outer_view(i).unwrap();
         for j in 0..nb_row {
             let mut row_i_iter= row_i.iter();
-            while  let Some((k, &val_ik)) = row_i_iter.next() {
+            while let Some((k, &val_ik)) = row_i_iter.next() {
+
                 // now we have our k in matrix multiplication a_ij = sum a_ik * b_kj
-                let location_kj = tri_da.find_locations(k, j);
-                let term_kj : F = location_kj.iter().map(|l | tri_da.data()[l.0]).sum();
-                if term_kj != F::zero() {
-                   triplets.push((i,j, val_ik * term_kj));
+                match tri_dah.get(&(k, j)) {
+                    Some(term_kj) => {
+                        if *term_kj != F::zero() {
+                            triplets.push((i,j, val_ik * *term_kj));
+                        }                       
+                    }
+                    _ => {}
                 }
             } // end of while
         }  // end of for j
         //
         return triplets
-    };
+    };   // end of our closure
     let all_triplets : Vec<Vec<(usize, usize, F)>> = (0..nb_row).into_par_iter().map(|i| f_i(i)).collect();
     log::debug!(" got all triplets");
     //
@@ -177,14 +194,28 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
     log::debug!("got nb_triplets in adamic adar : {}", nb_triplets);
     //
     let mut tri_adamic = TriMatI::<F, usize>::with_capacity((nb_row, nb_row), nb_triplets);
-
     for i in 0..all_triplets.len() {
         all_triplets[i].iter().for_each(|t| tri_adamic.add_triplet(t.0, t.1, t.2));
     };
     let csmat_ada : CsMat<F> = tri_adamic.to_csr();
+    *mat = csmat_ada;
+    log::debug!("exiting at end of adamic_adar_normalization_csmat");
     //
-    return Err(anyhow!("not yet implemented"));
+    return Ok(());
 }  // end of adamic_adar_normalization_csmat
+
+
+
+// do a Row normalization for dense or csr matrix
+pub fn matrepr_adamic_adar_normalization<F> (mat : &mut MatRepr<F>)
+    where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default + Send + Sync {
+    match &mut mat.get_data_mut() {
+        MatMode::FULL(mat) => { let _res = adamic_adar_normalization_full(mat); }, 
+        MatMode::CSR(csrmat) =>  { 
+                    assert!(csrmat.is_csr());
+                    let _res = adamic_adar_normalization_csmat(csrmat); }
+    }
+} // end of matrepr_row_normalization
 
 //===============================================================
 

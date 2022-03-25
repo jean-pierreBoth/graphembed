@@ -101,7 +101,8 @@ pub struct Hope<F> {
 
 
 impl <F> Hope<F>  where
-    F: Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + Default {
+    F: Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd +
+         Default + Send + Sync{
 
     pub fn new(params : HopeParams, trimat : TriMatI<F, usize>) -> Self {
         Hope::<F>{params, mat : MatRepr::from_csrmat(trimat.to_csr()), sigma_q : None}
@@ -202,10 +203,13 @@ impl <F> Hope<F>  where
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I, adamic_ada transform of matrep) 
     // so we do not need Gsvd, a simple approximated svd is sufficient
     fn make_adamic_adar_problem(&mut self, approx_mode : RangeApproxMode) -> Result<GSvdApprox<F>, anyhow::Error>
-             where for<'r> F: std::ops::MulAssign<&'r F> 
+             where F : Send + Sync + for<'r>  std::ops::MulAssign<&'r F> 
     {
         log::debug!("hope::make_adamicadar_problem approx_mode : {:?}", approx_mode);
-        
+        crate::renormalize::matrepr_adamic_adar_normalization(& mut self.mat);
+        // Mg is I, so in fact it is useless we have a simple SVD to approximate
+        let mat_l = &self.mat;
+//        let gsvdapprox = GSvdApprox::new(mat_l, None , approx_mode, None);        
         panic!("not yet implemented");
     } // end of make_rooted_pagerank_problem
 
@@ -329,7 +333,8 @@ impl <F> Hope<F>  where
 
 /// implement EmbedderT trait for Hope<F> where F is f64 or f32
 impl <F> EmbedderT<F> for Hope<F>  
-    where F : Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + Default {
+    where F : Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + 
+        Default + Send + Sync {
     type Output = EmbeddedAsym<F>;
     ///
     fn embed(&mut self) -> Result<EmbeddedAsym<F>, anyhow::Error > {
