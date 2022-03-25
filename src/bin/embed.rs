@@ -75,9 +75,10 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
     let hope_mode = match matches.value_of("proximity") {
         Some("KATZ") => { HopeMode::KATZ},
         Some("RPR")  => { HopeMode::RPR},
+        Some("ADA")  => { HopeMode::ADA},
         _            => {
                             log::error!("did not get proximity used, KATZ or RPR");
-                            return Err(anyhow!("did not get proximity used, KATZ or RPR"));
+                            std::process::exit(1);
                         },
     };
     // get decay

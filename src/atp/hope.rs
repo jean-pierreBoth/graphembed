@@ -24,9 +24,9 @@ use num_traits::float::*;
 use sprs::{CsMat, TriMatI, TriMatBase};
 
 
-use annembed::tools::svdapprox::{MatRepr, MatMode, RangeApproxMode};
+use annembed::tools::svdapprox::{MatRepr, MatMode, RangeApproxMode, SvdApprox, SvdResult};
 
-use super::randgsvd::{GSvdApprox};
+use super::randgsvd::{GSvdApprox, GSvdResult};
 use super::orderingf::*;
 use crate::embedding::{EmbeddedAsym, EmbedderT};
 
@@ -202,45 +202,21 @@ impl <F> Hope<F>  where
 
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I, adamic_ada transform of matrep) 
     // so we do not need Gsvd, a simple approximated svd is sufficient
-    fn make_adamic_adar_problem(&mut self, approx_mode : RangeApproxMode) -> Result<GSvdApprox<F>, anyhow::Error>
-             where F : Send + Sync + for<'r>  std::ops::MulAssign<&'r F> 
-    {
-        log::debug!("hope::make_adamicadar_problem approx_mode : {:?}", approx_mode);
+    fn make_adamic_adar_problem(&mut self) -> Result<SvdApprox<F>, anyhow::Error>
+             where F : Send + Sync + for<'r>  std::ops::MulAssign<&'r F>  {
+        //
+
+        log::debug!("hope::make_adamicadar_problem");
         crate::renormalize::matrepr_adamic_adar_normalization(& mut self.mat);
         // Mg is I, so in fact it is useless we have a simple SVD to approximate
         let mat_l = &self.mat;
-//        let gsvdapprox = GSvdApprox::new(mat_l, None , approx_mode, None);        
-        panic!("not yet implemented");
+        let svd_approx = SvdApprox::new(mat_l);
+        return Ok(svd_approx);
     } // end of make_rooted_pagerank_problem
 
 
-
-    /// computes the embedding
-    /// - dampening_factor helps defining the extent to which the multi hop neighbourhood of a node is taken into account 
-    ///   when using the katz index matrix or Rooted Page Rank. Factor must be between 0. and 1.
-    /// 
-    /// *Note that in RPR mode the matrix stored in the Hope structure is renormalized to a transition matrix!!*
-    /// 
-    pub fn compute_embedded(&mut self) -> Result<EmbeddedAsym<F>,anyhow::Error> {
-        //
-        log::debug!("hope::compute_embedded");
-        //
-        let cpu_start = ProcessTime::now();
-        let sys_start = SystemTime::now();
-        //
-        let gsvd_pb = match self.params.hope_m {
-            HopeMode::KATZ => { self.make_katz_problem(self.params.get_decay_weight(), self.params.get_range_mode()) },
-            HopeMode::RPR => { self.make_rooted_pagerank_problem(self.params.get_decay_weight(), self.params.get_range_mode()) },
-            HopeMode::ADA => { self.make_adamic_adar_problem(self.params.get_range_mode())},
-        };
-        // now we can approximately solve svd problem
-        let gsvd_res = gsvd_pb.unwrap().do_approx_gsvd(); 
-        if gsvd_res.is_err() {
-            return Err(anyhow!("compute_embedded : call GSvdApprox.do_approx_gsvd failed"));
-        }
-        let gsvd_res = gsvd_res.unwrap();
-        //
-        println!(" gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+    // fills in embedding from a gsvd
+    fn embed_from_gsvd_result(&mut self, gsvd_res : &GSvdResult<F>) -> Result<EmbeddedAsym<F>,anyhow::Error> {
         // get k. How many eigenvalues for first matrix are 1. (The part in alpha before s1)
         let k = gsvd_res.get_k();
         log::debug!(" number (k) of eigenvalues of first matrix that are equal to 1. : {}", k);
@@ -320,9 +296,68 @@ impl <F> Hope<F>  where
         //
         let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
         //
-        log::info!(" gsvd sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
-
         Ok(embedded_a)
+    } // end of embed_from_gsvd_result
+
+
+   // fills in embedding from a svd (and not a gsvd)! Covers the case Adamic Adar
+   fn embed_from_svd_result(&mut self, svd_res : &SvdResult<F>) -> Result<EmbeddedAsym<F>,anyhow::Error> {
+
+        panic!("not yet implemented");
+        return Err(anyhow!("not yet implemented"));
+   } // end of embed_from_svd_result
+
+
+
+    /// computes the embedding
+    /// - dampening_factor helps defining the extent to which the multi hop neighbourhood of a node is taken into account 
+    ///   when using the katz index matrix or Rooted Page Rank. Factor must be between 0. and 1.
+    /// 
+    /// *Note that in RPR mode the matrix stored in the Hope structure is renormalized to a transition matrix!!*
+    /// 
+    pub fn compute_embedded(&mut self) -> Result<EmbeddedAsym<F>,anyhow::Error> {
+        //
+        log::debug!("hope::compute_embedded");
+        //
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
+        //
+        let embedding = match self.params.hope_m {
+            HopeMode::KATZ => {
+                let gsvd_pb = self.make_katz_problem(self.params.get_decay_weight(), self.params.get_range_mode());
+                let gsvd_res = gsvd_pb.unwrap().do_approx_gsvd(); 
+                if gsvd_res.is_err() {
+                    return Err(anyhow!("compute_embedded : KATZ mode, call GSvdApprox.do_approx_gsvd failed"));
+                }
+                let gsvd_res = gsvd_res.unwrap();
+                let embedding = self.embed_from_gsvd_result(&gsvd_res);
+                embedding             
+            },
+            HopeMode::RPR => { 
+                let gsvd_pb = self.make_rooted_pagerank_problem(self.params.get_decay_weight(), self.params.get_range_mode());
+                let gsvd_res = gsvd_pb.unwrap().do_approx_gsvd(); 
+                if gsvd_res.is_err() {
+                    return Err(anyhow!("compute_embedded : RPR mode, call GSvdApprox.do_approx_gsvd failed"));
+                }
+                let gsvd_res = gsvd_res.unwrap();
+                let embedding = self.embed_from_gsvd_result(&gsvd_res);  
+                embedding              
+            },
+            HopeMode::ADA => {
+                let range_mode = self.params.get_range_mode().clone();
+                let svd_pb = self.make_adamic_adar_problem();
+                let svd_res = svd_pb.unwrap().direct_svd(range_mode); 
+                if svd_res.is_err() {
+                    return Err(anyhow!("compute_embedded : ADA mode, call SvdApprox.direct_svd failed"));
+                }
+                let svd_res = svd_res.unwrap();
+                let embedding = self.embed_from_svd_result(&svd_res);
+                return Err(anyhow!("not yet implemented"));
+            },
+        };  // znd of match
+        log::info!(" compute_embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        //
+        return embedding;
     }  // end of compute_embedded
 }  // end of impl Hope
 
