@@ -7,8 +7,10 @@ use anyhow::{anyhow};
 use ndarray_linalg::{Scalar, Lapack};
 use num_traits::float::Float;
 
+use rayon::iter::{ParallelIterator, IntoParallelIterator};
+
 use ndarray::{Array1, Array2, ArrayView2};
-use sprs::{CsMat, TriMatBase};
+use sprs::{CsMat, TriMatBase, TriMatI};
 
 use annembed::tools::svdapprox::*;
 
@@ -120,7 +122,8 @@ pub fn adamic_adar_normalization_full<F> (mat : &mut Array2<F>) -> Result<(), an
 
 // return a Csmat with adamic adar renormalization
 pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), anyhow::Error>
-    where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default
+    where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> +
+     Default + Send + Sync
 {
     let (nb_row, nb_col) = mat.shape();
     assert_eq!(nb_row, nb_col);
@@ -148,11 +151,10 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
         values[i] = values[i] / diagonal[row];
     }
     let tri_da = TriMatBase::from_triplets((nb_row, nb_col), rows, cols, values);
-    // now we have compute D*mat in tri_da, must compute mat * tri_da to get adar in trimat format a.k.a tri_adar
-    let mut tri_ada = TriMatBase::<Vec<usize>, Vec<F>>::with_capacity((nb_row, nb_col), 2 * nnz);    
-    // TODO must be made //
-    for i in 0..nb_row {
-        // TODO check the unwrap but cannot happen
+    //
+    log::debug!("computing all triplets");
+    let f_i = | i : usize | -> Vec::<(usize, usize , F)> {
+        let mut triplets = Vec::<(usize, usize , F)>::new();
         let row_i = mat.outer_view(i).unwrap();
         for j in 0..nb_row {
             let mut row_i_iter= row_i.iter();
@@ -161,13 +163,25 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
                 let location_kj = tri_da.find_locations(k, j);
                 let term_kj : F = location_kj.iter().map(|l | tri_da.data()[l.0]).sum();
                 if term_kj != F::zero() {
-                   tri_ada.add_triplet(i,j, val_ik * term_kj);
+                   triplets.push((i,j, val_ik * term_kj));
                 }
             } // end of while
         }  // end of for j
-        // must reset row_vec  !!!!!!!!!!!!!!!!!
-    } // end of for i
-    let csmat_ada : CsMat<F> = tri_ada.to_csr();
+        //
+        return triplets
+    };
+    let all_triplets : Vec<Vec<(usize, usize, F)>> = (0..nb_row).into_par_iter().map(|i| f_i(i)).collect();
+    log::debug!(" got all triplets");
+    //
+    let nb_triplets : usize = all_triplets.iter().fold(0, | acc, v| acc+ v.len());
+    log::debug!("got nb_triplets in adamic adar : {}", nb_triplets);
+    //
+    let mut tri_adamic = TriMatI::<F, usize>::with_capacity((nb_row, nb_row), nb_triplets);
+
+    for i in 0..all_triplets.len() {
+        all_triplets[i].iter().for_each(|t| tri_adamic.add_triplet(t.0, t.1, t.2));
+    };
+    let csmat_ada : CsMat<F> = tri_adamic.to_csr();
     //
     return Err(anyhow!("not yet implemented"));
 }  // end of adamic_adar_normalization_csmat
