@@ -302,9 +302,42 @@ impl <F> Hope<F>  where
 
    // fills in embedding from a svd (and not a gsvd)! Covers the case Adamic Adar
    fn embed_from_svd_result(&mut self, svd_res : &SvdResult<F>) -> Result<EmbeddedAsym<F>,anyhow::Error> {
-
+        //
+        log::debug!("entering embed_from_svd_result");
+        //
+        let s = match svd_res.get_sigma() {
+            Some(s) => { s },
+                     _                       => { return  Err(anyhow!("embed_from_svd_result could not get s"));},
+        };
+        //
+        let u : &Array2<F> = match svd_res.get_u() {
+            Some(u) =>  { u },
+                    _                        => { return  Err(anyhow!("compute_embedded could not get u")); },
+        };
+        let vt : &Array2<F> = match svd_res.get_vt() {
+            Some(vt) =>  { vt },
+                    _                        => { return  Err(anyhow!("compute_embedded could not get u")); },
+        };
+        //
+        let nb_sigma = s.len();
+        let mut source = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma));
+        let mut target = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma)); 
+        let v = vt.t();  
+        assert_eq!(u.ncols(), v.ncols());
+        for i in 0..nb_sigma {
+            let sigma = Float::sqrt(s[i]);
+            for j in 0..v.ncols() {
+                log::debug!(" sigma_q i : {}, value : {:?} ", i, sigma);
+                source.row_mut(i)[j] = sigma * u.row(i)[j];
+                target.row_mut(i)[j] = sigma * v.row(i)[j];
+            }
+        } 
+        log::debug!("exiting embed_from_svd_result");
+        let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
+        //
         panic!("not yet implemented");
-        return Err(anyhow!("not yet implemented"));
+        //
+        return Ok(embedded_a);
    } // end of embed_from_svd_result
 
 

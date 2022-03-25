@@ -74,8 +74,9 @@ lazy_static = { version = "1.4"}
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_debug"] }
 # log = { version = "0.4"}
 env_logger = { version = "0.9"}
-anyhow = {version = "1.0"}
 
+# hack to avoid interaction bug with intel-mkl
+anyhow = { version = "<=1.0.48" }
 # for documentation
 katexit = {version = "0.1.0"}
 

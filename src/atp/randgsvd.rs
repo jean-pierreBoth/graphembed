@@ -36,7 +36,7 @@ use ndarray::{Array2};
 use ndarray_linalg::{Scalar, Lapack};
 
 
-use super::gsvd::{GSvd, GSvdOptParams, GSvdResult};
+pub use super::gsvd::{GSvd, GSvdOptParams, GSvdResult};
 
 
 // this module provides svdapproximation tools à la Hlako-Tropp
