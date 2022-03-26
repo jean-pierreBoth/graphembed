@@ -16,8 +16,9 @@ use clap::{Arg, ArgMatches, Command, arg};
 
 use graphite::prelude::*;
 use crate::{nodesketch::*};
+use sprs::{TriMatI};
 
-static DATADIR : &str = &"/home/jpboth/Rust/graphembed/Data";
+static DATADIR : &str = &"/home/jpboth/Data/Graphs";
 
 
 fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
@@ -270,8 +271,17 @@ pub fn main() {
     log::info!("in hope::test_hope_gnutella09"); 
     // Nodes: 8114 Edges: 26013
     let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
+    let delimiters = [b'\t', b',', b' '];
     log::info!("\n\n test_nodesketchasym_wiki, loading file {:?}", path);
-    let res = csv_to_trimat::<f64>(&path, true, b'\t');
+    let mut res: anyhow::Result<(TriMatI<f64, usize>, NodeIndexation<usize>)> = Err(anyhow!("not initializd"));
+    for delim in delimiters {
+        log::info!("embedder trying reading {:?} with  delimiter{ }", &path, delim);
+        res = csv_to_trimat::<f64>(&path, true, delim);
+        if res.is_err() {
+            log::error!("embedder failed in csv_to_trimat, reading {:?}, trying delimiter {} ", &path, delim);
+        }
+        else { break;}
+    }
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
         log::error!("embedder failed in csv_to_trimat, reading {:?}", &path);

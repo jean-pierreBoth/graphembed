@@ -324,18 +324,19 @@ impl <F> Hope<F>  where
         let mut target = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma)); 
         let v = vt.t();  
         assert_eq!(u.ncols(), v.ncols());
+        log::info!("first eigenvalue {:.3e}, last eigenvalue : {:.3e}", s[0], s[s.len()-1]);
         for i in 0..nb_sigma {
             let sigma = Float::sqrt(s[i]);
-            for j in 0..v.ncols() {
+            if log::log_enabled!(log::Level::Info) && i <= 20 {
                 log::debug!(" sigma_q i : {}, value : {:?} ", i, sigma);
+            }
+            for j in 0..v.ncols() {
                 source.row_mut(i)[j] = sigma * u.row(i)[j];
                 target.row_mut(i)[j] = sigma * v.row(i)[j];
             }
         } 
         log::debug!("exiting embed_from_svd_result");
         let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
-        //
-        panic!("not yet implemented");
         //
         return Ok(embedded_a);
    } // end of embed_from_svd_result
@@ -385,7 +386,7 @@ impl <F> Hope<F>  where
                 }
                 let svd_res = svd_res.unwrap();
                 let embedding = self.embed_from_svd_result(&svd_res);
-                return Err(anyhow!("not yet implemented"));
+                embedding
             },
         };  // znd of match
         log::info!(" compute_embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
@@ -469,6 +470,7 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
                     }
                     values.push(- beta_f * *val);
                 } else {
+                    log::info!("there was sthing i {:?} val {:?} ", row , val);
                     values.push(F::one() - beta_f * *val);
                     already_diag[row] = 1;
                 }

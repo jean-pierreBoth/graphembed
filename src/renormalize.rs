@@ -24,12 +24,11 @@ pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where
     //
     let (nb_row, _ ) = csr_mat.shape();
     let mut range_i : std::ops::Range<usize>;
-    let mut nb_null_row = 0usize;
+    let mut nb_non_null_row = 0usize;
     for i in 0..nb_row {
-        let mut sum_i : F;
+        let mut sum_i : F = F::zero();
+        range_i = csr_mat.indptr().outer_inds_sz(i);
         {  // the borrow checker do not let us access csr_mat.indptr() and csr_mat.data_mut() simultaneously
-            range_i = csr_mat.indptr().outer_inds_sz(i);
-            sum_i = F::zero();
             let data = csr_mat.data();
             for j in range_i.clone() {
                 sum_i = sum_i + data[j];
@@ -38,15 +37,15 @@ pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where
         // we sum of row i
         if !(sum_i > F::zero()) {
             log::trace!("csr_row_normalization null sum of row i {}", i);
-            nb_null_row += 1;
+            nb_non_null_row += 1;
         } else {
             let data = csr_mat.data_mut();
-            for j in range_i {
+            for j in range_i.clone() {
                 data[j] = data[j]/sum_i;
             }
         }
     } // end of for i
-    log::debug!("csr_row_normalization nb row with null sum : {}", nb_null_row);
+    log::debug!("csr_row_normalization nb row with null sum : {}", nb_row - nb_non_null_row);
 } // end of csr_row_normalization
 
 
