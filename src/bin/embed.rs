@@ -23,6 +23,8 @@ use anyhow::{anyhow};
 use clap::{Arg, ArgMatches, Command, arg};
 
 use graphite::prelude::*;
+use sprs::{TriMatI};
+
 use crate::{nodesketch::*};
 
 static DATADIR : &str = &"/home/jpboth/Data/Graphs";
@@ -340,27 +342,41 @@ pub fn main() {
     //
     if hope_params.is_some() {
         log::info!("embedding mode : Hope");
-        // now we embed
-        let mut hope = Hope::new(hope_params.unwrap(), trimat); 
-        let embedding = Embedding::new(node_index, &mut hope);
-        if embedding.is_err() {
-            log::error!("error : {:?}", embedding.as_ref().err());
-            log::error!("hope embedding failed");
-            std::process::exit(1);
-        };
-        let _embed_res = embedding.unwrap();
+        // now we allocate an embedder (sthing that implement the Embedder trait)
+        if validation_params.is_none() {
+            // we do the embedding
+            let mut hope = Hope::new(hope_params.unwrap(), trimat); 
+            let embedding = Embedding::new(node_index, &mut hope);
+            if embedding.is_err() {
+                log::error!("hope embedding failed, error : {:?}", embedding.as_ref().err());
+                std::process::exit(1);
+            };
+            let _embed_res = embedding.unwrap();
+            // should dump somewhere
+        }
+        else {
+            let params = validation_params.unwrap();
+            // have to run validation simulations
+            log::info!("doing validaton runs for hope embedding");
+            let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<f64> {
+                let mut hope = Hope::new(hope_params.unwrap(), trimat); 
+                let res = hope.embed();
+                res.unwrap()
+            };
+            estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
+        }
     }  // end case Hope
     else if sketching_params.is_some() {
         log::info!("embedding mode : Sketching");
-        // now we embed
+        // now we allocate an embedder (sthing that implement the Embedder trait)
         let mut nodesketch = NodeSketch::new(sketching_params.unwrap(), trimat);
         let embedding = Embedding::new(node_index, &mut nodesketch);
         if embedding.is_err() {
-            log::error!("error : {:?}", embedding.as_ref().err());
-            log::error!("nodesketch embedding failed");
+            log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
             std::process::exit(1);
         };
         let _embed_res = embedding.unwrap();
     }
+    // 
     //    
 }  // end fo main

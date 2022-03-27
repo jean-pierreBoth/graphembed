@@ -41,8 +41,7 @@ pub fn hope_distance<F>(v1:&ArrayView1<F>, v2 : &ArrayView1<F>) -> f64
 
 
 
-// TODO add Resource Allocator (that is called AdamicAdar in Hope Paper and RA in references mentionned in validation module)
-/// To specify if we run with Katz index or in Rooted Page Rank 
+/// To specify if we run with Katz index or in Rooted Page Rank or Adamic Adar (a.k.a Resource Allocator)
 #[derive(Copy,Clone, Debug)]
 pub enum HopeMode {
     /// Katz index mode
