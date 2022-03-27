@@ -3,14 +3,23 @@
 //! example usage:
 //! 
 //! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 1000 and 3 iterations
-//! in the range approximations:
-//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "ADA" rank --targetrank 1000 --nbiter 3
+//! in the range approximations:  
+//! embedder --csv "p2p-Gnutella09.txt" hope  --approx "ADA" rank --targetrank 1000 --nbiter 3
 //! 
+//! with precision target:  
+//! embedder --csv "p2p-Gnutella09.txt" hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
 //! 
-//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
+//! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 :
 //! 
-//! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 
 //! embedder --csv "p2p-Gnutella09.txt" sketching --decay 0.1  --dim 500 --nbiter 3 
+//! 
+//!The sketching mode can construct a symetric embedding by passing the -s flag
+//! 
+//! 
+//! Embedding for estimation of AUC with link prediction 
+//!     It suffices to add the command : **validation --npass nbpass --skip fraction**
+//!     with nbpass is the number of step asked for in the validation and skip is the fraction of edges kept out of the train dataset.  
+//!     example : embedder --csv "p2p-Gnutella09.txt" sketching --decay 0.1  --dim 500 --nbiter 3 validation --npass 10 --skip 0.1
 //! 
 //!  hope or nodesketch are differents algorithms for embedding see related docs
 //!  for hope algorithms different modes of approximations are possible : KATZ, RPR (rooted page rank), ADA (adamic adar)
@@ -173,7 +182,8 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
 } // end of parse_hope_args
 
 
-fn parse_validation_parameters(matches : &ArgMatches) ->  Result<ValidationParams, anyhow::Error> {
+
+fn parse_validation_args(matches : &ArgMatches) ->  Result<ValidationParams, anyhow::Error> {
     //
     log::debug!("in parse_validation_parameters");
     // for now only link prediction is implemented
@@ -315,6 +325,15 @@ pub fn main() {
             let res = parse_sketching(sub_m);
             match res {
                 Ok(params) => { sketching_params = Some(params); },
+                _                     => {  },
+            }
+        }
+
+        Some(("validation", sub_m)) => {
+            log::debug!("got validation command");
+            let res = parse_validation_args(sub_m);
+            match res {
+                Ok(params) => { validation_params = Some(params); },
                 _                     => {  },
             }
         }
