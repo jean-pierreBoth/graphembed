@@ -10,6 +10,6 @@ pub use crate::sketching::*;
 pub use crate::atp::randgsvd;
 
 pub use annembed::tools::svdapprox::*;
-
+pub use crate::validation::link::*;
 
 pub use crate::sketching::params::{NodeSketchParams};

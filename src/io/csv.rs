@@ -178,6 +178,7 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 /// Returns the MatRepr field and a mapping from NodeId to a rank in matrix.
 pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    //
     let res_csv = csv_to_trimat(filepath, directed, delim);
     if res_csv.is_ok() {
         let csrmat : CsMat<F> = res_csv.as_ref().unwrap().0.to_csr();
@@ -188,6 +189,37 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         return Err(res_csv.unwrap_err());
     }
 }  // end of csv_to_csrmat
+
+
+/// loads a csv file testing for delimiters [b'\t', b',', b' ']
+/// For an asymetric graph directed must be set to true
+pub fn csv_to_csrmat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bool) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
+    where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    //
+    log::info!("\n\n csv_to_csrmat_delimiters, loading file {:?}", filepath);
+    //
+    let delimiters = [b'\t', b',', b' ', b';'];
+    //
+    let mut res:  anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> = Err(anyhow!("not initializd"));
+    for delim in delimiters {
+        log::debug!("embedder trying reading {:?} with  delimiter{ }", &filepath, delim);
+        res = csv_to_csrmat::<F>(&filepath, directed, delim);
+        if res.is_err() {
+            log::error!("embedder failed in csv_to_csrmat_delimiters, reading {:?}, trying delimiter {} ", &filepath, delim);
+        }
+        else { return res;}
+    }
+    if res.is_err() {
+        log::error!("error : {:?}", res.as_ref().err());
+        log::error!("embedder failed in csv_to_csrmat_delimiters, reading {:?}, tested delimiers {:?}", &filepath, delimiters);
+        std::process::exit(1);
+    };
+    //
+    return res;
+}  // end of csv_to_csrmat_delimiters
+
+
+
 
 
 /// load a directed/undirected  weighted/unweighted graph in csv format into a TriMatI representation.  
@@ -357,6 +389,34 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     Ok((trimat, nodeindex))
 } // end of csv_to_trimat
 
+
+
+
+pub fn csv_to_trimat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bool) -> anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)> 
+            where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + 
+                for<'r> std::ops::MulAssign<&'r F> + Default {
+    //
+    log::info!("in csv_to_trimat_delimiters");
+    //
+    let delimiters = [b'\t', b',', b' ', b';'];
+    //
+    let mut res :  anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)>  = Err(anyhow!("res not initialized"));
+    for delim in delimiters {
+        log::debug!("embedder trying reading {:?} with  delimiter{ }", &filepath, delim);
+        res = csv_to_trimat::<F>(&filepath, directed, delim);
+        if res.is_err() {
+            log::error!("embedder failed in csv_to_trimat_delimiters, reading {:?}, trying delimiter {} ", &filepath, delim);
+        }
+        else { return res;}
+    }
+    if res.is_err() {
+        log::error!("error : {:?}", res.as_ref().err());
+        log::error!("embedder failed in csv_to_csrmat_delimiters, reading {:?}, tested delimiers {:?}", &filepath, delimiters);
+        std::process::exit(1);
+    };
+    //
+    return res;
+}  // end of csv_to_trimat_delimiters
 
 //========================================================================================
 

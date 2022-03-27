@@ -1,8 +1,16 @@
 //! an executable for embedding graph
+//! 
 //! example usage:
-//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "RPR" precision --epsil 0.1 --maxrank 1000 --blockiter 3
-//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "RPR" rank --targetrank 1000 --nbiter 3
-//! embedder --csv "p2p-Gnutella09.txt" nodesketch --decay 0.1  --dim 500 --nbiter 3
+//! 
+//! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 1000 and 3 iterations
+//! in the range approximations:
+//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "ADA" rank --targetrank 1000 --nbiter 3
+//! 
+//! 
+//! embedder --csv "p2p-Gnutella09.txt" hope --decay 0.1 --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
+//! 
+//! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 
+//! embedder --csv "p2p-Gnutella09.txt" sketching --decay 0.1  --dim 500 --nbiter 3 
 //! 
 //!  hope or nodesketch are differents algorithms for embedding see related docs
 //!  for hope algorithms different modes of approximations are possible : KATZ, RPR (rooted page rank), ADA (adamic adar)
@@ -16,7 +24,6 @@ use clap::{Arg, ArgMatches, Command, arg};
 
 use graphite::prelude::*;
 use crate::{nodesketch::*};
-use sprs::{TriMatI};
 
 static DATADIR : &str = &"/home/jpboth/Data/Graphs";
 
@@ -65,6 +72,7 @@ fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Er
 } // end of parse_sketching
 
 
+
 fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> {
     log::debug!("in parse_hope");
     // first get mode Katz or Rooted Page Rank
@@ -74,11 +82,13 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
     let decay;
     // get approximation mode
     let hope_mode = match matches.value_of("proximity") {
-        Some("KATZ") => { HopeMode::KATZ},
-        Some("RPR")  => { HopeMode::RPR},
+        Some("KATZ") => {  HopeMode::KATZ
+                        },
+        Some("RPR")  => {   HopeMode::RPR
+                        },
         Some("ADA")  => { HopeMode::ADA},
         _            => {
-                            log::error!("did not get proximity used, KATZ or RPR");
+                            log::error!("did not get proximity used : ADA,KATZ or RPR");
                             std::process::exit(1);
                         },
     };
@@ -92,8 +102,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                 } 
         } 
         _      => { return Err(anyhow!("could not parse decay"));}
-
-    };                         
+    };  // end of decay match                         
     
     
     match matches.subcommand() {
@@ -127,7 +136,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
             let range = RangeApproxMode::EPSIL(RangePrecision::new(epsil, blockiter, maxrank));
             let params = HopeParams::new(hope_mode, range, decay);
             return Ok(params);
-        },  // end decoding preciison arg
+        },  // end decoding precision arg
 
 
         Some(("rank", sub_m)) => {
@@ -137,7 +146,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                     Ok(val) => { maxrank = val;},
                     _              => { return Err(anyhow!("could not parse Hope maxrank"));},
                 }
-            }
+            } // end of target rank
 
             // get blockiter
             if let Some(str) = sub_m.value_of("nbiter") {
@@ -162,6 +171,44 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
 } // end of parse_hope_args
 
 
+fn parse_validation_parameters(matches : &ArgMatches) ->  Result<ValidationParams, anyhow::Error> {
+    //
+    log::debug!("in parse_validation_parameters");
+    // for now only link prediction is implemented
+    let delete_proba : f64;
+    let nbpass : usize;
+
+    match matches.value_of("skip") {
+        Some(str) =>  { 
+                let res = str.parse::<f64>();
+                match res {
+                    Ok(val) => { delete_proba = val},
+                    _       => { return Err(anyhow!("could not parse skip parameter"));
+                                },
+                } 
+        } 
+        _      => { return Err(anyhow!("could not parse decay"));}
+    };  // end of skip match 
+
+    match matches.value_of("nbpass") {
+        Some(str) =>  { 
+                let res = str.parse::<usize>();
+                match res {
+                    Ok(val) => { nbpass = val},
+                    _       => { return Err(anyhow!("could not parse nbpass parameter"));
+                                },
+                } 
+        } 
+        _      => { return Err(anyhow!("could not parse decay"));}
+    };  // end of skip match  
+    //
+    let validation_params = ValidationParams::new(delete_proba, nbpass);
+    return Ok(validation_params);
+}  // end of parse_validation_parameter
+
+
+
+
 
 pub fn main() {
     //
@@ -182,7 +229,7 @@ pub fn main() {
             .takes_value(true)
             .help("specify \"hope\" or \"sketching\" "))
         .subcommand(Command::new("hope")
-            .subcommand_required(true)
+            .subcommand_required(false)
             .arg_required_else_help(true)
             .arg(Arg::new("proximity")
                 .long("approx")
@@ -210,7 +257,7 @@ pub fn main() {
                     arg!(--nbiter <nbiter> "integer between 2 and 5"),
                 ])
             )
-        )
+        ) // end command hope
         .subcommand(Command::new("sketching")
             .arg_required_else_help(true)
             .args(&[
@@ -219,9 +266,17 @@ pub fn main() {
                 arg!(--nbiter <nbiter> "number of loops around a node"),
             ])
             .arg(Arg::new("symetry")
-                .short('a')
-                .help(" -a for asymetric embedding, default is symetric"))
-        )
+                .short('s')
+                .help(" -s for a symetric embedding, default is assymetric")
+        ) // end command sketching
+        .subcommand(Command::new("validation")
+            .arg_required_else_help(true)
+            .args(&[
+                arg!(--nbpass <nbpass> "number of passes of validation"),
+                arg!(--skip <fraction> "fraction of edges to skip in training set"),
+            ])
+        )  // end subcommand validation
+    )
     .get_matches();
 
     // decode args
@@ -241,6 +296,7 @@ pub fn main() {
 
     let mut hope_params : Option<HopeParams> = None;
     let mut sketching_params : Option<NodeSketchParams> = None;
+    let mut validation_params : Option<ValidationParams> = None;
     //
     match matches.subcommand() {
         Some(("hope", sub_m)) => {
@@ -268,20 +324,11 @@ pub fn main() {
     }  // end match subcommand
 
 
-    log::info!("in hope::test_hope_gnutella09"); 
+    log::info!(" parsing of commands succeeded"); 
     // Nodes: 8114 Edges: 26013
     let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
-    let delimiters = [b'\t', b',', b' '];
-    log::info!("\n\n test_nodesketchasym_wiki, loading file {:?}", path);
-    let mut res: anyhow::Result<(TriMatI<f64, usize>, NodeIndexation<usize>)> = Err(anyhow!("not initializd"));
-    for delim in delimiters {
-        log::info!("embedder trying reading {:?} with  delimiter{ }", &path, delim);
-        res = csv_to_trimat::<f64>(&path, true, delim);
-        if res.is_err() {
-            log::error!("embedder failed in csv_to_trimat, reading {:?}, trying delimiter {} ", &path, delim);
-        }
-        else { break;}
-    }
+    log::info!("\n\n  loading file {:?}", path);
+    let res = csv_to_trimat_delimiters::<f64>(&path, true);
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
         log::error!("embedder failed in csv_to_trimat, reading {:?}", &path);
