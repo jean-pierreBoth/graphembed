@@ -14,3 +14,4 @@ pub use annembed::tools::svdapprox::*;
 pub use crate::validation::link::*;
 
 pub use crate::sketching::params::{NodeSketchParams};
+pub use crate::sketching::{nodesketch::NodeSketch, nodesketchasym::NodeSketchAsym};

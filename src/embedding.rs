@@ -34,7 +34,7 @@ type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
 
 pub enum EmbeddingMode {
     Hope, 
-    Nodesketch,
+    NodeSketch,
 }
 
 
@@ -188,10 +188,9 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
 
 
 /// The trait Embedder is something that has as output
-/// something satisfying the trait EmbeddedT<F>.  
+/// something satisfying the trait EmbeddedT<F>, for example  EmbeddedAsym<usize> for nodesketch embedding
 /// F is the type contained in embedded vectors , mostly f64, f32, usize
 /// Useful just to make cross validation generic.
-
 pub trait EmbedderT<F>  {
     type Output : EmbeddedT<F> ;
     ///

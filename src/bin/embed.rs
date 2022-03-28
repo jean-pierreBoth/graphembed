@@ -4,22 +4,24 @@
 //! 
 //! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 1000 and 3 iterations
 //! in the range approximations:  
-//! embedder --csv "p2p-Gnutella09.txt" hope  --approx "ADA" rank --targetrank 1000 --nbiter 3
+//! embed --csv "p2p-Gnutella09.txt" embedding hope  --approx "ADA" rank --targetrank 1000 --nbiter 3
 //! 
 //! with precision target:  
-//! embedder --csv "p2p-Gnutella09.txt" hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
+//! embedder --csv "p2p-Gnutella09.txt" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
 //! 
 //! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 :
 //! 
-//! embedder --csv "p2p-Gnutella09.txt" sketching --decay 0.1  --dim 500 --nbiter 3 
+//! embed --csv "p2p-Gnutella09.txt" embedding sketching --decay 0.1  --dim 500 --nbiter 3 
 //! 
 //!The sketching mode can construct a symetric embedding by passing the -s flag
 //! 
 //! 
 //! Embedding for estimation of AUC with link prediction 
-//!     It suffices to add the command : **validation --npass nbpass --skip fraction**
-//!     with nbpass is the number of step asked for in the validation and skip is the fraction of edges kept out of the train dataset.  
-//!     example : embedder --csv "p2p-Gnutella09.txt" sketching --decay 0.1  --dim 500 --nbiter 3 validation --npass 10 --skip 0.1
+//!     It suffices to add the command : **validation --npass nbpass --skip fraction** before the embedding specification.
+//!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
+//!     We get for example :  
+//!   
+//!     embed --csv "p2p-Gnutella09.txt" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 500 --nbiter 3 
 //! 
 //!  hope or nodesketch are differents algorithms for embedding see related docs
 //!  for hope algorithms different modes of approximations are possible : KATZ, RPR (rooted page rank), ADA (adamic adar)
@@ -243,31 +245,15 @@ fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow:
     // 
     let validation_params = ValidationParams::new(delete_proba, nbpass);
     //
+    let embedding_params_res = parse_embedding_cmd(matches);
+    if embedding_params_res.is_ok() {
+        return Ok(ValidationCmd{validation_params, embedding_params : embedding_params_res.unwrap()});
+    }
+    else {
+        log::info!("parse_embedding_cmd failed");
+        return Err(anyhow!("parse_validation_cmd failed"));   
+    }
     //
-    match matches.subcommand() {
-        Some(("hope", sub_m))       => {
-                if let Ok(params) = parse_hope_args(sub_m) {
-                    return Ok(ValidationCmd{validation_params, embedding_params : EmbeddingParams::from(params)});
-                }
-                else { 
-                    log::error!("parse_hope_args failed");
-                    return Err(anyhow!("parse_hope_args failed"));
-                }
-        },
-        Some(("sketching" , sub_m)) => {
-                if let Ok(params) = parse_sketching(sub_m) {
-                    return Ok(ValidationCmd{validation_params, embedding_params : EmbeddingParams::from(params)});
-                }
-                else { 
-                    log::error!("parse_hope_args failed");
-                    return Err(anyhow!("parse_hope_args failed"));
-                }
-        },
-           _                                    => {
-                log::error!("did not find hope neither sketching commands");
-        },
-    }    //
-    return Err(anyhow!("parse_validation_cmd failed"));
 }  // end of parse_validation_cmd
 
 
@@ -459,6 +445,7 @@ pub fn main() {
     match embedding_parameters.mode  {
         EmbeddingMode::Hope => {
             log::info!("embedding mode : Hope");
+            log::debug!(" hope parameters : {:?}",embedding_parameters.hope.unwrap());
             // now we allocate an embedder (sthing that implement the Embedder trait)
             if validation_params.is_none() {
                 // we do the embedding
@@ -473,6 +460,7 @@ pub fn main() {
             }
             else  {
                 let params = validation_params.unwrap();
+                log::debug!("validation parameters : {:?}", params);
                 // have to run validation simulations
                 log::info!("doing validaton runs for hope embedding");
                 // construction of the function necessay for AUC iterations
@@ -487,6 +475,7 @@ pub fn main() {
 
         EmbeddingMode::NodeSketch => {
             log::info!("embedding mode : Sketching");
+            log::debug!(" hope parameters : {:?}",embedding_parameters.sketching.unwrap());
             if validation_params.is_none() {
                 log::debug!("running embedding without validation");
                 // now we allocate an embedder (sthing that implement the Embedder trait)
@@ -500,6 +489,7 @@ pub fn main() {
             } // end case no validation
             else {
                 let params = validation_params.unwrap();
+                log::debug!("validation parameters : {:?}", params);
                 // have to run validation simulations
                 log::info!("doing validaton runs for nodesketch embedding");
                 // construction of the function necessay for AUC iterations            

@@ -4,6 +4,7 @@
 //! 
 
 
+use anyhow::{anyhow};
 
 use ndarray::{Array2, Array1, ArrayView1};
 use sprs::{TriMatI, CsMatI};

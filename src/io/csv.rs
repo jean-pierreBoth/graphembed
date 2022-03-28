@@ -202,10 +202,10 @@ pub fn csv_to_csrmat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bo
     //
     let mut res:  anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> = Err(anyhow!("not initializd"));
     for delim in delimiters {
-        log::debug!("embedder trying reading {:?} with  delimiter{ }", &filepath, delim);
+        log::debug!("embedder trying reading {:?} with  delimiter {:?}", &filepath, delim);
         res = csv_to_csrmat::<F>(&filepath, directed, delim);
         if res.is_err() {
-            log::error!("embedder failed in csv_to_csrmat_delimiters, reading {:?}, trying delimiter {} ", &filepath, delim);
+            log::error!("embedder failed in csv_to_csrmat_delimiters, reading {:?}, with delimiter {:?} ", &filepath, delim);
         }
         else { return res;}
     }
@@ -402,10 +402,10 @@ pub fn csv_to_trimat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bo
     //
     let mut res :  anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)>  = Err(anyhow!("res not initialized"));
     for delim in delimiters {
-        log::debug!("embedder trying reading {:?} with  delimiter{ }", &filepath, delim);
+        log::debug!("embedder trying reading {:?} with  delimiter {:?}", &filepath, delim as char);
         res = csv_to_trimat::<F>(&filepath, directed, delim);
         if res.is_err() {
-            log::error!("embedder failed in csv_to_trimat_delimiters, reading {:?}, trying delimiter {} ", &filepath, delim);
+            log::error!("embedder failed in csv_to_trimat_delimiters, reading {:?}, trying delimiter {:?} ", &filepath, delim as char);
         }
         else { return res;}
     }
