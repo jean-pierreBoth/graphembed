@@ -194,7 +194,7 @@ impl From<HopeParams> for EmbeddingParams {
 
 impl From<NodeSketchParams> for EmbeddingParams {
     fn from(params : NodeSketchParams) -> Self {
-        EmbeddingParams{mode : EmbeddingMode::Nodesketch, hope : None, sketching: Some(params)}
+        EmbeddingParams{mode : EmbeddingMode::NodeSketch, hope : None, sketching: Some(params)}
     }
 }
 
@@ -209,10 +209,10 @@ struct ValidationCmd {
 
 
 
-
+// parsing of valdation command
 fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow::Error> {
     //
-    log::debug!("in parse_validation_parameters");
+    log::debug!("in parse_validation_cmd");
     // for now only link prediction is implemented
     let delete_proba : f64;
     let nbpass : usize;
@@ -273,7 +273,9 @@ fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow:
 
 
 
+// parsing of embedding command
 fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow::Error> {
+    log::debug!("in parse_embedding_cmd");
     match matches.subcommand() {
         Some(("hope", sub_m))       => {
                 if let Ok(params) = parse_hope_args(sub_m) {
@@ -300,15 +302,16 @@ fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow
     }
 }  // parse_embedding_cmd
 
+//==============================================================================================
+
 
 pub fn main() {
     //
     let _ = env_logger::builder().is_test(true).try_init();
     log::info!("logger initialized"); 
-
- 
-
-    // the hope embedding command
+    //
+    // first we define subcommands we will need
+    // the hope command
     let hope_cmd = Command::new("hope")
     .subcommand_required(false)
     .arg_required_else_help(true)
@@ -363,6 +366,9 @@ pub fn main() {
         .subcommand(hope_cmd.clone())
         .subcommand(sketch_cmd.clone());
     //
+    // Now the command line
+    // ===================
+    //
     let matches = Command::new("embedder")
         .subcommand_required(true)
         .arg_required_else_help(true)
@@ -374,7 +380,10 @@ pub fn main() {
         .subcommand(embedding_command)
         .subcommand(validation_cmd)
     .get_matches();
+
+    //
     // decode args
+    // ==========
 
     let mut fname = String::from("");
     if matches.is_present("csvfile") {
@@ -389,9 +398,7 @@ pub fn main() {
         }
     };
 
-    let mut hope_params : Option<HopeParams> = None;
     let mut embedding_parameters : Option<EmbeddingParams> = None;
-    let mut sketching_params : Option<NodeSketchParams> = None;
     let mut validation_params : Option<ValidationParams> = None;
     //
     match matches.subcommand() {
@@ -431,8 +438,8 @@ pub fn main() {
         }
     }  // end if validation
 
-
-
+    // examine embedding_parameters to see if we do hope or sketching
+    
     log::info!(" parsing of commands succeeded"); 
     //
     let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
@@ -447,59 +454,64 @@ pub fn main() {
     //
     // we have our graph in trimat format
     //
-    if hope_params.is_some() {
-        log::info!("embedding mode : Hope");
-        // now we allocate an embedder (sthing that implement the Embedder trait)
-        if validation_params.is_none() {
-            // we do the embedding
-            let mut hope = Hope::new(hope_params.unwrap(), trimat); 
-            let embedding = Embedding::new(node_index, &mut hope);
-            if embedding.is_err() {
-                log::error!("hope embedding failed, error : {:?}", embedding.as_ref().err());
-                std::process::exit(1);
-            };
-            let _embed_res = embedding.unwrap();
-            // should dump somewhere
-        }
-        else {
-            let params = validation_params.unwrap();
-            // have to run validation simulations
-            log::info!("doing validaton runs for hope embedding");
-            // construction of the function necessay for AUC iterations
-            let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<f64> {
-                let mut hope = Hope::new(hope_params.unwrap(), trimat); 
-                let res = hope.embed();
-                res.unwrap()
-            };
-            estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
-        }
-    }  // end case Hope
-    else if sketching_params.is_some() {
-        log::info!("embedding mode : Sketching");
-        if validation_params.is_none() {
-            log::debug!("running embedding without validation");
+    let embedding_parameters = embedding_parameters.unwrap();
+
+    match embedding_parameters.mode  {
+        EmbeddingMode::Hope => {
+            log::info!("embedding mode : Hope");
             // now we allocate an embedder (sthing that implement the Embedder trait)
-            let mut nodesketch = NodeSketchAsym::new(sketching_params.unwrap(), trimat);
-            let embedding = Embedding::new(node_index, &mut nodesketch);
-            if embedding.is_err() {
-                log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
-                std::process::exit(1);
-            };
-            let _embed_res = embedding.unwrap();
-        } // end case no validation
-        else {
-            let params = validation_params.unwrap();
-            // have to run validation simulations
-            log::info!("doing validaton runs for nodesketch embedding");
-            // construction of the function necessay for AUC iterations            
-            let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<usize> {
-                let mut nodesketch = NodeSketchAsym::new(sketching_params.unwrap(), trimat);
-                let res = nodesketch.embed();
-                res.unwrap()
-            };
-            estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
-        }
-    }  // end case sketching_params
+            if validation_params.is_none() {
+                // we do the embedding
+                let mut hope = Hope::new(embedding_parameters.hope.unwrap(), trimat); 
+                let embedding = Embedding::new(node_index, &mut hope);
+                if embedding.is_err() {
+                    log::error!("hope embedding failed, error : {:?}", embedding.as_ref().err());
+                    std::process::exit(1);
+                };
+                let _embed_res = embedding.unwrap();
+                // should dump somewhere
+            }
+            else  {
+                let params = validation_params.unwrap();
+                // have to run validation simulations
+                log::info!("doing validaton runs for hope embedding");
+                // construction of the function necessay for AUC iterations
+                let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<f64> {
+                    let mut hope = Hope::new(embedding_parameters.hope.unwrap(), trimat); 
+                    let res = hope.embed();
+                    res.unwrap()
+                };
+                estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
+            }
+        },  // end case Hope
+
+        EmbeddingMode::NodeSketch => {
+            log::info!("embedding mode : Sketching");
+            if validation_params.is_none() {
+                log::debug!("running embedding without validation");
+                // now we allocate an embedder (sthing that implement the Embedder trait)
+                let mut nodesketch = NodeSketchAsym::new(embedding_parameters.sketching.unwrap(), trimat);
+                let embedding = Embedding::new(node_index, &mut nodesketch);
+                if embedding.is_err() {
+                    log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
+                    std::process::exit(1);
+                };
+                let _embed_res = embedding.unwrap();
+            } // end case no validation
+            else {
+                let params = validation_params.unwrap();
+                // have to run validation simulations
+                log::info!("doing validaton runs for nodesketch embedding");
+                // construction of the function necessay for AUC iterations            
+                let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<usize> {
+                    let mut nodesketch = NodeSketchAsym::new(embedding_parameters.sketching.unwrap(), trimat);
+                    let res = nodesketch.embed();
+                    res.unwrap()
+                };
+                estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
+            }
+        },  // end case sketching_params
+    };
     // 
     //    
 }  // end fo main
