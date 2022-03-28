@@ -1,5 +1,5 @@
 
-#[cfg(not(feature="intel-mkl"))]
+#[cfg(not(feature="intel-mkl-static"))]
 fn main() {
     // if not mkl we need to specify we ask for lapacke
     println!("cargo:rustc-link-lib=lapacke");
