@@ -75,7 +75,6 @@ fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Er
         },
         _   => { return Err(anyhow!("error parsing decay")); },
     }; // end match
-
     //
     let sketch_params = NodeSketchParams{sketch_size: dimension, decay, nb_iter, parallel : true};
     return Ok(sketch_params);
@@ -178,9 +177,40 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
     }; // end match
 } // end of parse_hope_args
 
+//=======================================================================
+
+struct EmbeddingParams {
+    mode : EmbeddingMode,
+    hope : Option<HopeParams>,
+    sketching : Option<NodeSketchParams>,
+} // end of struct EmbeddingParams
 
 
-fn parse_validation_args(matches : &ArgMatches) ->  Result<ValidationParams, anyhow::Error> {
+impl From<HopeParams> for EmbeddingParams {
+    fn from(params : HopeParams) -> Self {
+        EmbeddingParams{mode : EmbeddingMode::Hope, hope : Some(params), sketching:None}
+    }
+}
+
+impl From<NodeSketchParams> for EmbeddingParams {
+    fn from(params : NodeSketchParams) -> Self {
+        EmbeddingParams{mode : EmbeddingMode::Nodesketch, hope : None, sketching: Some(params)}
+    }
+}
+
+//=================================================================
+
+
+struct ValidationCmd {
+    validation_params : ValidationParams,
+    embedding_params : EmbeddingParams,
+} // end of struct ValidationCmd
+
+
+
+
+
+fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow::Error> {
     //
     log::debug!("in parse_validation_parameters");
     // for now only link prediction is implemented
@@ -209,22 +239,131 @@ fn parse_validation_args(matches : &ArgMatches) ->  Result<ValidationParams, any
                 } 
         } 
         _      => { return Err(anyhow!("could not parse decay"));}
-    };  // end of skip match  
-    //
+    };  // end of skip match 
+    // 
     let validation_params = ValidationParams::new(delete_proba, nbpass);
-    return Ok(validation_params);
-}  // end of parse_validation_parameter
+    //
+    //
+    match matches.subcommand() {
+        Some(("hope", sub_m))       => {
+                if let Ok(params) = parse_hope_args(sub_m) {
+                    return Ok(ValidationCmd{validation_params, embedding_params : EmbeddingParams::from(params)});
+                }
+                else { 
+                    log::error!("parse_hope_args failed");
+                    return Err(anyhow!("parse_hope_args failed"));
+                }
+        },
+        Some(("sketching" , sub_m)) => {
+                if let Ok(params) = parse_sketching(sub_m) {
+                    return Ok(ValidationCmd{validation_params, embedding_params : EmbeddingParams::from(params)});
+                }
+                else { 
+                    log::error!("parse_hope_args failed");
+                    return Err(anyhow!("parse_hope_args failed"));
+                }
+        },
+           _                                    => {
+                log::error!("did not find hope neither sketching commands");
+        },
+    }    //
+    return Err(anyhow!("parse_validation_cmd failed"));
+}  // end of parse_validation_cmd
 
 
 
+
+fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow::Error> {
+    match matches.subcommand() {
+        Some(("hope", sub_m))       => {
+                if let Ok(params) = parse_hope_args(sub_m) {
+                    return Ok(EmbeddingParams::from(params));
+                }
+                else { 
+                    log::error!("parse_hope_args failed");
+                    return Err(anyhow!("parse_hope_args failed"));
+                }
+        },
+        Some(("sketching" , sub_m)) => {
+                if let Ok(params) = parse_sketching(sub_m) {
+                    return Ok(EmbeddingParams::from(params));
+                }
+                else { 
+                    log::error!("parse_hope_args failed");
+                    return Err(anyhow!("parse_hope_args failed"));
+                }
+        },
+           _                                    => {
+                log::error!("did not find hope neither sketching commands");
+                return Err(anyhow!("parse_hope_args failed")); 
+        },
+    }
+}  // parse_embedding_cmd
 
 
 pub fn main() {
     //
     let _ = env_logger::builder().is_test(true).try_init();
     log::info!("logger initialized"); 
+
+ 
+
+    // the hope embedding command
+    let hope_cmd = Command::new("hope")
+    .subcommand_required(false)
+    .arg_required_else_help(true)
+    .arg(Arg::new("proximity")
+        .long("approx")
+        .required(true)
+        .takes_value(true)
+        .help("specify KATZ or RPR"))
+    .subcommand(Command::new("precision")
+        .arg_required_else_help(true)
+        .args(&[
+            arg!(--decay <decay> "decay factor at each hop"),
+            arg!(--maxrank <maxrank> "maximum rank expected"),
+            arg!(--blockiter <blockiter> "integer between 2 and 5"),
+            arg!(-e --epsil <epsil> "precision between 0. and 1."),
+        ]))
+    .subcommand(Command::new("rank")
+        .arg_required_else_help(true)
+        .args(&[
+            arg!(--decay <decay> "decay factor at each hop"),
+            arg!(--targetrank <targetrank> "expected rank"),
+            arg!(--nbiter <nbiter> "integer between 2 and 5"),
+        ])          
+    );
+
+    // the sketch embedding command
+    let sketch_cmd = Command::new("sketching")
+        .arg_required_else_help(true)
+        .args(&[
+            arg!(-d --dim <dim> "the embedding dimension"),
+            arg!(--decay <decay> "decay coefficient"),
+            arg!(--nbiter <nbiter> "number of loops around a node"),
+        ])
+        .arg(Arg::new("symetry")
+            .short('s')
+            .help(" -s for a symetric embedding, default is assymetric")
+    );
+
+    // validation must have one embedding subcommand
+    let validation_cmd= Command::new("validation")
+        .subcommand_required(true)
+        .args(&[
+            arg!(--nbpass <nbpass> "number of passes of validation"),
+            arg!(--skip <fraction> "fraction of edges to skip in training set"),
+            ])
+        .subcommand(hope_cmd.clone())
+        .subcommand(sketch_cmd.clone());
+
+    // the embedding command does just the embedding
+    let embedding_command = Command::new("embedding")
+        .subcommand_required(true)
+        .subcommand(hope_cmd.clone())
+        .subcommand(sketch_cmd.clone());
     //
-    let matches = Command::new("embed")
+    let matches = Command::new("embedder")
         .subcommand_required(true)
         .arg_required_else_help(true)
         .arg(Arg::new("csvfile")
@@ -232,58 +371,9 @@ pub fn main() {
             .takes_value(true)
             .required(true)
             .help("expecting a csv file"))
-        .arg(Arg::new("embedder")
-            .long("embedder")
-            .required(false)
-            .takes_value(true)
-            .help("specify \"hope\" or \"sketching\" "))
-        .subcommand(Command::new("hope")
-            .subcommand_required(false)
-            .arg_required_else_help(true)
-            .arg(Arg::new("proximity")
-                .long("approx")
-                .required(true)
-                .takes_value(true)
-                .help("specify KATZ or RPR"))
-            .subcommand(Command::new("precision")
-                .arg_required_else_help(true)
-                .args(&[
-                    arg!(--decay <decay> "decay factor at each hop"),
-                    arg!(--maxrank <maxrank> "maximum rank expected"),
-                    arg!(--blockiter <blockiter> "integer between 2 and 5"),
-                    arg!(-e --epsil <epsil> "precision between 0. and 1."),
-                ])
-            )
-            .subcommand(Command::new("rank")
-                .arg_required_else_help(true)
-                .args(&[
-                    arg!(--decay <decay> "decay factor at each hop"),
-                    arg!(--targetrank <targetrank> "expected rank"),
-                    arg!(--nbiter <nbiter> "integer between 2 and 5"),
-                ])
-            )
-        ) // end command hope
-        .subcommand(Command::new("sketching")
-            .arg_required_else_help(true)
-            .args(&[
-                arg!(-d --dim <dim> "the embedding dimension"),
-                arg!(--decay <decay> "decay coefficient"),
-                arg!(--nbiter <nbiter> "number of loops around a node"),
-            ])
-            .arg(Arg::new("symetry")
-                .short('s')
-                .help(" -s for a symetric embedding, default is assymetric")
-        ) // end command sketching
-        .subcommand(Command::new("validation")
-            .arg_required_else_help(true)
-            .args(&[
-                arg!(--nbpass <nbpass> "number of passes of validation"),
-                arg!(--skip <fraction> "fraction of edges to skip in training set"),
-            ])
-        )  // end subcommand validation
-    )
+        .subcommand(embedding_command)
+        .subcommand(validation_cmd)
     .get_matches();
-
     // decode args
 
     let mut fname = String::from("");
@@ -300,33 +390,28 @@ pub fn main() {
     };
 
     let mut hope_params : Option<HopeParams> = None;
+    let mut embedding_parameters : Option<EmbeddingParams> = None;
     let mut sketching_params : Option<NodeSketchParams> = None;
     let mut validation_params : Option<ValidationParams> = None;
     //
     match matches.subcommand() {
-        Some(("hope", sub_m)) => {
-            log::debug!("got hope mode");
-            let res = parse_hope_args(sub_m);
+        Some(("validation", sub_m)) => {
+            log::debug!("got validation command");
+            let res = parse_validation_cmd(sub_m);
             match res {
-                Ok(params) => { hope_params = Some(params); },
+                Ok(cmd) =>  { 
+                                                validation_params = Some(cmd.validation_params);
+                                                embedding_parameters = Some(cmd.embedding_params);
+                                         },
                 _                     => {  },
             }
         },
 
-        Some(("sketching", sub_m )) => {
-            log::debug!("got sketching mode");
-            let res = parse_sketching(sub_m);
+        Some(("embedding", sub_m )) => {
+            log::debug!("got embedding command");
+            let res = parse_embedding_cmd(sub_m);
             match res {
-                Ok(params) => { sketching_params = Some(params); },
-                _                     => {  },
-            }
-        }
-
-        Some(("validation", sub_m)) => {
-            log::debug!("got validation command");
-            let res = parse_validation_args(sub_m);
-            match res {
-                Ok(params) => { validation_params = Some(params); },
+                Ok(params) => { embedding_parameters = Some(params); },
                 _                     => {  },
             }
         }
@@ -336,6 +421,16 @@ pub fn main() {
             std::process::exit(1);
         }
     }  // end match subcommand
+
+    if let Some(validation_m) = matches.subcommand_matches("validation") {
+        log::debug!("subcommand_matches got subcommand match");
+        let res = parse_validation_cmd(validation_m);        
+        match res {
+            Ok(cmd) => { validation_params = Some(cmd.validation_params); },
+            _                          => {  },
+        }
+    }  // end if validation
+
 
 
     log::info!(" parsing of commands succeeded"); 
