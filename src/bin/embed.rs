@@ -34,7 +34,6 @@ use clap::{Arg, ArgMatches, Command, arg};
 use graphite::prelude::*;
 use sprs::{TriMatI};
 
-use crate::{nodesketch::*};
 
 static DATADIR : &str = &"/home/jpboth/Data/Graphs";
 
@@ -90,7 +89,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
     let mut epsil : f64 = 0.;
     let mut maxrank : usize = 0;
     let mut blockiter = 0;
-    let decay;
+    let mut decay = 1.;
     // get approximation mode
     let hope_mode = match matches.value_of("proximity") {
         Some("KATZ") => {  HopeMode::KATZ
@@ -103,20 +102,9 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                             std::process::exit(1);
                         },
     };
-    // get decay
-    match matches.value_of("decay") {
-        Some(str) =>  { 
-                let res = str.parse::<f64>();
-                match res {
-                    Ok(val) => { decay = val},
-                    _       => { return Err(anyhow!("could not parse Hope decay"));},
-                } 
-        } 
-        _      => { return Err(anyhow!("could not parse decay"));}
-    };  // end of decay match                         
-    
-    
+                      
     match matches.subcommand() {
+
         Some(("precision", sub_m)) =>  {
             if let Some(str) = sub_m.value_of("epsil") {
                 let res = str.parse::<f64>();
@@ -126,6 +114,15 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                 }         
             } // end of epsil
  
+            // get decay
+            if let Some(str)  = sub_m.value_of("decay")  { 
+                let res = str.parse::<f64>();
+                match res {
+                    Ok(val) => { decay = val},
+                    _       => { return Err(anyhow!("could not parse Hope decay"));},
+                } 
+            };  // end of decay match   
+    
             // get maxrank
             if let Some(str) = sub_m.value_of("maxrank") {
                 let res = str.parse::<usize>();
@@ -248,15 +245,10 @@ pub fn main() {
                 .required(true)
                 .takes_value(true)
                 .help("specify KATZ or RPR"))
-            .arg(Arg::new("decay")
-                .long("decay")
-                .takes_value(true)
-                .required(true)
-                .help("give a small value between 0. and 1.")
-            )
             .subcommand(Command::new("precision")
                 .arg_required_else_help(true)
                 .args(&[
+                    arg!(--decay <decay> "decay factor at each hop"),
                     arg!(--maxrank <maxrank> "maximum rank expected"),
                     arg!(--blockiter <blockiter> "integer between 2 and 5"),
                     arg!(-e --epsil <epsil> "precision between 0. and 1."),
@@ -265,6 +257,7 @@ pub fn main() {
             .subcommand(Command::new("rank")
                 .arg_required_else_help(true)
                 .args(&[
+                    arg!(--decay <decay> "decay factor at each hop"),
                     arg!(--targetrank <targetrank> "expected rank"),
                     arg!(--nbiter <nbiter> "integer between 2 and 5"),
                 ])
@@ -346,7 +339,7 @@ pub fn main() {
 
 
     log::info!(" parsing of commands succeeded"); 
-    // Nodes: 8114 Edges: 26013
+    //
     let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
     log::info!("\n\n  loading file {:?}", path);
     let res = csv_to_trimat_delimiters::<f64>(&path, true);
@@ -377,6 +370,7 @@ pub fn main() {
             let params = validation_params.unwrap();
             // have to run validation simulations
             log::info!("doing validaton runs for hope embedding");
+            // construction of the function necessay for AUC iterations
             let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<f64> {
                 let mut hope = Hope::new(hope_params.unwrap(), trimat); 
                 let res = hope.embed();
@@ -387,15 +381,30 @@ pub fn main() {
     }  // end case Hope
     else if sketching_params.is_some() {
         log::info!("embedding mode : Sketching");
-        // now we allocate an embedder (sthing that implement the Embedder trait)
-        let mut nodesketch = NodeSketch::new(sketching_params.unwrap(), trimat);
-        let embedding = Embedding::new(node_index, &mut nodesketch);
-        if embedding.is_err() {
-            log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
-            std::process::exit(1);
-        };
-        let _embed_res = embedding.unwrap();
-    }
+        if validation_params.is_none() {
+            log::debug!("running embedding without validation");
+            // now we allocate an embedder (sthing that implement the Embedder trait)
+            let mut nodesketch = NodeSketchAsym::new(sketching_params.unwrap(), trimat);
+            let embedding = Embedding::new(node_index, &mut nodesketch);
+            if embedding.is_err() {
+                log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
+                std::process::exit(1);
+            };
+            let _embed_res = embedding.unwrap();
+        } // end case no validation
+        else {
+            let params = validation_params.unwrap();
+            // have to run validation simulations
+            log::info!("doing validaton runs for nodesketch embedding");
+            // construction of the function necessay for AUC iterations            
+            let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<usize> {
+                let mut nodesketch = NodeSketchAsym::new(sketching_params.unwrap(), trimat);
+                let res = nodesketch.embed();
+                res.unwrap()
+            };
+            estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
+        }
+    }  // end case sketching_params
     // 
     //    
 }  // end fo main
