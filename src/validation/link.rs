@@ -76,7 +76,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let nb_edge = csrmat.nnz();
     let mut deleted_edge = IndexSet::with_capacity((nb_edge as f64 * delete_proba).round() as usize);
     //
-    log::info!("mean degree : {}", degree.iter().sum::<usize>() as f64/ nb_nodes as f64);
+    log::info!("mean degree : {:.3e}", degree.iter().sum::<usize>() as f64/ nb_nodes as f64);
     //
     let uniform = Uniform::<f64>::new(0., 1.);
     let mut rows = Vec::<usize>::with_capacity(nb_nodes);
@@ -86,9 +86,9 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let mut not_discarded = 0usize;
     let mut csmat_iter = csrmat.iter();
     let mut discarded = 0usize;
-    let _nb_to_discard = ((nb_edge - nb_nodes) as f64 * delete_proba) as usize;
+    let nb_to_discard = ((nb_edge - nb_nodes) as f64 * delete_proba) as usize;
     // 
-    log::debug!("csrmat nb edge : {}", nb_edge);
+    log::debug!("csrmat nb edge : {}, number to discard {}", nb_edge, nb_to_discard);
     // TODO must loop until we have deleted excatly the required number of edges
     while let Some((value,(row, col))) = csmat_iter.next() {
         let xsi = uniform.sample(rng);
@@ -118,7 +118,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
         }
     }  // end while
     //
-    log::info!(" ratio discarded = {:}", discarded as f64/ (nb_edge - nb_nodes) as f64);
+    log::info!(" ratio discarded = {:.3e}", discarded as f64/ (nb_edge - nb_nodes) as f64);
     log::info!(" not discarded due to low degree {:?}", not_discarded);
     //
     let trimat = TriMatI::<F, usize>::from_triplets((nb_nodes,nb_nodes), rows, cols, values);
@@ -219,14 +219,17 @@ fn one_precision_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f6
 /// 
 pub fn estimate_precision<F : Copy + Sync, G, E : EmbeddedT<G> + std::marker::Sync>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, 
                     symetric : bool, embedder : & dyn Fn(TriMatI<F, usize>) -> E) -> (Vec<f64>, Vec<f64>) {
-    let rng = Xoshiro256PlusPlus::seed_from_u64(0);
+    //
+    log::debug!("in estimate_precision");
+    //
+    let rng = Xoshiro256PlusPlus::seed_from_u64(1235437);
     //
     let mut precision = Vec::<f64>::with_capacity(nbiter);
     let mut recall = Vec::<f64>::with_capacity(nbiter);
     // TODO can be made //
     for _ in 0..nbiter {
         let mut new_rng = rng.clone();
-        new_rng.jump();
+ //       new_rng.jump();
         let (iter_prec, iter_recall) = one_precision_iteration(csmat, delete_proba,  symetric, embedder, &mut new_rng);
         precision.push(iter_prec);
         recall.push(iter_recall);
@@ -247,6 +250,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
                     E : EmbeddedT<G> + std::marker::Sync {
         //
     let nb_sample = 1000;
+    log::debug!("\n\n in one_auc_iteration nb_sample : {:?}, delete_proba : {:.3e}, symetric {:?}", nb_sample, delete_proba, symetric);
     //
     // compute score of all non observed edges (ie.  nb_nodes*(nb_nodes-1)/2 - filtered out)
     // sample nb_sample 2-uples of edges one from the deleted edge and one inexistent (not in csmat)
@@ -267,15 +271,18 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
     let nb_deleted = deleted_edges.len();
     let nb_nodes = csmat.shape().0;
     // as we can have large graph , mostly sparse to sample an inexistent edge we sample until we are outside csmat edges
+    log::trace!("nb deleted edges : {:?}", nb_deleted);
     let del_uniform = Uniform::<usize>::from(0..nb_deleted);
     let node_random = Uniform::<usize>::from(0..nb_nodes);
-    for _ in 0..nb_sample {
+    for k in 0..nb_sample {
         let del_edge = deleted_edges.get_index(del_uniform.sample(rng)).unwrap();
         let no_edge = loop {
             let i = node_random.sample(rng);
             let j = node_random.sample(rng);
+            log::trace!(" k ={:?},  (i;j) : {:?}", k, (i,j));
             if i != j && !trimat_set.contains(&(i,j)) && deleted_edges.get_index_of(&(i,j)).is_none() {
                 // edge (i,j) not on diagonal and neither in trimat set neither in deleted_edges, so inexistent edge
+                log::trace!(" accepted (i;j) : {:?}", (i,j));
                 break (i,j);
             }
         };
@@ -305,14 +312,21 @@ pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_p
     where   F : Copy + std::marker::Sync,
             E : EmbeddedT<G> + std::marker::Sync {
         //
-        let rng = Xoshiro256PlusPlus::seed_from_u64(0);
+        log::debug!("in estimate_auc");
+        // we allocate as many random generator we need for each iteration for future // of iterations
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(456231);
+        let mut rngs = Vec::<Xoshiro256PlusPlus>::with_capacity(nbiter);
+        for _ in 0..nbiter {
+            let new_rng = rng.clone();
+            rng = new_rng.clone();
+            rngs.push(new_rng);
+            rng.jump();
+        }
         //
         let mut auc = Vec::<f64>::with_capacity(nbiter);
         // TODO can be made //
-        for _ in 0..nbiter {
-            let mut new_rng = rng.clone();
-            new_rng.jump();
-            let iter_auc = one_auc_iteration(csmat, delete_proba,  symetric, embedder, &mut new_rng);
+        for i in 0..nbiter {
+            let iter_auc = one_auc_iteration(csmat, delete_proba,  symetric, embedder, &mut rngs[i]);
             auc.push(iter_auc);
         }
         //
@@ -330,7 +344,7 @@ mod tests {
 
 //    cargo test csv  -- --nocapture
 //    cargo test validation::link::tests::test_name -- --nocapture
-//    RUST_LOG=graphembed::validation::link=TRACE cargo test link -- --nocapture
+//    RUST_LOG=graphite::validation::link=TRACE cargo test link -- --nocapture
 
     use super::*;
 
