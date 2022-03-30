@@ -12,7 +12,7 @@ use std::fs::{OpenOptions};
 use std::path::{Path};
 use std::str::FromStr;
 
-use std::io::{Read};
+use std::io::{Read, BufReader, BufRead};
 
 use csv::ReaderBuilder;
 use num_traits::{float::*};
@@ -251,19 +251,14 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         println!("directed_from_csv could not open file {:?}", filepath.as_os_str());
         return Err(anyhow!("directed_from_csv could not open file {}", filepath.display()));            
     }
-    let mut file = fileres?;
+    let file = fileres?;
+    let mut bufreader = BufReader::new(file);
     // skip header lines
-    let mut nb_skipped = 0;
-    let mut c = [0];
-    loop {
-        file.read_exact(&mut c)?;
-        if c[0] == '\n' as u8 {
-            nb_skipped += 1;
-        }
-        if nb_skipped  == nb_headers_line {
-            break;
-        }
+    let mut headerline = String::new();
+    for _ in 0..nb_headers_line {
+        bufreader.read_line(&mut headerline)?;
     }
+    //
     let nb_edges_guess = 500_000;   // to pass as function argument
     let mut rows = Vec::<usize>::with_capacity(nb_edges_guess);
     let mut cols = Vec::<usize>::with_capacity(nb_edges_guess);
@@ -278,7 +273,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let mut nb_nodes : usize = 0;
     //
     // nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
-    let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(file);
+    let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(bufreader);
     for result in rdr.records() {
         let record = result?;
         if log::log_enabled!(Level::Info) && nb_record <= 5 {

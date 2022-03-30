@@ -54,6 +54,10 @@ pub trait EmbeddedT<F> {
     fn get_vec_distance(&self, v1 : &ArrayView1<F>, v2: &ArrayView1<F>) -> f64;
     /// get number of nodes
     fn get_nb_nodes(&self) -> usize;
+    /// get embedding of node of rank rank, and with tag.
+    /// For a basic symetric embedding , tag is not taken into account.
+    /// For embedding that has multiple embedding by node (example asysmetric embedding , the tag is used)    
+    fn get_embedded_node(&self, node_rank: usize, _tag : u8) -> ArrayView1<F>;
 } // end of trait
 
 
@@ -81,6 +85,13 @@ impl<F> Embedded<F> {
 
     pub fn get_distance(&self) ->  &fn(&ArrayView1<F>, &ArrayView1<F>) -> f64 {
         &self.distance
+    }
+
+    /// get embedding of node of rank rank, and with tag.
+    /// For a basic symetric embedding , tag is not taken into account.
+    /// For embedding that has multiple embedding by node (example asysmetric embedding , the tag is used)
+    pub fn get_embedded_node(&self, node_rank: usize, _tag : u8) -> ArrayView1<F> {
+        self.data.row(node_rank)
     }
 }  // end of impl Embedded
 
@@ -114,6 +125,13 @@ impl<F> EmbeddedT<F> for Embedded<F> {
     ///
     fn get_nb_nodes(&self) -> usize {
         self.data.dim().0
+    }
+
+    /// get embedding of node of rank rank, and with tag.
+    /// For a basic symetric embedding , tag is not taken into account.
+    /// For embedding that has multiple embedding by node (example asysmetric embedding , the tag is used)
+    fn get_embedded_node(&self, node_rank: usize, _tag : u8) -> ArrayView1<F> {
+        self.data.row(node_rank)
     }
 
 } // end impl EmbeddedT<F>
@@ -180,6 +198,20 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     /// get number of nodes embedded.
     fn get_nb_nodes(&self) -> usize {
         self.source.dim().0
+    }
+
+    /// get embedding of node of rank rank, and with tag.
+    /// For a basic symetric embedding , tag is not taken into account.
+    /// For embedding that has multiple embedding by node (example asysmetric embedding , the tag is used)
+    fn get_embedded_node(&self, node_rank: usize, tag : u8) -> ArrayView1<F> {
+        match tag {
+            0 => { return self.source.row(node_rank); }
+            1 => { return self.target.row(node_rank); }
+            _ => { 
+                    log::error!(" for asymetric embedding tag in get_embedded_node must be 0 or 1");
+                    std::panic!("for asymetric embedding tag in get_embedded_node must be 0 or 1");
+                }
+        }
     }
 } // end impl EmbeddedT<F>
 

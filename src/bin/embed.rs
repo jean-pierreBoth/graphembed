@@ -26,6 +26,12 @@
 //!  hope or nodesketch are differents algorithms for embedding see related docs
 //!  for hope algorithms different modes of approximations are possible : KATZ, RPR (rooted page rank), ADA (adamic adar)
 //!  
+//! the module can be launched by first setting the variable RUST_LOG as in *example export RUST_LOG=graphite=debug*
+//!  this will dump debugging info on the whole process
+//! 
+//! It can be launched by setting  *export RUST_LOG=graphite::validation=trace*
+//! to get the maximum info in the validation module.
+//! 
 
 
 
@@ -469,7 +475,7 @@ pub fn main() {
                     let res = hope.embed();
                     res.unwrap()
                 };
-                estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
+                link::estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
             }
         },  // end case Hope
 
@@ -498,7 +504,9 @@ pub fn main() {
                     let res = nodesketch.embed();
                     res.unwrap()
                 };
-                estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
+                link::estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
+                // TODO precision estimation too costly must subsample
+                //    estimate_precision(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);
             }
         },  // end case sketching_params
     };

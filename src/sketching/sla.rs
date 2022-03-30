@@ -19,8 +19,10 @@ pub(crate) fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, _weigh
     }
     //
     for i in 0..shape.0 {
+        // we do diagonal augmentation only for non isolated point
         if rowmax[i] > 0. {
-            graphtrip.add_triplet(i,i, rowmax[i]);
+            // TODO could add rowmax ?
+            graphtrip.add_triplet(i,i, 1.);
             log::trace!("diagonal_augmentation row : {}, value : {}", i, rowmax[i]);
         }
     }
