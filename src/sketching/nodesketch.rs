@@ -4,6 +4,7 @@
 //! 
 
 
+#[allow(unused)]
 use anyhow::{anyhow};
 
 use ndarray::{Array2, Array1, ArrayView1};
@@ -27,9 +28,10 @@ use super::{sla::*, params::NodeSketchParams};
 
 /// The distance corresponding to nodesketch embedding
 /// similarity is obtained by 1. - jaccard
-pub fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
+// The hash signature is initialized in our use of Probminhash by a usize::MAX a rank of node clearly which cannot be encountered
+pub(crate) fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
     assert_eq!(v1.len(), v2.len());
-    let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1  { acc + 1 } else {acc});
+    let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1 && *v.0 != usize::MAX { acc + 1 } else {acc});
     1.- (common as f64)/(v1.len() as f64)
 } // end of jaccard
 
@@ -112,7 +114,7 @@ impl  NodeSketch {
     fn sketch_slamatrix(&mut self, parallel : bool) {
         // 
         let treat_row = | row : usize | {
-            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
             let col_range = self.csrmat.indptr().outer_inds_sz(row);
             log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
             for k in col_range {
@@ -245,7 +247,7 @@ impl  NodeSketch {
         }
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), 0);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch

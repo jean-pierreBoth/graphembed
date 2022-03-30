@@ -7,7 +7,7 @@
 // For a directed graph we suppose the Csr matrix so that mat[[i,j]] is edge from i to j.
 
 
-
+#[allow(unused)]
 use anyhow::{anyhow};
 
 use ndarray::{Array1, Array2};
@@ -182,6 +182,7 @@ impl NodeSketchAsym {
 
     // do iteration on sketches separately for in neighbours and out neighbours
     fn iteration(&mut self) {
+        log::debug!("nodesketchasym : serial_iteration");
         // now we repeatedly merge csrmat (loop augmented matrix) with sketches
         for (row, _) in self.csrmat.outer_iterator().enumerate() {
             // new neighbourhood for current iteration 
@@ -256,7 +257,7 @@ impl NodeSketchAsym {
         }
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), 0);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch
@@ -296,7 +297,7 @@ impl NodeSketchAsym {
         }
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), 0);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch
