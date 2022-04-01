@@ -55,7 +55,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let mut cols = Vec::<usize>::with_capacity(nb_nodes);
     let mut values = Vec::<F>::with_capacity(nb_nodes);
     // we need degrees as we cannot delete edges if they are the last 
-    // as we cannot train anything if nodes is diconnected
+    // as we cannot train anything if nodes is disconnected
     let mut degrees_out = csrmat.degrees();
     let mut degrees_in = csrmat.transpose_view().to_csr().degrees();
     //
@@ -73,11 +73,22 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
         let mut discard = false;
         if xsi < delete_proba {
             // WARNING we do not delete self loop beccause of nodesketch which use self loop augmentation!!! 
-            if degrees_out[row] > 1 && degrees_in[col] > 1 && row != col {
-                discard = true;
+            if symetric {
+                // we check only for row < col as we will force coherent deletion at end of scan
+                if degrees_out[row] > 1 && degrees_in[col] > 1 && row < col {
+                    discard = true;
+                }
+                else {
+                    nb_isolation_not_discarded += 1; 
+                }
             }
             else {
-                nb_isolation_not_discarded += 1; 
+                if degrees_out[row] > 1 && degrees_in[col] > 1 && row != col {
+                    discard = true;
+                }
+            else {
+                    nb_isolation_not_discarded += 1; 
+                }
             }
         }
         if !discard {
@@ -94,6 +105,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
             if symetric {
                 // beccause when we filled csrmat symetric terms were added. csrm stores a complete matrix
                 deleted_edge.insert((col, row));
+                discarded += 1;
             }
         }
     }  // end while
@@ -381,16 +393,31 @@ mod tests {
     // makes a (symetric) nodesketch Embedded to be sent to precision computations
     fn nodesketch_get_embedded(trimat : TriMatI<f64, usize>) -> Embedded<usize> {
         let sketch_size = 300;
-        let decay = 0.02;
-        let nb_iter = 4;
+        let decay = 0.2;
+        let nb_iter = 10;
         let parallel = true;
         let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
+        log::debug!(" embedding parameters : {:?}", params);
         // now we embed
         let mut nodesketch = NodeSketch::new(params, trimat);
         let embed_res = nodesketch.compute_embedded();
         embed_res.unwrap()
     } // end nodesketch_Embedded
 
+
+    #[allow(unused)]
+    fn nodesketchasym_get_embedded(trimat : TriMatI<f64, usize>) -> EmbeddedAsym<usize> {
+        let sketch_size = 900;
+        let decay = 0.2;
+        let nb_iter = 5;
+        let parallel = true;
+        let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
+        log::debug!(" embedding parameters : {:?}", params);
+        // now we embed
+        let mut nodesketch = NodeSketchAsym::new(params, trimat);
+        let embed_res = nodesketch.compute_embedded();
+        embed_res.unwrap()
+    } // end nodesketch_Embedded
 
 
     #[test]
@@ -439,6 +466,32 @@ mod tests {
             log::info!("auc : {:?}", auc);
         };
     }  // end of test_link_auc_nodesketch_lesmiserables
+
+
+
+    // We can always treat a symetric as an asymetric one. Check results
+    #[test]
+    fn test_link_auc_nodesketchasym_lesmiserables() {
+        //
+        log_init_test();
+        //
+        log::debug!("in link.rs test_nodesketchasym_lesmiserables");
+        let path = std::path::Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
+        // we keep directed as false to get symetrization done in csv_to_trimat!!
+        let res = csv_to_trimat::<f64>(&path, false, b' ');
+        if res.is_err() {
+            log::error!("test_nodesketchasym_lesmiserables failed in csv_to_trimat");
+            assert_eq!(1, 0);
+        }
+        else {
+            let trimat_indexed = res.unwrap();
+            let csrmat  : CsMatI<f64, usize> = trimat_indexed.0.to_csr();
+            let symetric = false;
+            let auc = estimate_auc(&csrmat, 5, 0.1, symetric, &nodesketchasym_get_embedded);
+            log::info!("auc : {:?}", auc);
+        };
+    }  // end of test_link_auc_nodesketchasym_lesmiserables
 
 
 }  // end of mod tests
