@@ -32,7 +32,7 @@ use super::{sla::*, params::NodeSketchParams};
 // The hash signature is initialized in our use of Probminhash by a usize::MAX a rank of node clearly which cannot be encountered
 pub(crate) fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
     assert_eq!(v1.len(), v2.len());
-    let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1 && *v.0 != usize::MAX { acc + 1 } else {acc});
+    let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1 { acc + 1 } else {acc});
     1.- (common as f64)/(v1.len() as f64)
 } // end of jaccard
 
@@ -107,10 +107,11 @@ impl  NodeSketch {
 
 
     /// sketch of a row of initial self loop augmented matrix. Returns a vector of size self.sketch_size
+    /// We initialize signatures with row so an isolated node will have just its identity as signature
     fn sketch_slamatrix(&mut self, parallel : bool) {
         // 
         let treat_row = | row : usize | {
-            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), row);
             let col_range = self.csrmat.indptr().outer_inds_sz(row);
             log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
             for k in col_range {
@@ -227,8 +228,8 @@ impl  NodeSketch {
         let row_vec = row_vec.unwrap();
         // new neighbourhood for row at current iteration. Store neighbours of row with a weight. 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
-//        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
-        let weight = self.get_decay_weight();
+        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
+//        let weight = self.get_decay_weight();
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
         while let Some(neighbour) = row_iter.next() {
@@ -240,7 +241,7 @@ impl  NodeSketch {
                             neighbour.0, *neighbour.1, *val);  
                 }
                 None    => { 
-                    log::trace!("adding in v_k {}  weight {:.3e}", neighbour.0, *neighbour.1);
+                    log::trace!("adding node in v_k {}  weight {:.3e}", neighbour.0, *neighbour.1);
                     v_k.insert(neighbour.0, *neighbour.1); 
                 }
             };
@@ -261,10 +262,11 @@ impl  NodeSketch {
                     }
                 };                    
             }
-        }
+        }  // end of while
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
-        // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
+        // We initialize with row itself, so that if we have an isolated node, signature is just itself. So all isolated nodes will be at
+        // maximal distance of one another!
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), *row);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch

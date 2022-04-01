@@ -240,30 +240,48 @@ impl NodeSketchAsym {
         let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
+
         while let Some(neighbour) = row_iter.next() {
+            // neighbour.0 is a neighbour of row, it is brought with the weight connection from row to neighbour
             match v_k.get_mut(&neighbour.0) {
-                Some(val) => { *val = *val + weight * *neighbour.1; }
-                None              => { v_k.insert(neighbour.0, *neighbour.1); }
+                Some(val) => {
+                    *val = *val + *neighbour.1;
+                    log::trace!("{} augmenting weight in v_k for neighbour {},  new weight {:.3e}", 
+                        neighbour.0, *neighbour.1, *val);  
+                }
+                None    => { 
+                    log::trace!("adding node in v_k {}  weight {:.3e}", neighbour.0, *neighbour.1);
+                    v_k.insert(neighbour.0, *neighbour.1); 
+                }
             };
-            // get sketch of neighbour
+            // get component due to previous sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches_out[neighbour.0].read();
             for n in neighbour_sketch {
+            // something (here n) in a neighbour sketch is brought with the weight connection from row to neighbour multiplied by the decay factor
                 match v_k.get_mut(n) {
-                   // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
-                   Some(val)   => { *val = *val + weight; }
-                   None                => { v_k.insert(*n, weight); }
+                    // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
+                    Some(val)   => { 
+                        *val = *val + weight * *neighbour.1;
+                        log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
+                                    neighbour.0 , *n, weight * *neighbour.1, *val);
+                    }
+                    None                =>  {
+                        log::trace!("{} sketch adding node with {} decayed weight {:.3e}", neighbour.0 , *n, weight * *neighbour.1);
+                        v_k.insert(*n, weight *neighbour.1 );
+                    }
                 };                    
             }
-        }
+        } // end of while on previous sketches out
+
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), *row);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch
         let mut row_write = self.sketches_out[*row].write();
         for j in 0..self.get_sketch_size() {
-           row_write[j] = sketch[j];
+            row_write[j] = sketch[j];
         }
         //
         // now the problem for in treatment is that we should better have a csc mat?         
@@ -281,23 +299,39 @@ impl NodeSketchAsym {
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
         while let Some(neighbour) = row_iter.next() {
+            // neighbour.0 is a neighbour of row, it is brought with the weight connection from row to neighbour
             match v_k.get_mut(&neighbour.0) {
-                Some(val) => { *val = *val + weight * *neighbour.1; }
-                None              => { v_k.insert(neighbour.0, *neighbour.1); }
+                Some(val) => {
+                    *val = *val + *neighbour.1;
+                    log::trace!("{} augmenting weight in v_k for neighbour {},  new weight {:.3e}", 
+                            neighbour.0, *neighbour.1, *val);  
+                }
+                None    => { 
+                    log::trace!("adding node in v_k {}  weight {:.3e}", neighbour.0, *neighbour.1);
+                    v_k.insert(neighbour.0, *neighbour.1); 
+                }
             };
-            // get sketch of neighbour
+            // get component due to previous sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches_in[neighbour.0].read();
             for n in neighbour_sketch {
+                // something (here n) in a neighbour sketch is brought with the weight connection from row to neighbour multiplied by the decay factor
                 match v_k.get_mut(n) {
-                   // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
-                   Some(val)   => { *val = *val + weight; }
-                   None                => { v_k.insert(*n, weight); }
+                    // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
+                    Some(val)   => { 
+                        *val = *val + weight * *neighbour.1;
+                        log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
+                                neighbour.0 , *n, weight * *neighbour.1, *val);
+                    }
+                    None                =>  {
+                        log::trace!("{} sketch adding node with {} decayed weight {:.3e}", neighbour.0 , *n, weight * *neighbour.1);
+                        v_k.insert(*n, weight *neighbour.1 );
+                    }
                 };                    
             }
-        }
+        } // end of while on previous sketches out
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
-        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), usize::MAX);
+        let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), *row);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
         // save sketches into self sketch
