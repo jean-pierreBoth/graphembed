@@ -7,6 +7,7 @@
 #[allow(unused)]
 use anyhow::{anyhow};
 
+use log::log_enabled;
 use ndarray::{Array2, Array1, ArrayView1};
 use sprs::{TriMatI, CsMatI};
 
@@ -98,15 +99,10 @@ impl  NodeSketch {
 
     // utility to debug very small tests
     #[allow(unused)]
-    pub(crate) fn dump_state(&self) {
-        println!("\n dump previous state \n");
-        for i in 0..self.get_nb_nodes() {
-            println!("row i : {}   {:?}", i, self.previous_sketches[i].read());
-        }
-        println!("\n dump state \n");
-        for i in 0..self.get_nb_nodes() {
-            println!("row i : {}   {:?}", i, self.sketches[i].read());
-        }
+    pub(crate) fn dump_row_iteration(&self, noderank : usize) {
+        println!("row iteration i : {}", noderank);
+        println!("previous state  {:?}",  self.previous_sketches[noderank].read());
+        println!("new state  {:?} ", self.sketches[noderank].read());
     } // end of dump_state
 
 
@@ -120,10 +116,11 @@ impl  NodeSketch {
             for k in col_range {
                 let j = self.csrmat.indices()[k];
                 let w = self.csrmat.data()[k];
-                log::trace!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
+        //        log::trace!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
                 probminhash3.hash_item(j,w);
             }
             let sketch = probminhash3.get_signature();
+            log::trace!(" sketch_slamatrix sketch row i : {} , sketch : {:?}", row, sketch);
             for j in 0..self.get_sketch_size() {
                 self.previous_sketches[row].write()[j] = sketch[j];
             }
@@ -163,7 +160,7 @@ impl  NodeSketch {
                 self.parallel_iteration();
             }
             else {
-                self.iteration(); 
+                self.iteration();
             }
         }
         //
@@ -189,6 +186,10 @@ impl  NodeSketch {
         for (row, _) in self.csrmat.outer_iterator().enumerate() {
             // new neighbourhood for current iteration 
             self.treat_row(&row);
+            if log_enabled!(log::Level::Trace) {
+                log::trace!("dump end of iteration : ");
+                self.dump_row_iteration(row);
+            }
         }  // end of for on row
         // transfer sketches into previous sketches
         for i in 0..self.get_nb_nodes() { 
@@ -226,22 +227,38 @@ impl  NodeSketch {
         let row_vec = row_vec.unwrap();
         // new neighbourhood for row at current iteration. Store neighbours of row with a weight. 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
-        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
+//        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
+        let weight = self.get_decay_weight();
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
         while let Some(neighbour) = row_iter.next() {
-            // neighbour.0 is a neighbour of row,corresponds to sla component
+            // neighbour.0 is a neighbour of row, it is brought with the weight connection from row to neighbour
             match v_k.get_mut(&neighbour.0) {
-                Some(val) => { *val = *val + weight * *neighbour.1;}
-                None    => { v_k.insert(neighbour.0, *neighbour.1); }
+                Some(val) => {
+                    *val = *val + *neighbour.1;
+                    log::trace!("{} augmenting weight in v_k for neighbour {},  new weight {:.3e}", 
+                            neighbour.0, *neighbour.1, *val);  
+                }
+                None    => { 
+                    log::trace!("adding in v_k {}  weight {:.3e}", neighbour.0, *neighbour.1);
+                    v_k.insert(neighbour.0, *neighbour.1); 
+                }
             };
             // get component due to previous sketch of neighbour
             let neighbour_sketch = &*self.previous_sketches[neighbour.0].read();
             for n in neighbour_sketch {
+            // something (here n) in a neighbour sketch is brought with the weight connection from row to neighbour multiplied by the decay factor
                 match v_k.get_mut(n) {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to 
-                    Some(val)   => { *val = *val + weight; }
-                    None                =>  { v_k.insert(*n, weight);}
+                    Some(val)   => { 
+                            *val = *val + weight * *neighbour.1;
+                            log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
+                                        neighbour.0 , *n, weight * *neighbour.1, *val);
+                    }
+                    None                =>  {
+                        log::trace!("{} sketch adding node with {} decayed weight {:.3e}", neighbour.0 , *n, weight * *neighbour.1);
+                        v_k.insert(*n, weight *neighbour.1 );
+                    }
                 };                    
             }
         }
@@ -296,6 +313,9 @@ fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
+
+// This small test can be run with RUST_LOG=graphite=trace cargo test test_nodesketch_lesmiserables -- --nocapture >log 2>&1
+// to trace sketch evolutions with iterations and see the impact of decay weight.
 #[test]
 fn test_nodesketch_lesmiserables() {
     log_init_test();
@@ -309,9 +329,9 @@ fn test_nodesketch_lesmiserables() {
         assert_eq!(1, 0);
     }
     let (trimat, node_index) = res.unwrap();
-    let sketch_size = 150;
-    let decay = 0.1;
-    let nb_iter = 10;
+    let sketch_size = 15;
+    let decay = 100.;
+    let nb_iter = 2;
     let parallel = false;
     let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
     // now we embed

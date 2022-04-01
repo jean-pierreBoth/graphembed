@@ -23,7 +23,7 @@ pub(crate) fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, _weigh
         if rowmax[i] > 0. {
             // TODO could add rowmax ?
             graphtrip.add_triplet(i,i, 1.);
-            log::trace!("diagonal_augmentation row : {}, value : {}", i, rowmax[i]);
+//            log::trace!("diagonal_augmentation row : {}, value : {}", i, 1.);
         }
     }
     //
