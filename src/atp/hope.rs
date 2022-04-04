@@ -35,8 +35,8 @@ use crate::embedding::{EmbeddedAsym, EmbedderT};
 pub fn hope_distance<F>(v1:&ArrayView1<F>, v2 : &ArrayView1<F>) -> f64 
     where F : Float + Scalar + Lapack {
     assert_eq!(v1.len(), v2.len());
-    let dist2 = v1.iter().zip(v2.iter()).fold(F::zero(), |acc, v| acc + (*v.0 - *v.1)*(*v.0 - *v.1));
-    dist2.to_f64().unwrap().sqrt()
+    let dist2 = v1.iter().zip(v2.iter()).fold(F::zero(), |acc, v| acc + (*v.0 * *v.1));
+    1.0 - dist2.to_f64().unwrap()
 } // end of jaccard
 
 
@@ -323,16 +323,21 @@ impl <F> Hope<F>  where
         let mut target = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma)); 
         let v = vt.t();  
         assert_eq!(u.ncols(), v.ncols());
-        log::info!("first eigenvalue {:.3e}, last eigenvalue : {:.3e}", s[0], s[s.len()-1]);
-        for i in 0..nb_sigma {
-            let sigma = Float::sqrt(s[i]);
-            if log::log_enabled!(log::Level::Info) && i <= 20 {
-                log::debug!(" sigma_q i : {}, value : {:?} ", i, sigma);
+        log::info!("nb eigen values {}, first eigenvalue {:.3e}, last eigenvalue : {:.3e}", s.len(), s[0], s[s.len()-1]);
+        if log::log_enabled!(log::Level::Info) {
+            for i in 0..20.min(s.len()-1) {
+                log::debug!(" sigma_q i : {}, value : {:?} ", i, s[i]);
             }
-            for j in 0..v.ncols() {
+        }
+        log::info!("setting embedding for nb_nodes : {}", self.get_nb_nodes());
+        for i in 0..self.get_nb_nodes() {
+            for j in 0..nb_sigma {
+                let sigma = Float::sqrt(s[j]);
                 source.row_mut(i)[j] = sigma * u.row(i)[j];
                 target.row_mut(i)[j] = sigma * v.row(i)[j];
             }
+            log::trace!("\n source {} {:?}", i, source.row(i));
+            log::trace!("\n target {} {:?}", i, target.row(i));
         } 
         log::debug!("exiting embed_from_svd_result");
         let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
