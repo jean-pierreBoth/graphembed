@@ -356,6 +356,7 @@ pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_p
         }
         let mean_auc : f64 = auc.iter().sum::<f64>() / (auc.len() as f64);
         log::info!("estimate_auc : mean auc : {:.3e}", mean_auc);
+        log::debug!("exiting estimate_auc");
         //
         auc
 } // end of estimate_auc
@@ -371,7 +372,7 @@ mod tests {
 
 //    cargo test csv  -- --nocapture
 //    cargo test validation::link::tests::test_name -- --nocapture
-//    RUST_LOG=graphite::validation::link=TRACE cargo test link -- --nocapture
+//    RUST_LOG=graphite::validation::link=TRACE cargo test link* -- --nocapture
 
     use super::*;
 
@@ -388,7 +389,6 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }  
 
-    // TODO should use the embedder trait
     #[allow(unused)]
     // makes a (symetric) nodesketch Embedded to be sent to precision computations
     fn nodesketch_get_embedded(trimat : TriMatI<f64, usize>) -> Embedded<usize> {
@@ -400,9 +400,9 @@ mod tests {
         log::debug!(" embedding parameters : {:?}", params);
         // now we embed
         let mut nodesketch = NodeSketch::new(params, trimat);
-        let embed_res = nodesketch.compute_embedded();
+        let embed_res = nodesketch.embed();
         embed_res.unwrap()
-    } // end nodesketch_Embedded
+    } // end nodesketch_get_embedded
 
 
     #[allow(unused)]
@@ -415,9 +415,9 @@ mod tests {
         log::debug!(" embedding parameters : {:?}", params);
         // now we embed
         let mut nodesketch = NodeSketchAsym::new(params, trimat);
-        let embed_res = nodesketch.compute_embedded();
+        let embed_res = nodesketch.embed();
         embed_res.unwrap()
-    } // end nodesketch_Embedded
+    } // end nodesketchasym_get_embedded
 
 
     #[test]
@@ -493,5 +493,55 @@ mod tests {
         };
     }  // end of test_link_auc_nodesketchasym_lesmiserables
 
+
+
+// ============================  auc testing for hope ==========================  //
+
+
+
+
+    // functon to pass to auc methods
+    #[allow(unused)]
+    fn hope_ada_get_embedded(trimat : TriMatI<f64, usize>) -> EmbeddedAsym<f64> {
+        let nb_iter = 5;
+        let hope_m = HopeMode::ADA;
+        let decay_f = 0.05;
+//        let range_m = RangeApproxMode::RANK(RangeRank::new(70, 2));
+        let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.1, 10, 300));
+        let params = HopeParams::new(hope_m, range_m, decay_f);
+         // now we embed
+        let mut hope = Hope::new(params, trimat); 
+        //
+        let embed_res = hope.embed();
+        embed_res.unwrap()
+    } // end hope_ada_get_embedded
+
+
+#[test]
+    fn test_link_auc_hope_ada_lesmiserables() {
+        //
+        log_init_test();
+        //
+        log::debug!("in link.rs test_link_auc_hope_ada_lesmiserables");
+        let path = std::path::Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::info!("\n\n test_nodesketch_lesmiserables, loading file {:?}", path);
+        // we keep directed as false to get symetrization done in csv_to_trimat!!
+        let res = csv_to_trimat::<f64>(&path, false, b' ');
+        if res.is_err() {
+            log::error!("test_nodesketchasym_lesmiserables failed in csv_to_trimat");
+            assert_eq!(1, 0);
+        }
+        else {
+            let trimat_indexed = res.unwrap();
+            let csrmat  : CsMatI<f64, usize> = trimat_indexed.0.to_csr();
+            let symetric = true;
+            let auc = estimate_auc(&csrmat, 5, 0.1, symetric, &hope_ada_get_embedded);
+            log::info!("auc : {:?}", auc);
+        }
+    }  // end of test_link_auc_hope_ada_lesmiserables
+
+
+
+    
 
 }  // end of mod tests
