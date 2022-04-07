@@ -4,10 +4,10 @@
 //! 
 //! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 1000 and 3 iterations
 //! in the range approximations:  
-//! embed --csv "p2p-Gnutella09.txt" embedding hope  --approx "ADA" rank --targetrank 1000 --nbiter 3
+//! embed --csv "p2p-Gnutella09.txt" embedding hope  --approx "ADA" rank --targetrank 1000 --nbiter 3 --decay 0.1
 //! 
 //! with precision target:  
-//! embedder --csv "p2p-Gnutella09.txt" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
+//! embed --csv "p2p-Gnutella09.txt" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
 //! 
 //! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 :
 //! 
@@ -21,7 +21,7 @@
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   
-//!     embed --csv "p2p-Gnutella09.txt" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 500 --nbiter 3 
+//!     embed --csv "p2p-Gnutella09.txt" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 --decay 0.1
 //! 
 //!  hope or nodesketch are differents algorithms for embedding see related docs
 //!  for hope algorithms different modes of approximations are possible : KATZ, RPR (rooted page rank), ADA (adamic adar)
@@ -34,7 +34,7 @@
 //! 
 
 
-
+use log::{log_enabled};
 
 use anyhow::{anyhow};
 use clap::{Arg, ArgMatches, Command, arg};
@@ -82,9 +82,10 @@ fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Er
             }
         },
         _   => { return Err(anyhow!("error parsing decay")); },
-    }; // end match
+    }; // end match nb_iter
     //
-    let sketch_params = NodeSketchParams{sketch_size: dimension, decay, nb_iter, parallel : true};
+    let symetric = true;
+    let sketch_params = NodeSketchParams{sketch_size: dimension, decay, nb_iter, symetric, parallel : true};
     return Ok(sketch_params);
 } // end of parse_sketching
 
@@ -100,14 +101,14 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
     // get approximation mode
     let hope_mode = match matches.value_of("proximity") {
         Some("KATZ") => {  HopeMode::KATZ
-                        },
+        },
         Some("RPR")  => {   HopeMode::RPR
-                        },
+        },
         Some("ADA")  => { HopeMode::ADA},
         _            => {
                             log::error!("did not get proximity used : ADA,KATZ or RPR");
                             std::process::exit(1);
-                        },
+        },
     };
                       
     match matches.subcommand() {
@@ -130,6 +131,8 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                 } 
             };  // end of decay match   
     
+            // get symetric/asymetric flag 
+
             // get maxrank
             if let Some(str) = sub_m.value_of("maxrank") {
                 let res = str.parse::<usize>();
@@ -336,10 +339,7 @@ pub fn main() {
             arg!(-d --dim <dim> "the embedding dimension"),
             arg!(--decay <decay> "decay coefficient"),
             arg!(--nbiter <nbiter> "number of loops around a node"),
-        ])
-        .arg(Arg::new("symetry")
-            .short('s')
-            .help(" -s for a symetric embedding, default is assymetric")
+        ]
     );
 
     // validation must have one embedding subcommand
@@ -361,7 +361,7 @@ pub fn main() {
     // Now the command line
     // ===================
     //
-    let matches = Command::new("embedder")
+    let matches = Command::new("embed")
         .subcommand_required(true)
         .arg_required_else_help(true)
         .arg(Arg::new("csvfile")
@@ -369,6 +369,9 @@ pub fn main() {
             .takes_value(true)
             .required(true)
             .help("expecting a csv file"))
+        .arg(Arg::new("symetry")
+            .short('s').long("symetric").default_value("yes")
+            .help(" -s for a symetric embedding, default is symetric"))
         .subcommand(embedding_command)
         .subcommand(validation_cmd)
     .get_matches();
@@ -389,7 +392,23 @@ pub fn main() {
             fname = csv_file.clone();
         }
     };
+    let symetric =  match matches.value_of("symetry") {
+        Some(str) => {
+            let res = str.parse::<bool>();
+            if res.is_ok() {
+                res.unwrap()
+            }
+            else {
+                println!("error parsing symetric , must be \"true\" or \"false\" ");
+                std::process::exit(1);
+            }
+        },
+        _   => {  // default is true
+            true 
+        },
+    }; // end match symetry
 
+    // now we have datafile and symetry we can parse subcommands and parameters
     let mut embedding_parameters : Option<EmbeddingParams> = None;
     let mut validation_params : Option<ValidationParams> = None;
     //
@@ -435,8 +454,14 @@ pub fn main() {
     log::info!(" parsing of commands succeeded"); 
     //
     let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
-    log::info!("\n\n  loading file {:?}", path);
-    let res = csv_to_trimat_delimiters::<f64>(&path, true);
+    if log_enabled!(log::Level::Info) {
+        log::info!("\n\n loading file {:?}, symetric = {}", path, symetric);
+    }
+    else {
+        println!("\n\n loading file {:?}, symetric = {}", path, symetric);
+    }
+    // TODO change argument directed to symetric to csv_to_trimat_delimiters to avoid the !
+    let res = csv_to_trimat_delimiters::<f64>(&path, !symetric);
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
         log::error!("embedder failed in csv_to_trimat, reading {:?}", &path);
@@ -444,7 +469,7 @@ pub fn main() {
     }
     let (trimat, node_index) = res.unwrap();
     //
-    // we have our graph in trimat format
+    // we have our graph in trimat format, we must pass info on symetry or asymetry
     //
     let embedding_parameters = embedding_parameters.unwrap();
 

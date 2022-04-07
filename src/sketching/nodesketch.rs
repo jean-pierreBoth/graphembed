@@ -335,7 +335,8 @@ fn test_nodesketch_lesmiserables() {
     let decay = 100.;
     let nb_iter = 2;
     let parallel = false;
-    let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
+    let symetric = true;
+    let params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
     // now we embed
     let mut nodesketch = NodeSketch::new(params, trimat);
     let sketch_embedding = Embedding::new(node_index, &mut nodesketch);

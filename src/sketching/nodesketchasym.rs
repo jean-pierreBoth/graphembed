@@ -439,8 +439,9 @@ fn test_nodesketchasym_wiki() {
     let sketch_size = 150;
     let decay = 0.1;
     let nb_iter = 2;
+    let symetric = false;
     let parallel = false;
-    let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
+    let params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
      // now we embed
     let mut nodesketch = NodeSketchAsym::new(params, trimat);   
     let sketch_embedding = Embedding::new(node_index, &mut nodesketch);

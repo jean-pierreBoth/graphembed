@@ -395,8 +395,9 @@ mod tests {
         let sketch_size = 300;
         let decay = 0.2;
         let nb_iter = 10;
+        let symetric = true;
         let parallel = true;
-        let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
+        let params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
         log::debug!(" embedding parameters : {:?}", params);
         // now we embed
         let mut nodesketch = NodeSketch::new(params, trimat);
@@ -410,8 +411,9 @@ mod tests {
         let sketch_size = 900;
         let decay = 0.2;
         let nb_iter = 5;
+        let symetric = false;
         let parallel = true;
-        let params = NodeSketchParams{sketch_size, decay, nb_iter, parallel};
+        let params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
         log::debug!(" embedding parameters : {:?}", params);
         // now we embed
         let mut nodesketch = NodeSketchAsym::new(params, trimat);
