@@ -1,6 +1,6 @@
-//! this file implements the nodesketch (symetric) algorithm 
-//! described (nodesketch)<https://dl.acm.org/doi/10.1145/3292500.3330951>
-//! An asymetric implementation is in ['NodeSketchAsym`]
+//! this file implements the nodesketch (symetric) algorithm
+//!  
+//! An asymetric implementation is provided in [nodesketchasym](super::nodesketchasym)
 //! 
 
 
@@ -45,9 +45,9 @@ pub type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 
 
-/// Compute the sketch of node proximity for a (undirected) graph.
-/// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
-/// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
+/// Compute the sketch of node proximity for a (undirected) graph.  
+/// sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight).
+/// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive hashed weighted lists
 pub struct NodeSketch {
     /// specific arguments
     params : NodeSketchParams,

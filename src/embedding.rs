@@ -1,28 +1,25 @@
 //! Describes the Embedded vectors. 
 //! 
-//! Basic symetric Embedded are described by an Array2<F>
+//! Basic symetric embedded vectors are described by an Array2<F>
 //! 
-//! F can be a floating point type f32 or f64, in this case thetype F is described by the constraints :  
-//!   F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc.... 
+//! for Hope embedding F can be a floating point type f32 or f64. So the type F is described by the constraints :  
+//!   F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc....   
+//! For Nodesketch embedded the type is usize.  
 //! 
-//! For Nodesketch Embedded the type is usize.  
 //! Each row corresponds to a node.
 //! 
 //! For an asymetric or directed graph, an asymetric Embedded distinguishes for each node, its target role from its source role.
-//! So we need 2 matrices to represent the Embedded.
+//! So we need 2 matrices to represent the Embedded data.
 //! 
 //! 
-
-
-
-/// We have 2 Embedded modes.
-/// - Hope is described by the paper :
-///     *Asymetric Transitivity Preserving Graph Embedded 2016* 
-///     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.*.
-/// 
-/// - Nodesketch
-///     it is described by the paper <https://dl.acm.org/doi/10.1145/3292500.3330951>
-/// 
+//! We have 2 Embedded modes.
+//! - Hope is described by the paper :
+//!     *Asymetric Transitivity Preserving Graph Embedded 2016* 
+//!     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.*.
+//! 
+//! - Nodesketch
+//!     it is described by the paper <https://dl.acm.org/doi/10.1145/3292500.3330951>
+//! 
 
 
 use ndarray::{Array2, ArrayView1};
@@ -219,8 +216,8 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
 //====================================================================================
 
 
-/// The trait Embedder is something that has as output
-/// something satisfying the trait EmbeddedT<F>, for example  EmbeddedAsym<usize> for nodesketch embedding
+/// The trait Embedder is something that has as output :  
+/// something satisfying the trait EmbeddedT<F>, for example  EmbeddedAsym<usize> for nodesketch embedding.  
 /// F is the type contained in embedded vectors , mostly f64, f32, usize
 /// Useful just to make cross validation generic.
 pub trait EmbedderT<F>  {
@@ -231,11 +228,13 @@ pub trait EmbedderT<F>  {
 
 //==============================================================================
 
-/// The sructure collecting the result of the embedding process
-///     - nodeindexation : an IndexSet storing Node identifier (as in datafile) and associating it to a rank in Array representing embedded nodes
+/// The structure collecting the result of the embedding process
+/// 
+/// - nodeindexation : an IndexSet storing Node identifier (as in datafile) and associating it to a rank in Array representing embedded nodes
 ///                      given a node id we get its rank in Array using IndexSet::get_index_of
-///                      given a rank we get original node id by using IndexSet::get_index
-///     - embbeded : the embedded data of type EmbeddedData. At present time Embedded<F> or EmbeddedAsym<F>
+///                      given a rank we get original node id by using IndexSet::get_index. 
+/// 
+/// - embbeded : the embedded data of type EmbeddedData. At present time Embedded<F> or EmbeddedAsym<F>
 pub struct Embedding<F,  EmbeddedData : EmbeddedT<F> >  {
     /// association of nodeid to a rank. To be made generic to not restrict node id to usize
     nodeindexation : IndexSet<usize>,

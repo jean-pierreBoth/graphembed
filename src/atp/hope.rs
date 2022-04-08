@@ -4,7 +4,9 @@
 //!     Ou, Cui Pei, Zhang, Zhu   in KDD 2016
 //!  See  [atp](https://www.kdd.org/kdd2016/papers/files/rfp0184-ouA.pdf)
 //! 
-//! The type F is supposed to be f32 or f64 and is constrained to sataisfy whatever is expected for floats
+//! Implements only embedding built from Adamic Adar node representation.
+//! 
+//! The type F is supposed to be f32 or f64 and is constrained to satisfy whatever is expected for floats
 //! 
 
 
@@ -30,13 +32,30 @@ use super::randgsvd::{GSvdApprox, GSvdResult};
 use super::orderingf::*;
 use crate::embedding::{EmbeddedAsym, EmbedderT};
 
-/// The distance corresponding to hope embedding. In fact it is L2
-/// TODO similarity : any decreasing function of distance for example 1/(1+d) 
+/// The dissimilarity corresponding to hope. Note that it is not a distance, nor is it guaranteed to be positive.
+/// Basically it is the opposite of the similarity estimated (and constructed in the Hope matrix)
 pub fn hope_distance<F>(v1:&ArrayView1<F>, v2 : &ArrayView1<F>) -> f64 
     where F : Float + Scalar + Lapack {
     assert_eq!(v1.len(), v2.len());
     let dist2 = v1.iter().zip(v2.iter()).fold(F::zero(), |acc, v| acc + (*v.0 * *v.1));
     1.0 - dist2.to_f64().unwrap()
+}
+
+
+/// The distance corresponding to hope embedding. In fact it is Cosine
+pub fn hope_distance_cos<F>(v1:&ArrayView1<F>, v2 : &ArrayView1<F>) -> f64 
+    where F : Float + Scalar + Lapack {
+    assert_eq!(v1.len(), v2.len());
+    let dist = v1.iter().zip(v2.iter()).fold((F::zero(), F::zero(), F::zero()) , 
+            |acc, v| (acc.0 + *v.0 * *v.0, acc.1 + *v.1 * *v.1, acc.2 + *v.0 * *v.1));
+    //
+    if dist.0 > F::zero() && dist.1 > F::zero() {
+        let cos = dist.2/ (num_traits::Float::sqrt(dist.0 * dist.1));
+        1.0 - cos.to_f64().unwrap()
+    }
+    else{
+        1.
+    }
 } // end of jaccard
 
 
@@ -329,7 +348,7 @@ impl <F> Hope<F>  where
                 log::debug!(" sigma_q i : {}, value : {:?} ", i, s[i]);
             }
         }
-        log::info!("setting embedding for nb_nodes : {}", self.get_nb_nodes());
+        log::trace!("setting embedding for nb_nodes : {}", self.get_nb_nodes());
         for i in 0..self.get_nb_nodes() {
             for j in 0..nb_sigma {
                 let sigma = Float::sqrt(s[j]);
@@ -339,7 +358,7 @@ impl <F> Hope<F>  where
             log::trace!("\n source {} {:?}", i, source.row(i));
             log::trace!("\n target {} {:?}", i, target.row(i));
         } 
-        log::debug!("exiting embed_from_svd_result");
+        log::trace!("exiting embed_from_svd_result");
         let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
         //
         return Ok(embedded_a);
