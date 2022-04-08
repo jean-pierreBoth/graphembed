@@ -11,13 +11,15 @@ pub struct ValidationParams {
     delete_fraction : f64,
     /// the number of pass to run
     nbpass : usize,
+    /// We must know if graph is symetric as we will have to delete edges in a coherent way!
+    symetric : bool,
 } // end of ValidationParams
 
 
 
 impl ValidationParams {
-    pub fn new(delete_fraction : f64, nbpass : usize) -> Self {
-        ValidationParams{delete_fraction,nbpass}
+    pub fn new(delete_fraction : f64, nbpass : usize, symetric : bool) -> Self {
+        ValidationParams{delete_fraction, nbpass, symetric}
     }
 
     /// number of pass in validation
@@ -26,4 +28,6 @@ impl ValidationParams {
     /// fraction to skip in train test
     pub fn get_delete_fraction(&self) -> f64 { self.delete_fraction}
 
+    /// 
+    pub fn is_symetric(&self) -> bool { self.symetric}
 }  // end of ValidationParams

@@ -47,10 +47,10 @@ use clap::{Arg, ArgMatches, Command, arg};
 use graphite::prelude::*;
 use sprs::{TriMatI};
 
-
+/// variable to be changed to run tests
 static DATADIR : &str = &"/home/jpboth/Data/Graphs";
 
-
+#[doc(hidden)]
 fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
     log::debug!("in parse_sketching");
     // get embedding dimension
@@ -96,6 +96,8 @@ fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Er
 
 
 
+
+#[doc(hidden)]
 fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> {
     log::debug!("in parse_hope");
     // first get mode Katz or Rooted Page Rank
@@ -195,6 +197,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
 
 //=======================================================================
 
+#[doc(hidden)]
 struct EmbeddingParams {
     mode : EmbeddingMode,
     hope : Option<HopeParams>,
@@ -216,7 +219,7 @@ impl From<NodeSketchParams> for EmbeddingParams {
 
 //=================================================================
 
-
+#[doc(hidden)]
 struct ValidationCmd {
     validation_params : ValidationParams,
     embedding_params : EmbeddingParams,
@@ -226,6 +229,7 @@ struct ValidationCmd {
 
 
 // parsing of valdation command
+#[doc(hidden)]
 fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow::Error> {
     //
     log::debug!("in parse_validation_cmd");
@@ -275,6 +279,7 @@ fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow:
 
 
 // parsing of embedding command
+#[doc(hidden)]
 fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow::Error> {
     log::debug!("in parse_embedding_cmd");
     match matches.subcommand() {
@@ -306,6 +311,7 @@ fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow
 //==============================================================================================
 
 
+#[doc(hidden)]
 pub fn main() {
     //
     let _ = env_logger::builder().is_test(true).try_init();

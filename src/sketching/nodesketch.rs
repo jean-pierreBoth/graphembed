@@ -146,8 +146,6 @@ impl  NodeSketch {
 
 
     /// computes the embedding 
-    ///     - nb_iter  : corresponds to the number of hops we want to explore around each node.
-    ///     - parallel : a flag to ask for parallel exploration of nodes neighbourhood 
     pub fn compute_embedded(&mut self) -> Result<Embedded<usize>,anyhow::Error> {
         log::debug!("in nodesketch::compute_Embedded");
         let cpu_start = ProcessTime::now();

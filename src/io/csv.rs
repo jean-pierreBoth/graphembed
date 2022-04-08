@@ -172,8 +172,8 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 
 
 /// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
-///     - directed must be set to true if graph is directed.
-///     - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
+///  - directed must be set to true if graph is directed.
+///  - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
 /// 
 /// Returns the MatRepr field and a mapping from NodeId to a rank in matrix.
 pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
@@ -191,8 +191,12 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 }  // end of csv_to_csrmat
 
 
-/// loads a csv file testing for delimiters [b'\t', b',', b' ']
-/// For an asymetric graph directed must be set to true
+/// Loads a csv file and returning a MatRepr and a reindexation of nodes to ensure that internally nodes are identified by 
+/// a rank in 0..nb_nodes
+///  
+/// This function tests for the following delimiters [b'\t', b',', b' '] in the csv file.
+/// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  
+/// For an asymetric graph directed must be set to true.
 pub fn csv_to_csrmat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bool) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
     where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
     //
@@ -222,9 +226,10 @@ pub fn csv_to_csrmat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bo
 
 
 
-/// load a directed/undirected  weighted/unweighted graph in csv format into a TriMatI representation.  
-///     - directed must be set to true if graph is directed.
-///     - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
+/// Loads a directed/undirected  weighted/unweighted graph in csv format into a TriMatI representation.  
+///   
+/// - directed must be set to true if graph is directed.
+/// - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
 /// 
 /// If there are 3 fields by record, the third is assumed to be a weight convertible type F (F morally is usize, f32 or f64)
 /// Returns a 2-uple containing first the TriMatI and then the NodeIndexation remapping nodes id as given in the Csv file into (0..nb_nodes) 
@@ -386,7 +391,12 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 
 
 
-
+/// Loads a csv file and returning a matrix representation in triplets form and a reindexation of nodes to ensure that internally nodes are identified by 
+/// a rank in 0..nb_nodes
+///  
+/// This function tests for the following delimiters [b'\t', b',', b' '] in the csv file.
+/// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  
+/// For an asymetric graph directed must be set to true.
 pub fn csv_to_trimat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bool) -> anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)> 
             where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + 
                 for<'r> std::ops::MulAssign<&'r F> + Default {

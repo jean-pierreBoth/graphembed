@@ -3,9 +3,9 @@
 
 #[derive(Debug, Copy, Clone)]
 pub struct NodeSketchParams {
-    /// size of the sketch
+    /// size of the sketch or number of hashed values used for representing a node
     pub sketch_size: usize,    
-    /// exponential decay coefficient for reducing weight of 
+    /// exponential decay coefficient for reducing weight of a neighbour 
     pub decay : f64,
     /// number of iterations (i.e of hops around a node)
     pub nb_iter : usize,
