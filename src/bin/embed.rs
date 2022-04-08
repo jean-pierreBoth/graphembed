@@ -5,34 +5,41 @@
 //!  - --symetry true or false  specifies is csv describe a symetric (half of the edges in csv) or asymetric graph 
 //!  - a subcommand embedding for a simple embedding or validation for loop with AUC computation for the link prediction task
 //! 
+//! 1. **Embedding mode**
+//! 
 //! There are 2 types of embedding : hope or sketching see related docs [Hope], [NodeSketch] or [NodeSketchAsym]
+//! 
+//! The hope embedding requires the hope subcommand, the embedding relying on sketching is announced by the sketching subcommand.
+//! The sketching by default is adapted to the symetry declared for the csv file. It is possible to run with NodeSketchAsym on a symetric file 
+//! to see the impact on validation for example. Running in symetric mode on an asymetric graph is impossible, we do not provide a symetrization 
+//! function yet.
 //! 
 //! example usage:
 //! 
 //! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 1000 and 3 iterations
 //! in the range approximations:  
-//! embed --csv "p2p-Gnutella09.txt" --symetry "true" embedding hope  --approx "ADA" rank --targetrank 1000 --nbiter 3 --decay 0.1
+//! embed --csv "p2p-Gnutella09.txt" --symetric "true" embedding hope  --approx "ADA" rank --targetrank 1000 --nbiter 3 --decay 0.1
 //! 
 //! with precision target:  
-//! embed --csv "p2p-Gnutella09.txt" --symetry "true" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
+//! embed --csv "p2p-Gnutella09.txt" --symetric "true" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
 //! 
 //! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 :
 //! 
-//! embed --csv "p2p-Gnutella09.txt"  --symetry "true" embedding sketching --decay 0.1  --dim 500 --nbiter 3 
+//! embed --csv "p2p-Gnutella09.txt"  --symetric "true" embedding sketching --decay 0.1  --dim 500 --nbiter 3 
 //! 
 //! 
-//! Embedding for estimation of AUC with link prediction 
+//! 2. **Validation mode with estimation of AUC on link prediction task**.
+//! 
 //!     It suffices to add the command : **validation --npass nbpass --skip fraction** before the embedding specification.
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   
-//!     embed --csv "p2p-Gnutella09.txt" --symetry "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 --decay 0.1
+//!     embed --csv "p2p-Gnutella09.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 --decay 0.1
 //! 
 //!  hope or nodesketch are differents algorithms for embedding see related docs
-//!  for hope algorithms different modes of approximations are possible : KATZ, RPR (rooted page rank), ADA (adamic adar)
 //!  
-//! the module can be launched by first setting the variable RUST_LOG as in *example export RUST_LOG=graphite=debug*
-//!  this will dump debugging info on the whole process
+//! The module can be launched by first setting the variable RUST_LOG to info (normal information) or debug (to get get related info) 
+//! as in *example export RUST_LOG=graphite=debug*
 //! 
 //! It can be launched by setting  *export RUST_LOG=graphite::validation=trace*
 //! to get the maximum info in the validation module.
@@ -53,6 +60,25 @@ static DATADIR : &str = &"/home/jpboth/Data/Graphs";
 #[doc(hidden)]
 fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
     log::debug!("in parse_sketching");
+    // check for potential symetric argument 
+    let symetric : bool = match matches.value_of("symetric") {
+        Some(str) => {
+            log::debug!("got symetric arg in sketching");
+            let res = str.parse::<bool>();
+            if res.is_err() {
+                log::error!("error decoding symetric argument for sketching");
+                return Err(anyhow!("error decoding symetric argument for sketching"));
+            }
+            else {
+                res.unwrap()
+            }
+        },
+        _   => { 
+            log::debug!("setting symetric default mode in sketching");
+            true
+        },
+    }; // end match 
+
     // get embedding dimension
     let dimension = match matches.value_of("dim") {
         Some(str) => {
@@ -89,7 +115,6 @@ fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Er
         _   => { return Err(anyhow!("error parsing decay")); },
     }; // end match nb_iter
     //
-    let symetric = true;
     let sketch_params = NodeSketchParams{sketch_size: dimension, decay, nb_iter, symetric, parallel : true};
     return Ok(sketch_params);
 } // end of parse_sketching
@@ -198,6 +223,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
 //=======================================================================
 
 #[doc(hidden)]
+#[derive(Debug)]
 struct EmbeddingParams {
     mode : EmbeddingMode,
     hope : Option<HopeParams>,
@@ -220,6 +246,7 @@ impl From<NodeSketchParams> for EmbeddingParams {
 //=================================================================
 
 #[doc(hidden)]
+#[derive(Debug)]
 struct ValidationCmd {
     validation_params : ValidationParams,
     embedding_params : EmbeddingParams,
@@ -346,6 +373,7 @@ pub fn main() {
 
     // the sketch embedding command
     let sketch_cmd = Command::new("sketching")
+        .arg(Arg::new("symetric").required(false).takes_value(true).long("symetric").help("true or false"))
         .arg_required_else_help(true)
         .args(&[
             arg!(-d --dim <dim> "the embedding dimension"),
@@ -404,7 +432,7 @@ pub fn main() {
             fname = csv_file.clone();
         }
     };
-    let symetric =  match matches.value_of("symetry") {
+    let symetric_graph =  match matches.value_of("symetry") {
         Some(str) => {
             let res = str.parse::<bool>();
             if res.is_ok() {
@@ -430,9 +458,9 @@ pub fn main() {
             let res = parse_validation_cmd(sub_m);
             match res {
                 Ok(cmd) =>  { 
-                                                validation_params = Some(cmd.validation_params);
-                                                embedding_parameters = Some(cmd.embedding_params);
-                                         },
+                                            validation_params = Some(cmd.validation_params);
+                                            embedding_parameters = Some(cmd.embedding_params);
+                },
                 _                     => {  },
             }
         },
@@ -453,7 +481,7 @@ pub fn main() {
     }  // end match subcommand
 
     if let Some(validation_m) = matches.subcommand_matches("validation") {
-        log::debug!("subcommand_matches got subcommand match");
+        log::debug!("subcommand_matches got validation");
         let res = parse_validation_cmd(validation_m);        
         match res {
             Ok(cmd) => { validation_params = Some(cmd.validation_params); },
@@ -467,13 +495,13 @@ pub fn main() {
     //
     let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
     if log_enabled!(log::Level::Info) {
-        log::info!("\n\n loading file {:?}, symetric = {}", path, symetric);
+        log::info!("\n\n loading file {:?}, symetric = {}", path, symetric_graph);
     }
     else {
-        println!("\n\n loading file {:?}, symetric = {}", path, symetric);
+        println!("\n\n loading file {:?}, symetric = {}", path, symetric_graph);
     }
     // TODO change argument directed to symetric to csv_to_trimat_delimiters to avoid the !
-    let res = csv_to_trimat_delimiters::<f64>(&path, !symetric);
+    let res = csv_to_trimat_delimiters::<f64>(&path, !symetric_graph);
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
         log::error!("embedder failed in csv_to_trimat, reading {:?}", &path);
@@ -503,9 +531,9 @@ pub fn main() {
             }
             else  {
                 let mut params = validation_params.unwrap();
-                if !symetric {
+                if !symetric_graph {
                     log::debug!("setting asymetric flag for validation");
-                    params = ValidationParams::new(params.get_delete_fraction(), params.get_nbpass(), symetric);
+                    params = ValidationParams::new(params.get_delete_fraction(), params.get_nbpass(), symetric_graph);
                 }
                 log::debug!("validation parameters : {:?}", params);
                 // have to run validation simulations
@@ -516,17 +544,19 @@ pub fn main() {
                     let res = hope.embed();
                     res.unwrap()
                 };
-                link::estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), symetric, &f);
+                link::estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), symetric_graph, &f);
             }
         },  // end case Hope
 
         EmbeddingMode::NodeSketch => {
             log::info!("embedding mode : Sketching");
-            log::debug!(" hope parameters : {:?}",embedding_parameters.sketching.unwrap());
+            let sketching_params = embedding_parameters.sketching.unwrap();
+            log::debug!(" sketching embedding parameters : {:?}", sketching_params);
             if validation_params.is_none() {
                 log::debug!("running embedding without validation");
+                let sketching_symetry = sketching_params.is_symetric();
                 // now we allocate an embedder (sthing that implement the Embedder trait)
-                match symetric {
+                match sketching_symetry {
                     true => {   
                         let mut nodesketch = NodeSketch::new(embedding_parameters.sketching.unwrap(), trimat);
                         let embedding = Embedding::new(node_index, &mut nodesketch);
@@ -548,10 +578,11 @@ pub fn main() {
                 };
             } // end case no validation
             else {
-                let mut params = validation_params.unwrap();
-                if !symetric {
-                    params = ValidationParams::new(params.get_delete_fraction(), params.get_nbpass(), symetric);
-                    log::debug!("asymetric validation , validation parameters : {:?}", params);
+                let validation_params = validation_params.unwrap();
+                log::debug!("validation , validation parameters : {:?}", validation_params);
+                log::debug!("sketching parameters : {:?}", sketching_params);
+                let sketching_symetry = sketching_params.is_symetric();
+                if !sketching_symetry {
                     log::info!("doing validaton runs for nodesketchasym embedding");
                     // construction of the function necessay for AUC iterations            
                     let f = | trimat : TriMatI<f64, usize> | -> EmbeddedAsym<usize> {
@@ -559,7 +590,7 @@ pub fn main() {
                         let res = nodesketch.embed();
                         res.unwrap()
                     };
-                    link::estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), symetric, &f);
+                    link::estimate_auc(&trimat.to_csr(), validation_params.get_nbpass(), validation_params.get_delete_fraction(), symetric_graph, &f);
                 }  // end case asymetric
                 else {
                     log::info!("doing validaton runs for nodesketch embedding");
@@ -568,7 +599,7 @@ pub fn main() {
                         let res = nodesketch.embed();
                         res.unwrap()
                     };
-                    link::estimate_auc(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), symetric, &f);
+                    link::estimate_auc(&trimat.to_csr(), validation_params.get_nbpass(), validation_params.get_delete_fraction(), symetric_graph, &f);
                 }
                 // TODO precision estimation too costly must subsample
                 //    estimate_precision(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);

@@ -63,7 +63,10 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     //
     let mut discarded : usize = 0;
     let mut nb_isolation_not_discarded : usize = 0;
-    let nb_to_discard = (nb_edge as f64 * delete_proba) as usize;
+    let nb_to_discard = match symetric {
+        true => { 2 * (nb_edge as f64 * delete_proba) as usize},
+        false => { (nb_edge as f64 * delete_proba) as usize},
+    };
     // 
     log::debug!("csrmat nb edge : {}, number to discard {}", nb_edge, nb_to_discard);
 
@@ -274,7 +277,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
         trimat_set.insert((triplet.1.0, triplet.1.1));
     }               
     //
-    // embed (to be passed as a closure)
+    // embedder (passed as a closure)
     //
     let embedded = &embedder(trimat);
     let mut good = 0.;

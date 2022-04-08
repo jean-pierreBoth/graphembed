@@ -29,6 +29,7 @@ use indexmap::IndexSet;
 /// to represent the distance in embedded space between 2 vectors
 type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
 
+#[derive(Debug)]
 pub enum EmbeddingMode {
     Hope, 
     NodeSketch,

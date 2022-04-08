@@ -35,13 +35,13 @@ pub type NodeIndexation<N> = IndexSet<N>;
 // count number of first lines beginning with '#' or '%'
 fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
     //
-    log::info!("get_header_size");
+    log::debug!("get_header_size");
     //
     let fileres = OpenOptions::new().read(true).open(&filepath);
     if fileres.is_err() {
-        log::error!("ProcessingState reload_json : reload could not open file {:?}", filepath.as_os_str());
+        log::error!("fn get_header_size : could not open file {:?}", filepath.as_os_str());
         println!("directed_from_csv could not open file {:?}", filepath.as_os_str());
-        return Err(anyhow!("directed_from_csv could not open file {}", filepath.display()));            
+        return Err(anyhow!("fn get_header_size : could not open file {}", filepath.display()));            
     }
     let mut file = fileres?;
     let mut nb_header_lines = 0;
@@ -60,7 +60,7 @@ fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
         }
         else {
             more = false;
-            log::debug!("file has {} nb headrers lines", nb_header_lines);
+            log::debug!("file has {} nb headers lines", nb_header_lines);
         }
     }
     //
@@ -281,7 +281,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(bufreader);
     for result in rdr.records() {
         let record = result?;
-        if log::log_enabled!(Level::Info) && nb_record <= 5 {
+        if log::log_enabled!(Level::Info) && nb_record <= 2 {
             log::info!(" record num {:?}, {:?}", nb_record, record);
         }
         //
@@ -401,7 +401,7 @@ pub fn csv_to_trimat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bo
             where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + 
                 for<'r> std::ops::MulAssign<&'r F> + Default {
     //
-    log::info!("in csv_to_trimat_delimiters");
+    log::debug!("in csv_to_trimat_delimiters");
     //
     let delimiters = [b'\t', b',', b' ', b';'];
     //
