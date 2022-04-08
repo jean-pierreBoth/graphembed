@@ -172,7 +172,7 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 
 
 /// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
-///  - directed must be set to true if graph is directed.
+///  - directed must be set to true if graph is directed or if all edges are in csv file even if graph is symetric!
 ///  - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
 /// 
 /// Returns the MatRepr field and a mapping from NodeId to a rank in matrix.
@@ -202,12 +202,12 @@ pub fn csv_to_csrmat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bo
     //
     log::info!("\n\n csv_to_csrmat_delimiters, loading file {:?}", filepath);
     //
-    let delimiters = [b'\t', b',', b' ', b';'];
+    let delimiters = ['\t', ',', ' ', ';'];
     //
     let mut res:  anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> = Err(anyhow!("not initializd"));
     for delim in delimiters {
         log::debug!("embedder trying reading {:?} with  delimiter {:?}", &filepath, delim);
-        res = csv_to_csrmat::<F>(&filepath, directed, delim);
+        res = csv_to_csrmat::<F>(&filepath, directed, delim as u8);
         if res.is_err() {
             log::error!("embedder failed in csv_to_csrmat_delimiters, reading {:?}, with delimiter {:?} ", &filepath, delim);
         }
@@ -268,14 +268,17 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let mut rows = Vec::<usize>::with_capacity(nb_edges_guess);
     let mut cols = Vec::<usize>::with_capacity(nb_edges_guess);
     let mut values = Vec::<F>::with_capacity(nb_edges_guess);
-    let mut node1 : usize;
+    let mut node1 : usize;   // rank id
     let mut node2 : usize;
+    let mut node_id1 : usize;  // node_id as in file
+    let mut node_id2 : usize;
     let mut weight : F;
     let mut rowmax : usize = 0;
     let mut colmax : usize = 0;
     let mut nb_record = 0;
     let mut nb_fields = 0;
     let mut nb_nodes : usize = 0;
+    let mut last_edge_inserted = (0usize,0usize);
     //
     // nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(bufreader);
@@ -303,13 +306,15 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         let field = record.get(0).unwrap();
         // decode into Ix type
         if let Ok(node) = field.parse::<usize>() {
-            let already = nodeindex.get_index_of(&node);
+            node_id1 = node;
+            let already = nodeindex.get_index_of(&node_id1);
             match already {
                 Some(idx) => { node1 = idx},
-                None             => {   node1 = nodeindex.insert_full(node).0;
-                                        log::trace!("inserting node num : {}, rank : {}", node, node1);
-                                        nb_nodes += 1;
-                                    }
+                None             => {
+                        node1 = nodeindex.insert_full(node_id1).0;
+                        log::trace!("inserting node num : {}, rank : {}", node_id1, node1);
+                        nb_nodes += 1;
+                }
             }
             rowmax = rowmax.max(node1);
         }
@@ -319,11 +324,12 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         }
         let field = record.get(1).unwrap();
         if let Ok(node) = field.parse::<usize>() {
-            let already = nodeindex.get_index_of(&node);
+            node_id2 = node;
+            let already = nodeindex.get_index_of(&node_id2);
             match already {
                 Some(idx) => { node2 = idx},
-                None             => {   node2 = nodeindex.insert_full(node).0;
-                                        log::trace!("inserting node num : {}, rank : {}", node, node2);
+                None             => {   node2 = nodeindex.insert_full(node_id2).0;
+                                        log::trace!("inserting node num : {}, rank : {}", node_id2, node2);
                                         nb_nodes += 1;
                                     }
             }            
@@ -334,8 +340,10 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
         }
         if !hset.insert((node1,node2)) {
-            log::error!("2-uple ({:?}, {:?}) already present, record {}", node1, node2, nb_record);
-            return Err(anyhow!("2-uple ({:?}, {:?}) already present", node1, node2));
+            log::error!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, nb_record);
+            log::error!("last edge inserted : {:?}", last_edge_inserted);
+            log::error!("record read : {:?}", record);
+            return Err(anyhow!("2-uple ({:?}, {:?}) already present", node_id1, node_id2));
         }
         if !directed {
             rowmax = rowmax.max(node2);
@@ -359,11 +367,14 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         rows.push(node1);
         cols.push(node2);
         values.push(weight);
+        log::trace!("to insert : (node1, node2) : ({}, {})", node1, node2);
         nb_record += 1;
         if !directed {
             // store symetric point and check it was not already present
             if !hset.insert((node2,node1)) {
-                log::error!("undirected mode 2-uple ({:?}, {:?}) already present, record {}", node2, node1, nb_record);
+                log::error!("undirected mode 2-uple ({:?}, {:?}) symetric edge already present, record {}", node_id2, node_id1, nb_record);
+                log::error!("last edge inserted : {:?}", last_edge_inserted);
+                log::error!("record read : {:?}", record);
                 return Err(anyhow!("undirected mode  : 2-uple ({:?}, {:?}) already present", node2, node1));
             }
             rows.push(node2);
@@ -371,6 +382,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             values.push(weight); 
             nb_record += 1;
         }
+        last_edge_inserted.0 = node_id1;
+        last_edge_inserted.1 = node_id2;
         if log::log_enabled!(Level::Info) && nb_record <= 5 {
             log::info!("{:?}", record);
             log::info!(" node1 {:?}, node2 {:?}", node1, node2);
@@ -403,12 +416,12 @@ pub fn csv_to_trimat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bo
     //
     log::debug!("in csv_to_trimat_delimiters");
     //
-    let delimiters = [b'\t', b',', b' ', b';'];
+    let delimiters = ['\t', ',', ' ', ';'];
     //
     let mut res :  anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)>  = Err(anyhow!("res not initialized"));
     for delim in delimiters {
         log::debug!("embedder trying reading {:?} with  delimiter {:?}", &filepath, delim as char);
-        res = csv_to_trimat::<F>(&filepath, directed, delim);
+        res = csv_to_trimat::<F>(&filepath, directed, delim as u8);
         if res.is_err() {
             log::error!("embedder failed in csv_to_trimat_delimiters, reading {:?}, trying delimiter {:?} ", &filepath, delim as char);
         }

@@ -2,7 +2,9 @@
 //! 
 //! The main arguments are 
 //!  - --csv filename
-//!  - --symetry true or false  specifies is csv describe a symetric (half of the edges in csv) or asymetric graph 
+//!  - --symetry true or false  specifies if is csv describe a symetric (half of the edges in csv) or asymetric graph
+//!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a). 
+//!     sometimes a symetric graph is fully described in the csv file, then declare asymetric  
 //!  - a subcommand embedding for a simple embedding or validation for loop with AUC computation for the link prediction task
 //! 
 //! 1. **Embedding mode**
