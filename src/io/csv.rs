@@ -278,6 +278,9 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let mut nb_record = 0;
     let mut nb_fields = 0;
     let mut nb_nodes : usize = 0;
+    let nb_warnings = 10;
+    // to detect potential asymetry 
+    let mut nb_potential_asymetry : usize = 0;
     let mut last_edge_inserted = (0usize,0usize);
     //
     // nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
@@ -339,11 +342,13 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             log::debug!("error decoding field 2 of record {}", nb_record+1);
             return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
         }
-        if !hset.insert((node1,node2)) {
-            log::error!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, nb_record);
-            log::error!("last edge inserted : {:?}", last_edge_inserted);
-            log::error!("record read : {:?}", record);
-            return Err(anyhow!("2-uple ({:?}, {:?}) already present", node_id1, node_id2));
+        if !directed && !hset.insert((node1,node2)) {
+            if nb_potential_asymetry <= nb_warnings {
+                println!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, nb_record);
+                log::error!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, nb_record);
+                log::error!("last edge inserted : {:?}", last_edge_inserted);
+                log::error!("record read : {:?}", record);
+            }
         }
         if !directed {
             rowmax = rowmax.max(node2);
@@ -370,17 +375,18 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         log::trace!("to insert : (node1, node2) : ({}, {})", node1, node2);
         nb_record += 1;
         if !directed {
-            // store symetric point and check it was not already present
+            // store symetric point and warn if it was not already present
             if !hset.insert((node2,node1)) {
-                log::error!("undirected mode 2-uple ({:?}, {:?}) symetric edge already present, record {}", node_id2, node_id1, nb_record);
-                log::error!("last edge inserted : {:?}", last_edge_inserted);
-                log::error!("record read : {:?}", record);
-                return Err(anyhow!("undirected mode  : 2-uple ({:?}, {:?}) already present", node2, node1));
+                nb_potential_asymetry += 1;
+                if nb_potential_asymetry <= nb_warnings {
+                    log::error!("undirected mode 2-uple ({:?}, {:?}) symetric edge already present, record {}", node_id2, node_id1, nb_record);
+                    log::error!("last edge inserted : {:?}", last_edge_inserted);
+                    log::error!("record read : {:?}", record);
+                }
             }
             rows.push(node2);
             cols.push(node1);
             values.push(weight); 
-            nb_record += 1;
         }
         last_edge_inserted.0 = node_id1;
         last_edge_inserted.1 = node_id2;
@@ -398,6 +404,12 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     assert_eq!(nb_nodes, nodeindex.len());
     log::info!("\n\n csv file read!, nb nodes {}, nb edges  {}", nodeindex.len(), nb_record);
     log::info!("rowmax : {}, colmax : {}, nb_edges : {}", rowmax, colmax, trimat.nnz());
+    // 
+    if nb_potential_asymetry > 0 {
+        log::error!("\n\n csv_to_trimat : CHECK SYMETRY number of couples definded more than one time : {}", nb_potential_asymetry);
+        println!("\n\n csv_to_trimat : CHECK SYMETRY number of couples definded more than one time : {}", nb_potential_asymetry);
+        println!("csv_to_trimat took the first couple ")
+    }
     //
     Ok((trimat, nodeindex))
 } // end of csv_to_trimat
