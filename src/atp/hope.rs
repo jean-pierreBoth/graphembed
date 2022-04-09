@@ -202,15 +202,15 @@ impl <F> Hope<F>  where
         // compute Ml = (1-alfa) I
         let mat_l = match self.mat.get_data() {
             MatMode::FULL(_) => { 
-                    let mut dense = Array2::<F>::eye(self.mat.shape()[0]);
-                    dense *= F::from_f64(1. - factor).unwrap();
-                    MatRepr::<F>::from_array2(dense)
-                },
+                let mut dense = Array2::<F>::eye(self.mat.shape()[0]);
+                dense *= F::from_f64(1. - factor).unwrap();
+                MatRepr::<F>::from_array2(dense)
+            },
             MatMode::CSR(_) =>  {
-                    let mut id =  CsMat::<F>::eye(self.get_nb_nodes());
-                    id.scale(F::one() - F::from_f64(factor).unwrap());
-                    MatRepr::<F>::from_csrmat(id)
-                }
+                let mut id =  CsMat::<F>::eye(self.get_nb_nodes());
+                id.scale(F::one() - F::from_f64(factor).unwrap());
+                MatRepr::<F>::from_csrmat(id)
+            },
         };
         let gsvdapprox = GSvdApprox::new(mat_l, mat_g , approx_mode, None);
         //

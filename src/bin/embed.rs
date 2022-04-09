@@ -11,8 +11,11 @@
 //! 
 //! There are 2 types of embedding : hope or sketching see related docs [Hope], [NodeSketch] or [NodeSketchAsym]
 //! 
-//! The hope embedding requires the hope subcommand, the embedding relying on sketching is announced by the sketching subcommand.
-//! The sketching by default is adapted to the symetry declared for the csv file. It is possible to run with NodeSketchAsym on a symetric file 
+//! The hope embedding requires the hope subcommand, the embedding relying on sketching is announced by the sketching subcommand.  
+//! 
+//! - Hope embedding can run in 2 approximations mode with a precision mode or a rank target approximation of the similatity matrix
+//! 
+//! - The sketching by default is adapted to the symetry declared for the csv file. It is possible to run with NodeSketchAsym on a symetric file 
 //! to see the impact on validation for example. Running in symetric mode on an asymetric graph is impossible, we do not provide a symetrization 
 //! function yet.
 //! 
@@ -38,7 +41,6 @@
 //!   
 //!     embed --csv "p2p-Gnutella09.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 --decay 0.1
 //! 
-//!  hope or nodesketch are differents algorithms for embedding see related docs
 //!  
 //! The module can be launched by first setting the variable RUST_LOG to info (normal information) or debug (to get get related info) 
 //! as in *example export RUST_LOG=graphite=debug*
