@@ -218,6 +218,74 @@ impl <F> Hope<F>  where
     } // end of make_rooted_pagerank_problem
 
 
+    fn embed_rpr_simple(&mut self, factor : f64, approx_mode : RangeApproxMode) -> Result<EmbeddedAsym<F>, anyhow::Error> 
+            where for<'r> F: std::ops::MulAssign<&'r F>  {
+        //
+        log::debug!("hope::make_rooted_pagerank_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
+        //
+        crate::renormalize::matrepr_row_normalization(& mut self.mat);
+        // Mg is I - alfa * P where P is the normalized adjacency matrix to a probability matrix
+        let t_mat_g = compute_1_minus_beta_mat(&self.mat, factor, false);
+        // compute svd approx of transpose(mat_g) which U and V as inverse of Mg                 
+        let mut svd_approx = SvdApprox::new(&t_mat_g);
+        let svd_res = svd_approx.direct_svd(approx_mode); 
+        if svd_res.is_err() {
+            return Err(anyhow!("compute_embedded : ADA mode, call SvdApprox.direct_svd failed"));
+        }
+        let svd_res = svd_res.unwrap();
+        // now we have svd approx de transpose(Matg_g) we have just to modify singular values
+        let s = match svd_res.get_sigma() {
+            Some(s) => { s },
+                     _                       => { return  Err(anyhow!("embed_from_svd_result could not get s"));},
+        };
+        //
+        let u : &Array2<F> = match svd_res.get_u() {
+            Some(u) =>  { u },
+                    _                        => { return  Err(anyhow!("compute_embedded could not get u")); },
+        };
+        let vt : &Array2<F> = match svd_res.get_vt() {
+            Some(vt) =>  { vt },
+                    _                        => { return  Err(anyhow!("compute_embedded could not get u")); },
+        };
+        //
+        log::info!("nb eigen values {}, first eigenvalue {:.3e}, last eigenvalue : {:.3e}", s.len(), s[0], s[s.len()-1]);
+        if log::log_enabled!(log::Level::Info) {
+            for i in 0..20.min(s.len()-1) {
+                log::debug!(" sigma_q i : {}, value : {:?} ", i, s[i]);
+            }
+        }
+        //
+        let nb_sigma = s.len();
+        let mut source = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma));
+        let mut target = Array2::<F>::zeros((self.get_nb_nodes(), nb_sigma)); 
+        // source is U , target is V, we must inverse spectrum.
+        let v = vt.t(); 
+        assert_eq!(u.ncols(), v.ncols());
+        //
+        log::info!("nb eigen values {}, first eigenvalue {:.3e}, last eigenvalue : {:.3e}", s.len(), s[0], s[s.len()-1]);
+        if log::log_enabled!(log::Level::Info) {
+            for i in 0..20.min(s.len()-1) {
+                log::debug!(" sigma_q i : {}, value : {:?} ", i, s[i]);
+            }
+        }
+        log::trace!("setting embedding for nb_nodes : {}", self.get_nb_nodes());
+        for i in 0..self.get_nb_nodes() {
+            for j in 0..nb_sigma {
+                let sigma = Float::sqrt(F::from(1.- factor).unwrap() /s[j]);
+                source.row_mut(i)[j] = sigma * u.row(i)[j];
+                target.row_mut(i)[j] = sigma * v.row(i)[j];
+            }
+            log::trace!("\n source {} {:?}", i, source.row(i));
+            log::trace!("\n target {} {:?}", i, target.row(i));
+        } 
+        log::trace!("exiting embed_from_svd_result");
+        let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
+        //
+        return Ok(embedded_a);
+    } // end of embed_rpr_simple
+
+
+
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I, adamic_ada transform of matrep) 
     // so we do not need Gsvd, a simple approximated svd is sufficient
     fn make_adamic_adar_problem(&mut self) -> Result<SvdApprox<F>, anyhow::Error>
@@ -319,7 +387,7 @@ impl <F> Hope<F>  where
 
 
    // fills in embedding from a svd (and not a gsvd)! Covers the case Adamic Adar
-   fn embed_from_svd_result(&mut self, svd_res : &SvdResult<F>) -> Result<EmbeddedAsym<F>,anyhow::Error> {
+   fn embed_ada_from_svd_result(&mut self, svd_res : &SvdResult<F>) -> Result<EmbeddedAsym<F>,anyhow::Error> {
         //
         log::debug!("entering embed_from_svd_result");
         //
@@ -365,6 +433,7 @@ impl <F> Hope<F>  where
    } // end of embed_from_svd_result
 
 
+ 
 
     /// computes the embedding
     /// - dampening_factor helps defining the extent to which the multi hop neighbourhood of a node is taken into account 
@@ -375,20 +444,32 @@ impl <F> Hope<F>  where
     pub fn compute_embedded(&mut self) -> Result<EmbeddedAsym<F>,anyhow::Error> {
         //
         log::debug!("hope::compute_embedded");
+        let use_gsvd_for_katz = false;
         //
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
         //
         let embedding = match self.params.hope_m {
             HopeMode::KATZ => {
-                let gsvd_pb = self.make_katz_problem(self.params.get_decay_weight(), self.params.get_range_mode());
-                let gsvd_res = gsvd_pb.unwrap().do_approx_gsvd(); 
-                if gsvd_res.is_err() {
-                    return Err(anyhow!("compute_embedded : KATZ mode, call GSvdApprox.do_approx_gsvd failed"));
-                }
-                let gsvd_res = gsvd_res.unwrap();
-                let embedding = self.embed_from_gsvd_result(&gsvd_res);
-                embedding             
+                let embedding = match use_gsvd_for_katz {
+                    true => {
+                        let gsvd_pb = self.make_katz_problem(self.params.get_decay_weight(), self.params.get_range_mode());
+                        let gsvd_res = gsvd_pb.unwrap().do_approx_gsvd(); 
+                        if gsvd_res.is_err() {
+                            return Err(anyhow!("compute_embedded : KATZ mode, call GSvdApprox.do_approx_gsvd failed"));
+                        }
+                        let gsvd_res = gsvd_res.unwrap();
+                        let embedding = self.embed_from_gsvd_result(&gsvd_res);
+                        embedding
+                    },  
+                    false => {
+                        log::debug!("trying KATZ with simple svd");
+                        let embedding = self.embed_rpr_simple(self.params.get_decay_weight(), 
+                            self.params.get_range_mode());
+                        embedding
+                    },
+                };
+                embedding          
             },
             HopeMode::RPR => { 
                 let gsvd_pb = self.make_rooted_pagerank_problem(self.params.get_decay_weight(), self.params.get_range_mode());
@@ -408,7 +489,7 @@ impl <F> Hope<F>  where
                     return Err(anyhow!("compute_embedded : ADA mode, call SvdApprox.direct_svd failed"));
                 }
                 let svd_res = svd_res.unwrap();
-                let embedding = self.embed_from_svd_result(&svd_res);
+                let embedding = self.embed_ada_from_svd_result(&svd_res);
                 embedding
             },
         };  // znd of match
