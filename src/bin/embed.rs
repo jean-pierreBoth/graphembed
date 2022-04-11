@@ -133,20 +133,43 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
     let mut epsil : f64 = 0.;
     let mut maxrank : usize = 0;
     let mut blockiter = 0;
-    let mut decay = 1.;
+    let mut decay : Option<f64> = None;
     // get approximation mode
     let hope_mode = match matches.value_of("proximity") {
         Some("KATZ") => {  HopeMode::KATZ
         },
-        Some("RPR")  => {   HopeMode::RPR
+        Some("RPR")  => {  HopeMode::RPR
         },
-        Some("ADA")  => { HopeMode::ADA},
+        Some("ADA")  => {  HopeMode::ADA},
         _            => {
                             log::error!("did not get proximity used : ADA,KATZ or RPR");
                             std::process::exit(1);
         },
     };
-                      
+
+    if let Some(str)  = matches.value_of("decay")  { 
+        let res = str.parse::<f64>();
+        match res {
+            Ok(val) => { decay = Some(val)},
+            _            => {   
+                                return Err(anyhow!("could not parse Hope decay"));
+                            },
+        };  // end of decay match 
+    }
+    else { // check we have decay in non ADA mode
+        match hope_mode {
+            HopeMode::ADA => { decay = Some(1.);},
+            _ => {
+                if decay.is_none() {
+                    log::error!("Hope mode requires --decay for non ADA proximity");
+                    println!("Hope mode requires --decay for non ADA proximity");
+                    return Err(anyhow!("Hope mode requires --decay for non ADA proximity"));
+                };
+            },
+        };
+    }
+    
+    
     match matches.subcommand() {
 
         Some(("precision", sub_m)) =>  {
@@ -158,16 +181,6 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
                 }         
             } // end of epsil
  
-            // get decay
-            if let Some(str)  = sub_m.value_of("decay")  { 
-                let res = str.parse::<f64>();
-                match res {
-                    Ok(val) => { decay = val},
-                    _       => { return Err(anyhow!("could not parse Hope decay"));},
-                } 
-            };  // end of decay match   
-    
-            // get symetric/asymetric flag 
 
             // get maxrank
             if let Some(str) = sub_m.value_of("maxrank") {
@@ -188,7 +201,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
             }
             //
             let range = RangeApproxMode::EPSIL(RangePrecision::new(epsil, blockiter, maxrank));
-            let params = HopeParams::new(hope_mode, range, decay);
+            let params = HopeParams::new(hope_mode, range, decay.unwrap());
             return Ok(params);
         },  // end decoding precision arg
 
@@ -212,7 +225,7 @@ fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> 
             }   
             //          
             let range = RangeApproxMode::RANK(RangeRank::new(maxrank, blockiter));
-            let params = HopeParams::new(hope_mode, range, decay);
+            let params = HopeParams::new(hope_mode, range, decay.unwrap());
             return Ok(params);
         }, // end of decoding rank arg
 
@@ -301,7 +314,7 @@ fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow:
     }
     else {
         log::info!("parse_embedding_cmd failed");
-        return Err(anyhow!("parse_validation_cmd failed"));   
+        return Err(anyhow!("parse_validation_cmd parsing embedding cmd failed"));   
     }
     //
 }  // end of parse_validation_cmd
@@ -357,11 +370,12 @@ pub fn main() {
         .long("approx")
         .required(true)
         .takes_value(true)
-        .help("specify KATZ or RPR"))
+        .help("specify ADA or RPR"))
+    .arg(Arg::new("decay")
+        .long("decay").takes_value(true).help("RPR option needs a decay"))
     .subcommand(Command::new("precision")
         .arg_required_else_help(true)
         .args(&[
-            arg!(--decay <decay> "decay factor at each hop"),
             arg!(--maxrank <maxrank> "maximum rank expected"),
             arg!(--blockiter <blockiter> "integer between 2 and 5"),
             arg!(-e --epsil <epsil> "precision between 0. and 1."),
@@ -369,7 +383,6 @@ pub fn main() {
     .subcommand(Command::new("rank")
         .arg_required_else_help(true)
         .args(&[
-            arg!(--decay <decay> "decay factor at each hop"),
             arg!(--targetrank <targetrank> "expected rank"),
             arg!(--nbiter <nbiter> "integer between 2 and 5"),
         ])          
@@ -474,7 +487,10 @@ pub fn main() {
             let res = parse_embedding_cmd(sub_m);
             match res {
                 Ok(params) => { embedding_parameters = Some(params); },
-                _                     => {  },
+                _                     => { 
+                    log::error!("exiting with error {}", res.err().unwrap());
+                    std::process::exit(1);
+                 },
             }
         }
 
@@ -489,13 +505,19 @@ pub fn main() {
         let res = parse_validation_cmd(validation_m);        
         match res {
             Ok(cmd) => { validation_params = Some(cmd.validation_params); },
-            _                          => {  },
+            _                     => { 
+                                    log::error!("paring validation command failed");
+                                    println!("exiting with error {}", res.err().as_ref().unwrap());
+                                  //  log::error!("exiting with error {}", res.err().unwrap());
+                                    std::process::exit(1);                                
+            },
         }
     }  // end if validation
 
     // examine embedding_parameters to see if we do hope or sketching
     
     log::info!(" parsing of commands succeeded"); 
+    log::debug!("\n embedding paramertes : {:?}", embedding_parameters.as_ref());
     //
     let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
     if log_enabled!(log::Level::Info) {
