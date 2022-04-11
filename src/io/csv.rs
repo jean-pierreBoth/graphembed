@@ -275,8 +275,10 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     let mut weight : F;
     let mut rowmax : usize = 0;
     let mut colmax : usize = 0;
-    let mut nb_record = 0;
+    let mut nb_record = 0;      // number of record loaded
+    let mut num_record : usize = 0;
     let mut nb_fields = 0;
+    let mut nb_self_loop = 0;
     let mut nb_nodes : usize = 0;
     let nb_warnings = 10;
     // to detect potential asymetry 
@@ -286,6 +288,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     // nodes must be numbered contiguously from 0 to nb_nodes-1 to be stored in a matrix.
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(bufreader);
     for result in rdr.records() {
+        num_record += 1;
         let record = result?;
         if log::log_enabled!(Level::Info) && nb_record <= 2 {
             log::info!(" record num {:?}, {:?}", nb_record, record);
@@ -301,8 +304,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
         }
         else {
             if record.len() != nb_fields {
-                println!("non constant number of fields at record {} first record has {}",nb_record+1,  nb_fields);
-                return Err(anyhow!("non constant number of fields at record {} first record has {}",nb_record+1,  nb_fields));   
+                println!("non constant number of fields at record {} first record has {}",num_record,  nb_fields);
+                return Err(anyhow!("non constant number of fields at record {} first record has {}",num_record,  nb_fields));   
             }
         }
         // we have 2 or 3 fields
@@ -322,8 +325,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             rowmax = rowmax.max(node1);
         }
         else {
-            log::debug!("error decoding field 1 of record {}", nb_record+1);
-            return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
+            log::debug!("error decoding field 1 of record {}", num_record);
+            return Err(anyhow!("error decoding field 1 of record  {}",num_record)); 
         }
         let field = record.get(1).unwrap();
         if let Ok(node) = field.parse::<usize>() {
@@ -339,13 +342,20 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
             colmax = colmax.max(node2);
         }
         else {
-            log::debug!("error decoding field 2 of record {}", nb_record+1);
-            return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
+            log::debug!("error decoding field 2 of record {}", num_record);
+            return Err(anyhow!("error decoding field 2 of record  {}",num_record)); 
         }
+        // check for self loop
+        if node_id1 == node_id2 {
+            nb_self_loop += 1;
+            log::error!("csv_to_trimat  got diagonal term ({},{}) at record {:?} record num {}", node_id1, node_id2, record, num_record);
+            continue;
+        }
+        //
         if !directed && !hset.insert((node1,node2)) {
             if nb_potential_asymetry <= nb_warnings {
-                println!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, nb_record);
-                log::error!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, nb_record);
+                println!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, num_record);
+                log::error!("2-uple ({:?}, {:?}) already present, record {}", node_id1, node_id2, num_record);
                 log::error!("last edge inserted : {:?}", last_edge_inserted);
                 log::error!("record read : {:?}", record);
             }
@@ -402,13 +412,17 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     assert_eq!(trimat.shape().0,nodeindex.len());
     //
     assert_eq!(nb_nodes, nodeindex.len());
-    log::info!("\n\n csv file read!, nb nodes {}, nb edges  {}", nodeindex.len(), nb_record);
+    log::info!("\n\n csv file read!, nb nodes {}, nb edges loaded {}, nb_record read {}", nodeindex.len(), nb_record, num_record);
     log::info!("rowmax : {}, colmax : {}, nb_edges : {}", rowmax, colmax, trimat.nnz());
+    log::info!(" nb diagonal terms filtered : {}", nb_self_loop);
     // 
     if nb_potential_asymetry > 0 {
         log::error!("\n\n csv_to_trimat : CHECK SYMETRY number of couples definded more than one time : {}", nb_potential_asymetry);
         println!("\n\n csv_to_trimat : CHECK SYMETRY number of couples definded more than one time : {}", nb_potential_asymetry);
         println!("csv_to_trimat took the first couple ")
+    }
+    if nb_self_loop > 0 {
+        println!("nb diagonal terms filtered : {}", nb_self_loop);
     }
     //
     Ok((trimat, nodeindex))
