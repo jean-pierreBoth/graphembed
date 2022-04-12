@@ -1,16 +1,28 @@
 # resultats
 
-We give here some embedding times and AUC for the link prediction task
-All computations are done on a 8-core i7@2.3 Ghz
+We give here some embedding times and AUC for the link prediction task.
+The AUC are estimated from 5 successuve runs with a fraction of edges deleted.
 
-## Results Hope embedding
+We estimate AUC as described in:  
+*Link Prediction in complex Networks : A survey             
+Lü, Zhou. Physica 2011.*
 
-The eigenvalue range gives the range between higher and lower extracted singular values 
+The real fraction of edge deleted can be smaller than asked for as we avoid disconnecting nodes
+form which nothing can be learned. We ask for deleting 15% of edges. The real fraction of edges deleted
+is given in the column *"ratio discarded"*.
+
+All computations are done on a 8-core i7@2.3 Ghz laptop
+
+## Hope embedding results
+
+The eigenvalue range give the range between higher and lower extracted singular value.
+
+The colmun *svd* specify how the randomized approximation of the svd was done.
 
 1. Symetric Graphs
 
 |  graph     | nb nodes | nb edges   | hope mode   |  svd(rank/epsil)  | ratio discarded | eigenvalue range | AUC (link)|  time(s)  |
-|  ---       |  ---     | -------    |  -------    |    -------        |   -------       |   ------         |  ----     | -----     |
+|  ------    |  ---     | -------    |  -------    |    -------        |   :-------:       |   :------:     |  ----     | -----     |
 | Gnutella8  | 6301     | 20777      |  ADA        |rank 20, nbiter 10 |     0.137       |   21.6 - 4.8     |    0.82   |  1.2      |
 | Gnutella8  | 6301     | 20777      |  ADA        |rank 100, nbiter 10|     0.137       |   21.6 - 2.5     |    0.71   |  1.6      |
 | ca-AstroPh | 18772    | 396160     |  ADA        |   rank 100        |     0.15        |   83.7 - 14.3    |    0.964  |  11       |
@@ -19,7 +31,7 @@ The eigenvalue range gives the range between higher and lower extracted singular
 
 2. Asymetric Graphs
 
-## Results Sketching 
+## Sketching embedding results 
 
 1. Symetric Graphs
 

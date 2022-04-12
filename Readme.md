@@ -14,8 +14,7 @@ We use two strategies for graph embedding.
 It is based on multi hop neighbourhood identification via sensitive hashing.  
 Instead of using **ICWS** for hashing we use the more recent algorithm **probminhash** See [probminhash](https://arxiv.org/abs/1911.00675).
 The idea is to associate a probability distribution of neighbours of each point and hash this distribution to build an embedding vector.
-An extension of the paper is also implemented to get asymetric embedding for directed graph. In fact by default the algorithm runs in
-asymetric mode.
+An extension of the paper is also implemented to get asymetric embedding for directed graph.
 
 2. The second is based on the paper:
    
@@ -24,7 +23,7 @@ asymetric mode.
 
 The objective is to provide an asymetric graph embedding and get estimate of the precision of the embedding in function of its dimension.
 We use the Adamic-Adar (also known as Resource Allocatior in Kernel Graph litterature) representation of the graph.
-The asymetric embedding is obtined from the left and right singular eigenvectors of thr Adamic-Adar representatino of the graph.  
+The asymetric embedding is obtained from the left and right singular eigenvectors of the Adamic-Adar representatino of the graph.  
 The svd is approximated by randomization as described in Halko-Tropp 2011. 
 
 Katz index or Rooted Page Rank should also be possible using randomized Gsvd as described in :
@@ -53,12 +52,12 @@ be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
     les miserables  co occurence de mots dans un chapitre
 
 * CA-GrQc.txt       <https://snap.stanford.edu/data/ca-GrQc.html>
+*   p2p-Gnutella09.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella09.html>
 
 2. Asymetric graphs
    
 *   wiki-vote               <https://snap.stanford.edu/data/wiki-Vote.html>
 *   soc-epinions            <https://snap.stanford.edu/data/soc-Epinions1.html>
-*   p2p-Gnutella09.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella09.html>
         8114 nodes, 26013 edges
    
 * Cora : <http://konect.cc/networks/subelj_cora>
