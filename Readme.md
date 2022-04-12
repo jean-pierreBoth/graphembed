@@ -33,21 +33,7 @@ Katz index or Rooted Page Rank should also be possible using randomized Gsvd as 
 
 ## Some results
 
-We give here some embedding times and AUC for the link prediction task
-All computations are done on a 8-core i7@2.3 Ghz
-
-The data sets used are described in the next paragraphs.
-### Sketching embedding (Nodesketch and extension)
-
-|  graph      |  hop decay   | dimension  | AUC      | sys time(s) |  cpu time(s) |
-|  :---:      | :---:        |  :-----:   |  :----:  |  ----       |  ----------  |
-
-
-### Hope embedding
-
-The eigenvalue ratio gives the quotient of the smallest singular value reached to the greatest one, the smaller the better.
-|  graph  | mode (rank/epsil) | iter parameter | eigenvalue ratio |  AUC    | time(s) |
-|  :---:  |    :---:          |  :-----:       |  :----:          |  ----   |         |
+The results are detailed [here](./resultats.md)
 
 ## Some data sets
 
@@ -82,4 +68,9 @@ be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
 
 1. Symetric 
 
-* youtube.  Nodes: 1134890 Edges: 2987624
+* youtube.  Nodes: 1134890 Edges: 2987624 <https://snap.stanford.edu/data/com-Youtube.html>
+
+2. Asymetric
+   
+* twitter as tested in Hope  <http://konect.cc/networks/munmun_twitter_social>
+        465017 nodes
