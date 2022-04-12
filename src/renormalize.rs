@@ -4,11 +4,13 @@
 
 use anyhow::{anyhow};
 
+use std::time::{SystemTime};
+use cpu_time::ProcessTime;
+
 use ndarray_linalg::{Scalar, Lapack};
 use num_traits::float::Float;
 
-use rayon::iter::{ParallelIterator, IntoParallelIterator};
-use std::collections::HashMap;
+
 
 use ndarray::{Array1, Array2};
 use sprs::{CsMat,TriMatI};
@@ -20,6 +22,7 @@ use annembed::tools::svdapprox::*;
 pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where 
             F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F>  {
     //
+    log::debug!("csr_row_normalization");
     assert!(csr_mat.is_csr());
     //
     let (nb_row, _ ) = csr_mat.shape();
@@ -31,6 +34,10 @@ pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where
         {  // the borrow checker do not let us access csr_mat.indptr() and csr_mat.data_mut() simultaneously
             let data = csr_mat.data();
             for j in range_i.clone() {
+                if i == csr_mat.indices()[j] {
+                    println!("got diagonal term ({},{}) val : {} ", i,i, data[i]);
+                    std::panic!();
+                }
                 sum_i = sum_i + data[j];
             }
         }   
@@ -149,54 +156,20 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
         cols.push(col);
         values.push(*item.0);
     }
-    // fill in TriMatBase corresponding to DA in a Hash structure
-    let mut tri_dah  = HashMap::<(usize,usize), F>::with_capacity(nnz); 
     for i in 0..values.len() {
         let row = rows[i];
         assert!(diagonal[row] != F::zero());
         values[i] = values[i] / diagonal[row];
-        match tri_dah.insert((rows[i], cols[i]),values[i]) {
-            Some(_) => { log::debug!(" non unique item({}, {}", rows[i], cols[i]) ;},
-            _       => {  },
-        }
     }
-    //
-    log::debug!("computing all triplets");
-    let f_i = | i : usize | -> Vec::<(usize, usize , F)> {
-        let mut triplets = Vec::<(usize, usize , F)>::new();
-        if i % 1000 == 0 {
-            log::debug!("treating row {}", i);
-        }
-        let row_i = mat.outer_view(i).unwrap();
-        for j in 0..nb_row {
-            let mut row_i_iter= row_i.iter();
-            while let Some((k, &val_ik)) = row_i_iter.next() {
+    let da_trimat = TriMatI::<F, usize>::from_triplets((nb_row,nb_col), rows, cols, values);
+    let da = da_trimat.to_csr();
+    // now we use sprs::smmp::mul_csr_csr
 
-                // now we have our k in matrix multiplication a_ij = sum a_ik * b_kj
-                match tri_dah.get(&(k, j)) {
-                    Some(term_kj) => {
-                        if *term_kj != F::zero() {
-                            triplets.push((i,j, val_ik * *term_kj));
-                        }                       
-                    }
-                    _ => {}
-                }
-            } // end of while
-        }  // end of for j
-        //
-        return triplets
-    };   // end of our closure
-    let all_triplets : Vec<Vec<(usize, usize, F)>> = (0..nb_row).into_par_iter().map(|i| f_i(i)).collect();
-    log::debug!(" got all triplets");
-    //
-    let nb_triplets : usize = all_triplets.iter().fold(0, | acc, v| acc+ v.len());
-    log::debug!("got nb_triplets in adamic adar : {}", nb_triplets);
-    //
-    let mut tri_adamic = TriMatI::<F, usize>::with_capacity((nb_row, nb_row), nb_triplets);
-    for i in 0..all_triplets.len() {
-        all_triplets[i].iter().for_each(|t| tri_adamic.add_triplet(t.0, t.1, t.2));
-    };
-    let csmat_ada : CsMat<F> = tri_adamic.to_csr();
+    log::debug!("calling sprs::smmp::mul_csr_csr ");
+    let cpu_start = ProcessTime::now();
+    let sys_start = SystemTime::now();  
+    let csmat_ada = sprs::smmp::mul_csr_csr(mat.view(), da.view());
+    log::debug!("sprs::smmp::mul_csr_csr time elasped sys (s) sys, {}, cpu : {:?}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
     *mat = csmat_ada;
     log::debug!("exiting at end of adamic_adar_normalization_csmat");
     //
