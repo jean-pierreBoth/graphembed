@@ -304,9 +304,9 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
         if log_enabled!(log::Level::Trace) {
             log::debug!("distance between deleted edge nodes {} and {} : {:.3e}", del_edge.0, del_edge.1, dist_del_edge);
             log::debug!("distance between no edge nodes {} and {} : {:.3e}",no_edge.0, no_edge.1, dist_no_edge);
-            log::trace!(" dump node del_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(del_edge.0, 0));
-            log::trace!(" dump node del_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(del_edge.1, 1));        
-            if dist_no_edge < 1. {
+//            log::trace!(" dump node del_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(del_edge.0, 0));
+//            log::trace!(" dump node del_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(del_edge.1, 1));        
+            if dist_no_edge <  dist_del_edge {
                 log::debug!(" dump node del_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(del_edge.0, 0));
                 log::debug!(" dump node del_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(del_edge.1, 1)); 
                 log::debug!(" dump node no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, 0));

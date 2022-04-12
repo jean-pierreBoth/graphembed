@@ -559,7 +559,6 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
             let mut rows = Vec::<usize>::with_capacity(nnz+ n);
             let mut cols = Vec::<usize>::with_capacity(nnz+n);
             let mut values = Vec::<F>::with_capacity(nnz+n);
-            let mut already_diag = Array1::<u8>::zeros(n);
             let mut iter = mat.iter();
             let beta_f = F::from_f64(beta).unwrap();
             while let Some((val, (row, col))) = iter.next() {
@@ -574,18 +573,14 @@ fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) 
                     }
                     values.push(- beta_f * *val);
                 } else {
-                    log::info!("there was sthing i {:?} val {:?} ", row , val);
-                    values.push(F::one() - beta_f * *val);
-                    already_diag[row] = 1;
+                    log::info!("there was sthing i ({:?}, {:?}),  val {:?} ", row , col, val);
                 }
             };
             // fill values in diag not already initialized
             for i in 0..n {
-                if already_diag[i] == 0 {
                     rows.push(i);
                     cols.push(i);
                     values.push(F::one()); 
-                }                   
             }
             let trimat = TriMatBase::<Vec<usize>, Vec<F>>::from_triplets((n,n),rows, cols, values);
             let csr_mat : CsMat<F> = trimat.to_csr();
