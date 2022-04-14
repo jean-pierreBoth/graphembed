@@ -147,7 +147,7 @@ impl  NodeSketch {
 
     /// computes the embedding 
     pub fn compute_embedded(&mut self) -> Result<Embedded<usize>,anyhow::Error> {
-        log::debug!("in nodesketch::compute_Embedded");
+        log::debug!("in Nodesketch::compute_Embedded");
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
         //

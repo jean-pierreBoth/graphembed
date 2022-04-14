@@ -80,7 +80,7 @@ pub fn dense_row_normalization<F>(mat : &mut Array2<F>)
 
 // do a Row normalization for dense or csr matrix
 pub fn matrepr_row_normalization<F> (mat : &mut MatRepr<F>)
-    where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Sync + Default {
     match &mut mat.get_data_mut() {
         MatMode::FULL(mat) => { dense_row_normalization(mat); }, 
         MatMode::CSR(csrmat) =>  { 

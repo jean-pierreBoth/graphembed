@@ -177,7 +177,7 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
 /// 
 /// Returns the MatRepr field and a mapping from NodeId to a rank in matrix.
 pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim : u8) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
-    where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default + Sync {
     //
     let res_csv = csv_to_trimat(filepath, directed, delim);
     if res_csv.is_ok() {
@@ -198,7 +198,7 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 /// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  
 /// For an asymetric graph directed must be set to true.
 pub fn csv_to_csrmat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bool) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 
-    where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+    where F: FromStr + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Sync + Default {
     //
     log::info!("\n\n csv_to_csrmat_delimiters, loading file {:?}", filepath);
     //

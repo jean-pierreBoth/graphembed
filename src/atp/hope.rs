@@ -533,7 +533,7 @@ impl <F> EmbedderT<F> for Hope<F>
 // cannot avoid allocations (See as Katz Index and Rooted Page Rank needs a reallocation for a different mat each! which
 // forbid using reference in GSvdApprox if we want to keep one definition a GSvdApprox)
 fn compute_1_minus_beta_mat<F>(mat : &MatRepr<F>, beta : f64, transpose : bool) -> MatRepr<F> 
-        where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
+        where  F : Sync + Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + Default {
     //
     match mat.get_data() {
         MatMode::FULL(mat) => {

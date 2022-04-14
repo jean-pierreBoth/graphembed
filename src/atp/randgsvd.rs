@@ -82,8 +82,9 @@ pub struct GSvdApprox<F: Scalar> {
 
 
 impl  <F> GSvdApprox<F>  
-    where  F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc + 
+    where  F : Send + Sync + Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc + 
                for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + Default {
+    //
     pub fn new(mat1 : MatRepr<F>, mat2 : MatRepr<F>, target: RangeApproxMode, opt_params : Option<GSvdOptParams>) -> Self {
         // check for dimensions constraints
         if mat1.shape()[1] != mat2.shape()[1] {

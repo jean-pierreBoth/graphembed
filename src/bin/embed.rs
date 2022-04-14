@@ -305,7 +305,7 @@ fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow:
         _      => { return Err(anyhow!("could not parse decay"));}
     };  // end of skip match 
     // 
-    let symetric = true; // defualt is symetric, we do ot have here the global io parameter
+    let symetric = true; // default is symetric, we do not have here the global io parameter
     let validation_params = ValidationParams::new(delete_proba, nbpass, symetric);
     //
     let embedding_params_res = parse_embedding_cmd(matches);
@@ -475,8 +475,8 @@ pub fn main() {
             let res = parse_validation_cmd(sub_m);
             match res {
                 Ok(cmd) =>  { 
-                                            validation_params = Some(cmd.validation_params);
-                                            embedding_parameters = Some(cmd.embedding_params);
+                    validation_params = Some(cmd.validation_params);
+                    embedding_parameters = Some(cmd.embedding_params);
                 },
                 _                     => {  },
             }
@@ -577,6 +577,15 @@ pub fn main() {
         EmbeddingMode::NodeSketch => {
             log::info!("embedding mode : Sketching");
             let sketching_params = embedding_parameters.sketching.unwrap();
+            // check coherence with symetry of graph, symetric graph can run in asymetric mode as reading csv we symetrize, the inverse not possible
+            if !symetric_graph && sketching_params.is_symetric(){
+                log::info!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
+                println!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
+                std::process::exit(1);
+            }
+            else if symetric_graph && !sketching_params.is_symetric() {
+                log::info!("doing asymetric embedding for symetric graph");
+            }          
             log::debug!(" sketching embedding parameters : {:?}", sketching_params);
             if validation_params.is_none() {
                 log::debug!("running embedding without validation");
@@ -584,7 +593,7 @@ pub fn main() {
                 // now we allocate an embedder (sthing that implement the Embedder trait)
                 match sketching_symetry {
                     true => {   
-                        let mut nodesketch = NodeSketch::new(embedding_parameters.sketching.unwrap(), trimat);
+                        let mut nodesketch = NodeSketch::new(sketching_params, trimat);
                         let embedding = Embedding::new(node_index, &mut nodesketch);
                         if embedding.is_err() {
                             log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
@@ -608,6 +617,12 @@ pub fn main() {
                 log::debug!("validation , validation parameters : {:?}", validation_params);
                 log::debug!("sketching parameters : {:?}", sketching_params);
                 let sketching_symetry = sketching_params.is_symetric();
+                if !symetric_graph && sketching_params.is_symetric() {
+                    log::info!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
+                    println!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
+                    std::process::exit(1);
+                }
+                // we are sure to have a coherent symetry arguments
                 if !sketching_symetry {
                     log::info!("doing validaton runs for nodesketchasym embedding");
                     // construction of the function necessay for AUC iterations            
@@ -621,7 +636,7 @@ pub fn main() {
                 else {
                     log::info!("doing validaton runs for nodesketch embedding");
                     let f = | trimat : TriMatI<f64, usize> | -> Embedded<usize> {
-                        let mut nodesketch = NodeSketch::new(embedding_parameters.sketching.unwrap(), trimat);
+                        let mut nodesketch = NodeSketch::new(sketching_params, trimat);
                         let res = nodesketch.embed();
                         res.unwrap()
                     };

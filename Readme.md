@@ -13,7 +13,9 @@ We use two strategies for graph embedding.
 
 It is based on multi hop neighbourhood identification via sensitive hashing.  
 Instead of using **ICWS** for hashing we use the more recent algorithm **probminhash** See [probminhash](https://arxiv.org/abs/1911.00675).
-The idea is to associate a probability distribution of neighbours of each point and hash this distribution to build an embedding vector.
+The algorithm associates a probability distribution on neighbours of each point depending on edge weights and distance to the point.
+Then this distribution is hashed to build an embedding vector. The distance between embedded vectors is the Jaccard distance so we get
+a real distance on the embedding space.
 An extension of the paper is also implemented to get asymetric embedding for directed graph.
 
 2. The second is based on the paper:
@@ -23,16 +25,14 @@ An extension of the paper is also implemented to get asymetric embedding for dir
 
 The objective is to provide an asymetric graph embedding and get estimate of the precision of the embedding in function of its dimension.
 We use the Adamic-Adar (also known as Resource Allocatior in Kernel Graph litterature) representation of the graph.
-The asymetric embedding is obtained from the left and right singular eigenvectors of the Adamic-Adar representatino of the graph.  
-The svd is approximated by randomization as described in Halko-Tropp 2011. 
+The asymetric embedding is obtained from the left and right singular eigenvectors of the Adamic-Adar representatino of the graph.
+Source node are related to left singular vectors and target nodes to the right ones. The similarity measure is the dot product, so it is not a norm.  
+The svd is approximated by randomization as described in Halko-Tropp 2011 as implmented in the annembed crate.
 
 Katz index or Rooted Page Rank should also be possible using randomized Gsvd as described in :
  *Randomized Generalized Singular Value Decomposition CAMC 2021*
     W. Wei H. Zhang, X. Yang, X. Chen
 
-## Some results
-
-The results are detailed [here](./resultats.md)
 
 ## Some data sets
 
@@ -65,6 +65,8 @@ be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
 
 #### Some larger data tests for user to download
 
+Beware that some data are in Tsv format and need to be converted to Csv, before being read by the program.  
+
 1. Symetric 
 
 * youtube.  Nodes: 1134890 Edges: 2987624 <https://snap.stanford.edu/data/com-Youtube.html>
@@ -72,4 +74,27 @@ be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
 2. Asymetric
    
 * twitter as tested in Hope  <http://konect.cc/networks/munmun_twitter_social>
-        465017 nodes
+        465017 nodes 834797 edges
+
+
+## Some results
+
+Embedding and link prediction evaluation for the above data sets are given [here](./resultats.md)
+
+### Some qualitative comments
+
+## Usage
+
+The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
+It is intrinsically asymetric in nature. It nevertheless gives access to the spectrum of Adamic Adar representing the graph and
+so to the required dimension to get a valid embedding in $R^{n}$.  
+
+The Sketching embedding is much faster for large graphs but embeds in space consisting in sequences of node id equipped with the Jaccard Distance.
+
+The *embed* module takes embedding and possibly validation in one directive.
+
+The general syntax is :
+
+embed file_description [validation_command --validation_arguments] embedding_command --embedding_argumeents
+
+It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
