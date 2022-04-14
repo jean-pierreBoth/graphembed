@@ -86,10 +86,10 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
                 }
             }
             else {
-                if degrees_out[row] > 1 && degrees_in[col] > 1 && row != col {
+                if (degrees_out[row] > 1 && degrees_in[col] > 1) && row != col {
                     discard = true;
                 }
-            else {
+                else {
                     nb_isolation_not_discarded += 1; 
                 }
             }
@@ -258,7 +258,7 @@ pub fn estimate_precision<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, de
 
 /// type G is necessary beccause we embed in possibly different type than F. (for example in Array<usize> with nodesketch)
 fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bool, 
-            embedder : &dyn Fn(TriMatI<F, usize>) -> E, rng : &mut Xoshiro256PlusPlus) -> f64
+            embedder : &dyn Fn(TriMatI<F, usize>) -> E, mut rng: Xoshiro256PlusPlus) -> f64
             where   F : Default + Copy + std::marker::Sync,
                     G : std::fmt::Debug,
                     E : EmbeddedT<G> + std::marker::Sync {
@@ -270,7 +270,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
     // sample nb_sample 2-uples of edges one from the deleted edge and one inexistent (not in csmat)
     // count the number of times the distance of the first is less than the second.
     // filter
-    let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
+    let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, &mut rng);
     // need to store trimat index before move to embedding
     let mut trimat_set = HashSet::<(usize,usize)>::with_capacity(trimat.nnz());
     for triplet in trimat.triplet_iter() {
@@ -289,10 +289,10 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
     let del_uniform = Uniform::<usize>::from(0..nb_deleted);
     let node_random = Uniform::<usize>::from(0..nb_nodes);
     for _k in 0..nb_sample {
-        let del_edge = deleted_edges.get_index(del_uniform.sample(rng)).unwrap();
+        let del_edge = deleted_edges.get_index(del_uniform.sample(&mut rng)).unwrap();
         let no_edge = loop {
-            let i = node_random.sample(rng);
-            let j = node_random.sample(rng);
+            let i = node_random.sample(&mut rng);
+            let j = node_random.sample(&mut rng);
             if i != j && !trimat_set.contains(&(i,j)) && deleted_edges.get_index_of(&(i,j)).is_none() {
                 // edge (i,j) not on diagonal and neither in trimat set neither in deleted_edges, so inexistent edge
                 break (i,j);
@@ -335,7 +335,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
 /// type G is necessary beccause we embed in a possibly different type than F. (for example in Array<usize> with nodesketch)
 
 pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, symetric : bool, 
-            embedder : &dyn Fn(TriMatI<F, usize>) -> E) -> Vec<f64>
+            embedder : &(dyn Fn(TriMatI<F, usize>) -> E + Sync)) -> Vec<f64>
     where   F : Default + Copy + std::marker::Sync,
             G : std::fmt::Debug,
             E : EmbeddedT<G> + std::marker::Sync {
@@ -352,10 +352,16 @@ pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_p
         }
         //
         let mut auc = Vec::<f64>::with_capacity(nbiter);
-        // TODO can be made //
-        for i in 0..nbiter {
-            let iter_auc = one_auc_iteration(csmat, delete_proba,  symetric, embedder, &mut rngs[i]);
-            auc.push(iter_auc);
+        // switch in case of debugging
+        let parallel = false;
+        if parallel {
+            auc = (0..nbiter).into_par_iter().map(|i| one_auc_iteration(csmat, delete_proba,  symetric, embedder, rngs[i].clone())).collect();
+        }
+        else {
+            for i in 0..nbiter {
+                let iter_auc = one_auc_iteration(csmat, delete_proba,  symetric, embedder, rngs[i].clone());
+                auc.push(iter_auc);
+            }
         }
         let mean_auc : f64 = auc.iter().sum::<f64>() / (auc.len() as f64);
         log::info!("estimate_auc : mean auc : {:.3e}", mean_auc);
