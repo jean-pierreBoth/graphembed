@@ -1,6 +1,6 @@
 # Graphite
 
-The purpose of this crate is to provide asymetric (and also symetric) embedding of graphs
+The purpose of this crate is to provide asymetric (and also symetric) embedding of graphs positively weighted edges.
 
 **work in progress...**
 ## Methods
@@ -24,7 +24,7 @@ An extension of the paper is also implemented to get asymetric embedding for dir
     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
 
 The objective is to provide an asymetric graph embedding and get estimate of the precision of the embedding in function of its dimension.
-We use the Adamic-Adar (also known as Resource Allocatior in Kernel Graph litterature) representation of the graph.
+We use the Adamic-Adar representation of the graph.
 The asymetric embedding is obtained from the left and right singular eigenvectors of the Adamic-Adar representatino of the graph.
 Source node are related to left singular vectors and target nodes to the right ones. The similarity measure is the dot product, so it is not a norm.  
 The svd is approximated by randomization as described in Halko-Tropp 2011 as implmented in the annembed crate.
@@ -57,6 +57,8 @@ be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
 2. Asymetric graphs
    
 *   wiki-vote               <https://snap.stanford.edu/data/wiki-Vote.html>
+        7115 nodes 103689 edges
+    
 *   soc-epinions            <https://snap.stanford.edu/data/soc-Epinions1.html>
         8114 nodes, 26013 edges
    
