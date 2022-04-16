@@ -424,6 +424,16 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
     if nb_self_loop > 0 {
         println!("nb diagonal terms filtered : {}", nb_self_loop);
     }
+    // dump indexation 
+    if log::log_enabled!(log::Level::Trace) {
+        log::trace!("dump of indexation set");
+        let mut iter = nodeindex.iter();
+        let mut rank = 0;
+        while let Some(id) = iter.next() {
+            println!(" rank : {}, node id : {} ", rank, id);
+            rank += 1;
+        }
+    }
     //
     Ok((trimat, nodeindex))
 } // end of csv_to_trimat

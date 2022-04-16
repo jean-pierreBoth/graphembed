@@ -57,7 +57,9 @@ impl NodeSketchAsym {
 
     pub fn new(params : NodeSketchParams ,mut trimat : TriMatI<f64, usize>) -> Self {
         //
-        let csrmat = diagonal_augmentation(&mut trimat, 1.);
+        log::debug!("allocating NodeSketchAsym : {:?}", params);
+        //
+        let csrmat = diagonal_augmentation(&mut trimat, 0.0);
         let mut sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
@@ -102,7 +104,7 @@ impl NodeSketchAsym {
     fn sketch_slamatrix_out(&mut self, parallel : bool) {
         // a closure to work on previous_sketches_out
         let treat_row_out = | row : usize | {
-            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), row);
             let col_range = self.csrmat.indptr().outer_inds_sz(row);
             log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
             for k in col_range {
@@ -141,7 +143,7 @@ impl NodeSketchAsym {
         let transposed_mat = self.csrmat.transpose_view();
         // a closure to treat rows but working on transposed_mat instead of self.csrmat as in sketch_slamatrix_out
         let treat_row_in = | row : usize | {
-            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), 0);
+            let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), row);
             let col_range = transposed_mat.indptr().outer_inds_sz(row);
             log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
             for k in col_range {
@@ -158,7 +160,7 @@ impl NodeSketchAsym {
         if !parallel {
             log::debug!(" not parallel case nb rows  {}",self.csrmat.rows()) ;
             for row in 0..transposed_mat.rows() {
-                if self.csrmat.indptr().nnz_in_outer_sz(row) > 0 {
+                if transposed_mat.indptr().nnz_in_outer_sz(row) > 0 {
                     log::trace!("sketch_slamatrix_in sketching row {}", row);
                     treat_row_in(row);
                 }
@@ -208,7 +210,7 @@ impl NodeSketchAsym {
 
     // do iteration on sketches separately for in neighbours and out neighbours
     fn parallel_iteration(&mut self) {
-        log::debug!("nodesketchasym : parallel_iteration");
+        log::trace!("nodesketchasym : parallel_iteration");
         // now we repeatedly merge csrmat (loop augmented matrix) with sketches
         (0..self.csrmat.rows()).into_par_iter().for_each( |row| self.treat_row_and_col(&row));
         // transfer sketches into previous sketches
@@ -232,16 +234,15 @@ impl NodeSketchAsym {
     fn treat_row_and_col(&self, row : &usize) {
         // if we have no data ar row we return immediately
         let row_vec = self.csrmat.outer_view(*row);
+        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
         if row_vec.is_none() {
-            return;
+            log::debug!("NodeSketchAsym::treat_row_and_col, no outgoing edge for row : {}", row);
         }
         let row_vec = row_vec.unwrap();
         // out treatment new neighbourhood for current iteration 
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
-        let weight = self.get_decay_weight()/self.get_sketch_size() as f64;
         // get an iterator on neighbours of node corresponding to row 
         let mut row_iter = row_vec.iter();
-
         while let Some(neighbour) = row_iter.next() {
             // neighbour.0 is a neighbour of row, it is brought with the weight connection from row to neighbour
             match v_k.get_mut(&neighbour.0) {
@@ -273,7 +274,6 @@ impl NodeSketchAsym {
                 };                    
             }
         } // end of while on previous sketches out
-
         // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
         // as we possibly got more.
         let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), *row);
@@ -284,14 +284,17 @@ impl NodeSketchAsym {
         for j in 0..self.get_sketch_size() {
             row_write[j] = sketch[j];
         }
+        // end treatment outgoing edge
         //
         // now the problem for in treatment is that we should better have a csc mat?         
         // For a directed graph we suppose the Csr matrix so that mat[[i,j]] is edge from i to j.
         // So we get a transposed view of self.csrmat
         //
         let transpose = self.csrmat.transpose_view();
+        assert!(transpose.is_csc());
         let row_vec = transpose.outer_view(*row);
         if row_vec.is_none() {
+            log::debug!("NodeSketchAsym::treat_row_and_col, no incoming edge for row : {}", row);
             return;
         }
         let row_vec = row_vec.unwrap();
@@ -353,6 +356,7 @@ impl NodeSketchAsym {
         let sys_start = SystemTime::now();        
         // first iteration, we fill previous sketches
         let parallel = self.params.get_parallel();
+        log::debug!("NodeSketchAsym parallel mode : {}", parallel);
         self.sketch_slamatrix(parallel);    
         for i in 0.. self.params.get_nb_iter() {
             log::debug!("compute_embedded , iteration {}", i);
