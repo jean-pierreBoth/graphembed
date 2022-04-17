@@ -25,6 +25,7 @@
 use ndarray::{Array2, ArrayView1};
 use indexmap::IndexSet;
 
+use crate::sketching::{IN,OUT};
 
 /// to represent the distance in embedded space between 2 vectors
 type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
@@ -169,6 +170,9 @@ impl <F> EmbeddedAsym<F> {
 } // end of impl block for EmbeddedAsym
 
 
+//const IN : u8 = 1;
+//const OUT : u8 = 0;
+
 impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
 
     fn is_symetric(&self) -> bool {
@@ -205,8 +209,8 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     /// For embedding that has multiple embedding by node (example asysmetric embedding , the tag is used)
     fn get_embedded_node(&self, node_rank: usize, tag : u8) -> ArrayView1<F> {
         match tag {
-            0 => { return self.source.row(node_rank); }
-            1 => { return self.target.row(node_rank); }
+            OUT => { return self.source.row(node_rank); }
+            IN => { return self.target.row(node_rank); }
             _ => { 
                     log::error!(" for asymetric embedding tag in get_embedded_node must be 0 or 1");
                     std::panic!("for asymetric embedding tag in get_embedded_node must be 0 or 1");

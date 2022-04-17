@@ -41,6 +41,8 @@ pub struct NodeSketchAsym {
     params : NodeSketchParams,
     /// Row compressed matrix representing self loop augmented graph i.e initial neighbourhood info
     csrmat : CsMatI<f64, usize>,
+    /// the transposed matrix
+    csrmat_transposed : CsMatI<f64, usize>,
     /// The matrix storing all sketches along iterations for neighbours directed toward current node
     sketches_in : Vec<RowSketch>,
     ///
@@ -59,7 +61,8 @@ impl NodeSketchAsym {
         //
         log::debug!("allocating NodeSketchAsym : {:?}", params);
         //
-        let csrmat = diagonal_augmentation(&mut trimat, 0.0);
+        let csrmat = diagonal_augmentation(&mut trimat, 1.0);
+        let csrmat_transposed = csrmat.transpose_view().to_owned().to_csr();
         let mut sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
@@ -77,7 +80,7 @@ impl NodeSketchAsym {
             let previous_sketch_out = Array1::<usize>::zeros(sketch_size);
             previous_sketches_out.push(Arc::new(RwLock::new(previous_sketch_out)));            
         }
-        NodeSketchAsym{params, csrmat, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
+        NodeSketchAsym{params, csrmat, csrmat_transposed, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
     }  // end of for NodeSketchAsym::new
     
 
@@ -140,15 +143,14 @@ impl NodeSketchAsym {
     /// We must initialize self.previous_sketches_in
     fn sketch_slamatrix_in(&mut self, parallel : bool) {
         //
-        let transposed_mat = self.csrmat.transpose_view();
         // a closure to treat rows but working on transposed_mat instead of self.csrmat as in sketch_slamatrix_out
         let treat_row_in = | row : usize | {
             let mut probminhash3 = ProbMinHash3::<usize, AHasher>::new(self.get_sketch_size(), row);
-            let col_range = transposed_mat.indptr().outer_inds_sz(row);
+            let col_range = self.csrmat_transposed.indptr().outer_inds_sz(row);
             log::trace!("sketch_slamatrix i : {}, col_range : {:?}", row, col_range);            
             for k in col_range {
-                let j = transposed_mat.indices()[k];
-                let w = transposed_mat.data()[k];
+                let j = self.csrmat_transposed.indices()[k];
+                let w = self.csrmat_transposed.data()[k];
                 log::trace!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
                 probminhash3.hash_item(j,w);
             }
@@ -159,8 +161,8 @@ impl NodeSketchAsym {
         };
         if !parallel {
             log::debug!(" not parallel case nb rows  {}",self.csrmat.rows()) ;
-            for row in 0..transposed_mat.rows() {
-                if transposed_mat.indptr().nnz_in_outer_sz(row) > 0 {
+            for row in 0..self.csrmat_transposed.rows() {
+                if self.csrmat_transposed.indptr().nnz_in_outer_sz(row) > 0 {
                     log::trace!("sketch_slamatrix_in sketching row {}", row);
                     treat_row_in(row);
                 }
@@ -168,7 +170,7 @@ impl NodeSketchAsym {
         } 
         else {
             // parallel case
-            (0..transposed_mat.rows()).into_par_iter().for_each(| row|  if transposed_mat.indptr().nnz_in_outer_sz(row) > 0 { treat_row_in(row); })
+            (0..self.csrmat_transposed.rows()).into_par_iter().for_each(| row|  if self.csrmat_transposed.indptr().nnz_in_outer_sz(row) > 0 { treat_row_in(row); })
         }
         //
         log::debug!("sketch_slamatrix_in done");        
@@ -290,9 +292,7 @@ impl NodeSketchAsym {
         // For a directed graph we suppose the Csr matrix so that mat[[i,j]] is edge from i to j.
         // So we get a transposed view of self.csrmat
         //
-        let transpose = self.csrmat.transpose_view();
-        assert!(transpose.is_csc());
-        let row_vec = transpose.outer_view(*row);
+        let row_vec = self.csrmat_transposed.outer_view(*row);
         if row_vec.is_none() {
             log::debug!("NodeSketchAsym::treat_row_and_col, no incoming edge for row : {}", row);
             return;
