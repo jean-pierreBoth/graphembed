@@ -38,6 +38,7 @@ impl NodeSketchParams {
 
     /// useful to set flag received from argument related to datafile reading
     /// or for getting asymetric embedding even with symetric data to check coherence/stability
+    /// but running in symetric mode with asymetric graph is checked against.
     pub fn set_symetry(&mut self, symetry : bool) { self.symetric = symetry}
 
 } // end of NodeSketchParams

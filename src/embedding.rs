@@ -26,6 +26,7 @@ use ndarray::{Array2, ArrayView1};
 use indexmap::IndexSet;
 
 use crate::sketching::{IN,OUT};
+use crate::tools::degrees::*;
 
 /// to represent the distance in embedded space between 2 vectors
 type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
@@ -144,6 +145,8 @@ pub struct EmbeddedAsym<F> {
     source : Array2<F>,
     /// target node representation
     target : Array2<F>,
+    ///
+    degrees : Option<Vec<Degree>>,
     /// distance
     distance : Distance<F>,
 } // end of struct EmbeddedAsym
@@ -151,10 +154,10 @@ pub struct EmbeddedAsym<F> {
 
 impl <F> EmbeddedAsym<F> {
 
-    pub(crate) fn new(source : Array2<F>, target : Array2<F>, distance : Distance<F>) -> Self {
+    pub(crate) fn new(source : Array2<F>, target : Array2<F>, degrees : Option<Vec<Degree>>, distance : Distance<F>) -> Self {
         assert_eq!(source.dim().0, target.dim().0);
         assert_eq!(source.dim().1, target.dim().1);
-        EmbeddedAsym{source, target, distance}
+        EmbeddedAsym{source, target, degrees, distance}
     }
 
     /// get representation of nodes as sources
@@ -194,10 +197,32 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     /// To get an interface with original nodes id,  use the Embedding structure wwhich has a mapping from node_id to node_rank
     /// get distance FROM source node_rank1 TO target node_rank2 if Embedded is asymetric, in symetric case there is no order) 
     fn get_noderank_distance(&self, node_rank1 : usize, node_rank2 : usize) -> f64 {
-        let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
-        let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
-        0.5 * (dist_s + dist_t)
-    }
+        let mut distances = Vec::<f64>::with_capacity(3);
+        //
+        if let Some(degrees) = &self.degrees {
+            if degrees[node_rank1].d_out > 0 &&  degrees[node_rank2].d_out > 0 {
+                let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
+                distances.push(dist_s);
+            }
+
+            if degrees[node_rank1].d_in > 0 &&  degrees[node_rank2].d_in > 0 {
+                let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
+                distances.push(dist_t);
+            }
+            // 
+            if degrees[node_rank1].d_out > 0 &&  degrees[node_rank2].d_in > 0 {
+                let dist_t = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
+                distances.push(dist_t);
+            }
+            let dist = distances.iter().sum::<f64>() / distances.len() as f64;
+            return dist;
+        }
+        else {
+            std::panic!("not yet");
+        }
+        // TODO the mixed case source -> target
+
+    } // end of get_noderank_distance
 
     /// get number of nodes embedded.
     fn get_nb_nodes(&self) -> usize {

@@ -25,6 +25,7 @@ use num_traits::float::*;
 //use sprs::prod;
 use sprs::{CsMat, TriMatI, TriMatBase};
 
+use crate::tools::{degrees::*};
 
 use annembed::tools::svdapprox::{MatRepr, MatMode, RangeApproxMode, SvdApprox, SvdResult};
 
@@ -112,6 +113,8 @@ pub struct Hope<F> {
     params : HopeParams,
     /// the graph as a matrix
     mat : MatRepr<F>,
+    ///
+    degrees : Option<Vec<Degree>>, 
     /// store the eigenvalue weighting the eigenvectors. This give information on precision.
     sigma_q : Option<Array1<F>>
 }
@@ -123,13 +126,15 @@ impl <F> Hope<F>  where
          Default + Send + Sync{
 
     pub fn new(params : HopeParams, trimat : TriMatI<F, usize>) -> Self {
-        Hope::<F>{params, mat : MatRepr::from_csrmat(trimat.to_csr()), sigma_q : None}
+        let csrmat = trimat.to_csr();
+        let degrees = get_degrees(&csrmat);
+        Hope::<F>{params, mat : MatRepr::from_csrmat(trimat.to_csr()), degrees : Some(degrees), sigma_q : None}
     }
 
     /// instantiate a Hope problem with the adjacency matrix
     pub fn from_ndarray(params : HopeParams, mat : Array2<F>) -> Self {
         let mat = MatRepr::from_array2(mat);
-        Hope::<F> {params, mat, sigma_q : None}
+        Hope::<F> {params, mat, degrees: None, sigma_q : None}
     }
 
     pub fn get_nb_nodes(&self) -> usize {
@@ -196,7 +201,7 @@ impl <F> Hope<F>  where
         //
         log::debug!("hope::make_rooted_pagerank_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         //
-        crate::renormalize::matrepr_row_normalization(& mut self.mat);
+        crate::tools::renormalize::matrepr_row_normalization(& mut self.mat);
         // Mg is I - alfa * P where P is the normalized adjacency matrix to a probability matrix
         let mat_g = compute_1_minus_beta_mat(&self.mat, factor, true);
         // compute Ml = (1-alfa) I
@@ -223,7 +228,7 @@ impl <F> Hope<F>  where
         //
         log::debug!("hope::embed_rpr_simple : {:?}, factor : {:?}", approx_mode, factor);
         //
-        crate::renormalize::matrepr_row_normalization(& mut self.mat);
+        crate::tools::renormalize::matrepr_row_normalization(& mut self.mat);
         // Mg is I - alfa * P where P is the normalized adjacency matrix to a probability matrix
         let t_mat_g = compute_1_minus_beta_mat(&self.mat, factor, true);
         // compute svd approx of transpose(mat_g) which U and V as inverse of Mg                 
@@ -280,7 +285,7 @@ impl <F> Hope<F>  where
             log::trace!("\n target {} {:?}", i, target.row(i));
         } 
         log::trace!("exiting embed_from_svd_result");
-        let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
+        let embedded_a = EmbeddedAsym::new(source, target, None, hope_distance);
         //
         return Ok(embedded_a);
     } // end of embed_rpr_simple
@@ -294,7 +299,7 @@ impl <F> Hope<F>  where
         //
 
         log::debug!("hope::make_adamicadar_problem");
-        crate::renormalize::matrepr_adamic_adar_normalization(& mut self.mat);
+        crate::tools::renormalize::matrepr_adamic_adar_normalization(& mut self.mat);
         // Mg is I, so in fact it is useless we have a simple SVD to approximate
         let mat_l = &self.mat;
         let svd_approx = SvdApprox::new(mat_l);
@@ -381,7 +386,7 @@ impl <F> Hope<F>  where
         }
         self.sigma_q = Some(Array1::from_iter(sigma_q.iter().map(|x| x.1)));
         //
-        let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
+        let embedded_a = EmbeddedAsym::new(source, target, None, hope_distance);
         //
         Ok(embedded_a)
     } // end of embed_from_gsvd_result
@@ -428,7 +433,7 @@ impl <F> Hope<F>  where
             log::trace!("\n target {} {:?}", i, target.row(i));
         } 
         log::trace!("exiting embed_from_svd_result");
-        let embedded_a = EmbeddedAsym::new(source, target, hope_distance);
+        let embedded_a = EmbeddedAsym::new(source, target, None, hope_distance);
         //
         return Ok(embedded_a);
    } // end of embed_from_svd_result

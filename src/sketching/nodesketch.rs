@@ -65,7 +65,7 @@ impl  NodeSketch {
     // We pass a Trimat as we have to do self loop augmentation
     pub fn new(params : NodeSketchParams, mut trimat :TriMatI<f64, usize>) -> Self {
         // TODO can adjust weight depending on context?
-        let csrmat = diagonal_augmentation(&mut trimat, 1.);
+        let csrmat = diagonal_augmentation(&mut trimat,1.);
         log::debug!(" NodeSketch new csrmat dims nb_rows {}, nb_cols {} ", csrmat.rows(), csrmat.cols());
         let mut sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());

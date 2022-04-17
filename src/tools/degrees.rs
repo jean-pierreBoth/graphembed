@@ -6,13 +6,18 @@ use sprs::{CsMatI};
 
 
 /// first component is in, second component is out!
-pub struct Degree(pub u32, pub u32);
+#[derive(Copy,Clone, Debug)]
+pub struct Degree {
+    pub d_in : u32, 
+    pub d_out : u32,
+}
 
 impl Degree {
+    fn new(d_in : u32, d_out : u32) -> Self { Degree{d_in, d_out} }
     /// get degrre in 
-    pub fn degree_in(&self) -> u32 {self.0}
+    pub fn degree_in(&self) -> u32 {self.d_in}
     /// get degree out
-    pub fn degree_out(&self) -> u32 {self.1}
+    pub fn degree_out(&self) -> u32 {self.d_out}
 }  // end of impl Degree
 
 
@@ -25,12 +30,12 @@ pub fn get_degrees<F>(csmat : &CsMatI<F, usize>) -> Vec<Degree>
     assert!(csmat.is_csr());
     //
     let (nb_row, _) = csmat.shape();
-    let mut degrees = (0..nb_row).into_iter().map(|_| Degree(0u32,0u32)).collect::<Vec<Degree>>();
+    let mut degrees = (0..nb_row).into_iter().map(|_| Degree{d_in : 0, d_out:0}).collect::<Vec<Degree>>();
     //
     let mut iter = csmat.iter();
     while let Some((_val, (i,j))) = iter.next() {
-        degrees[i].1 += 1;  // one more out for i
-        degrees[j].0 += 1; // one more in for j
+        degrees[i].d_out += 1;  // one more out for i
+        degrees[j].d_in += 1; // one more in for j
     }
     degrees
 }  // end of get_degrees

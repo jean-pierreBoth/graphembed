@@ -26,8 +26,8 @@ use cpu_time::ProcessTime;
 
 
 use super::{sla::*, params::NodeSketchParams};
+use crate::tools::degrees::*;
 use crate::embedding::{EmbeddedAsym, EmbedderT};
-
 
 
 pub type RowSketch = Arc<RwLock<Array1<usize>>>;
@@ -43,6 +43,8 @@ pub struct NodeSketchAsym {
     csrmat : CsMatI<f64, usize>,
     /// the transposed matrix
     csrmat_transposed : CsMatI<f64, usize>,
+    /// degrees in and out
+    degrees: Vec<Degree>,
     /// The matrix storing all sketches along iterations for neighbours directed toward current node
     sketches_in : Vec<RowSketch>,
     ///
@@ -67,6 +69,7 @@ impl NodeSketchAsym {
         let mut previous_sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
+        let degrees = get_degrees(&csrmat);
         let sketch_size = params.get_sketch_size();
         for _ in 0..csrmat.rows() {
             // incoming edges
@@ -80,7 +83,7 @@ impl NodeSketchAsym {
             let previous_sketch_out = Array1::<usize>::zeros(sketch_size);
             previous_sketches_out.push(Arc::new(RwLock::new(previous_sketch_out)));            
         }
-        NodeSketchAsym{params, csrmat, csrmat_transposed, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
+        NodeSketchAsym{params, csrmat, csrmat_transposed, degrees, sketches_in, previous_sketches_in, sketches_out, previous_sketches_out}
     }  // end of for NodeSketchAsym::new
     
 
@@ -380,7 +383,7 @@ impl NodeSketchAsym {
                 embedded_source.row_mut(i)[j] = self.sketches_out[i].read()[j];
             }
         }
-        let embedded = EmbeddedAsym::<usize>::new(embedded_source, embedded_target, super::nodesketch::jaccard_distance);
+        let embedded = EmbeddedAsym::<usize>::new(embedded_source, embedded_target, Some(self.degrees.clone()), super::nodesketch::jaccard_distance);
         //
         Ok(embedded)
     } // end of compute_Embedded

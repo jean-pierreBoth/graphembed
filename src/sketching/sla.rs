@@ -5,7 +5,7 @@ use sprs::{TriMatI, CsMatI};
 use ndarray::{Array1};
 
 // takes a matrix in a triplet form augment it by diagonal
-pub(crate) fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, _weight : f64) -> CsMatI<f64, usize> {
+pub(crate) fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, weight : f64) -> CsMatI<f64, usize> {
     let shape = graphtrip.shape();
     log::debug!("diagonal_augmentation received shape {:?}", shape);
     assert_eq!(shape.0, shape.1);
@@ -20,9 +20,9 @@ pub(crate) fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, _weigh
     //
     for i in 0..shape.0 {
         // we do diagonal augmentation only for non isolated point
-        if rowmax[i] > 0. {
+        if rowmax[i] > 0. && weight > 0. {
             // TODO could add rowmax ?
-            graphtrip.add_triplet(i,i, 1.);
+            graphtrip.add_triplet(i,i, weight);
 //            log::trace!("diagonal_augmentation row : {}, value : {}", i, 1.);
         }
     }

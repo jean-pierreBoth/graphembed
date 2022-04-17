@@ -26,7 +26,7 @@ use sprs::{TriMatI, CsMatI};
 use rayon::prelude::*;
 
 use crate::embedding::{EmbeddedT};
-
+use crate::tools::{degrees::*, edge::Edge};
 
 pub enum ValidationMode {
     NODELABEL,
@@ -43,7 +43,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     where F: Default + Copy {
     //
     assert!(delete_proba < 1. && delete_proba > 0.);
-    log::trace!("filter_csmat delete_proba : {}", delete_proba);
+    log::debug!("filter_csmat, delete proba {}, symetric : {}", delete_proba, symetric);
     // get total in + out degree
     let nb_nodes = csrmat.rows();
     let nb_edge = csrmat.nnz();
@@ -56,10 +56,11 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let mut values = Vec::<F>::with_capacity(nb_nodes);
     // we need degrees as we cannot delete edges if they are the last 
     // as we cannot train anything if nodes is disconnected
-    let mut degrees_out = csrmat.degrees();
-    let mut degrees_in = csrmat.transpose_view().to_csr().degrees();
+    let mut degrees = get_degrees::<F>(csrmat);
+    // let mut degrees_out = csrmat.degrees();
+    // let mut degrees_in = csrmat.transpose_view().to_csr().degrees();
     //
-    log::info!("mean in degree : {:.3e}", degrees_in.iter().sum::<usize>() as f64/ nb_nodes as f64);
+    log::info!("mean in degree : {:.3e}", degrees.iter().map(|degree| degree.d_in).sum::<u32>() as f64/ nb_nodes as f64);
     //
     let mut discarded : usize = 0;
     let mut nb_isolation_not_discarded : usize = 0;
@@ -78,7 +79,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
             // WARNING we do not delete self loop beccause of nodesketch which use self loop augmentation!!! 
             if symetric {
                 // we check only for row < col as we will force coherent deletion at end of scan
-                if degrees_out[row] > 1 && degrees_in[col] > 1 && row < col {
+                if degrees[row].d_out > 1 && degrees[col].d_in > 1 && row < col {
                     discard = true;
                 }
                 else {
@@ -86,7 +87,8 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
                 }
             }
             else {
-                if (degrees_out[row] > 1 && degrees_in[col] > 1) && row != col {
+                if (degrees[row].degree_in() > 0 || degrees[row].degree_out() > 1) && 
+                            (degrees[col].degree_in() > 1 || degrees[row].degree_out() > 0) && row != col {
                     discard = true;
                 }
                 else {
@@ -102,8 +104,8 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
         }
         else {
             deleted_edge.insert((row, col));
-            degrees_out[row] -= 1;
-            degrees_in[col] -= 1;
+            degrees[row].d_out -= 1;
+            degrees[col].d_in -= 1;
             discarded += 1;
             if symetric {
                 // beccause when we filled csrmat symetric terms were added. csrm stores a complete matrix
@@ -123,9 +125,6 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
 
 
 
-// local edge type corresponding to node1, ndde2 , distance from node1 to node2
-#[derive(Copy, Clone, Debug)]
-struct Edge(usize,usize,f64);
 
 
 
@@ -297,6 +296,10 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
                 // edge (i,j) not on diagonal and neither in trimat set neither in deleted_edges, so inexistent edge
                 break (i,j);
             }
+            if !symetric && i != j && !trimat_set.contains(&(j,i)) && deleted_edges.get_index_of(&(j,i)).is_none() {
+                // edge (i,j) not on diagonal and neither in trimat set neither in deleted_edges, so inexistent edge
+                break (j,i);
+            }
         };
         let dist_del_edge = embedded.get_noderank_distance(del_edge.0,del_edge.1);
         let dist_no_edge = embedded.get_noderank_distance(no_edge.0,no_edge.1);
@@ -307,10 +310,19 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
 //            log::trace!(" dump node del_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(del_edge.0, 0));
 //            log::trace!(" dump node del_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(del_edge.1, 1));        
             if dist_no_edge <  dist_del_edge {
-                log::debug!(" dump node del_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(del_edge.0, 0));
-                log::debug!(" dump node del_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(del_edge.1, 1)); 
-                log::debug!(" dump node no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, 0));
-                log::debug!(" dump node no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, 1));
+                log::debug!(" node rank in del_edge.0, {:?} : {:?}", del_edge.0, embedded.get_embedded_node(del_edge.0, 0));
+                log::debug!(" node rank in del_edge.1, {:?} : {:?}", del_edge.1, embedded.get_embedded_node(del_edge.1, 0));
+                log::debug!(" node rank in no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, 0));
+                log::debug!(" node rank in no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, 0));                
+                if !symetric {
+                    log::debug!(" node rank out del_edge.0, {:?} : {:?}", del_edge.0, embedded.get_embedded_node(del_edge.0, 1));
+                    log::debug!(" node rank out del_edge.1, {:?} : {:?}", del_edge.1, embedded.get_embedded_node(del_edge.1, 1));
+                    log::debug!(" node rank out no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, 1));
+                    log::debug!(" node rank out no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, 1)); 
+                }
+                if !symetric {
+
+                }
             }
         }
         // end debug stuff
@@ -323,7 +335,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
         }
     }
     let auc = good / nb_sample as f64;
-    log::debug!(" auc = {:3.e} nb dist equality : {}", auc, nb_dist_equality);
+    log::info!(" auc = {:3.e} nb dist equality : {}", auc, nb_dist_equality);
     //
     return auc;
 } // end of one_auc_iteration
