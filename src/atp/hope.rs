@@ -114,7 +114,7 @@ pub struct Hope<F> {
     /// the graph as a matrix
     mat : MatRepr<F>,
     ///
-    degrees : Option<Vec<Degree>>, 
+    _degrees : Option<Vec<Degree>>, 
     /// store the eigenvalue weighting the eigenvectors. This give information on precision.
     sigma_q : Option<Array1<F>>
 }
@@ -128,13 +128,13 @@ impl <F> Hope<F>  where
     pub fn new(params : HopeParams, trimat : TriMatI<F, usize>) -> Self {
         let csrmat = trimat.to_csr();
         let degrees = get_degrees(&csrmat);
-        Hope::<F>{params, mat : MatRepr::from_csrmat(trimat.to_csr()), degrees : Some(degrees), sigma_q : None}
+        Hope::<F>{params, mat : MatRepr::from_csrmat(trimat.to_csr()), _degrees : Some(degrees), sigma_q : None}
     }
 
     /// instantiate a Hope problem with the adjacency matrix
     pub fn from_ndarray(params : HopeParams, mat : Array2<F>) -> Self {
         let mat = MatRepr::from_array2(mat);
-        Hope::<F> {params, mat, degrees: None, sigma_q : None}
+        Hope::<F> {params, mat, _degrees: None, sigma_q : None}
     }
 
     pub fn get_nb_nodes(&self) -> usize {

@@ -1,4 +1,4 @@
-// compute degrees in and out from a csmat
+//! compute degrees in and out from a csmat
 
 
 
@@ -30,7 +30,7 @@ pub fn get_degrees<F>(csmat : &CsMatI<F, usize>) -> Vec<Degree>
     assert!(csmat.is_csr());
     //
     let (nb_row, _) = csmat.shape();
-    let mut degrees = (0..nb_row).into_iter().map(|_| Degree{d_in : 0, d_out:0}).collect::<Vec<Degree>>();
+    let mut degrees = (0..nb_row).into_iter().map(|_| Degree::new( 0, 0)).collect::<Vec<Degree>>();
     //
     let mut iter = csmat.iter();
     while let Some((_val, (i,j))) = iter.next() {

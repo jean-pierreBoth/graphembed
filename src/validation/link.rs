@@ -262,7 +262,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
                     G : std::fmt::Debug,
                     E : EmbeddedT<G> + std::marker::Sync {
         //
-    let nb_sample = 5000;
+    let nb_sample = 10000;
     let mut nb_dist_equality: usize = 0;
     log::debug!("\n\n in one_auc_iteration nb_sample : {:?}, delete_proba : {:.3e}, symetric {:?}", nb_sample, delete_proba, symetric);
     //
@@ -319,9 +319,6 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
                     log::debug!(" node rank out del_edge.1, {:?} : {:?}", del_edge.1, embedded.get_embedded_node(del_edge.1, 1));
                     log::debug!(" node rank out no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, 1));
                     log::debug!(" node rank out no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, 1)); 
-                }
-                if !symetric {
-
                 }
             }
         }

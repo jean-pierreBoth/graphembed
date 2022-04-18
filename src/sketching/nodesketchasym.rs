@@ -383,7 +383,8 @@ impl NodeSketchAsym {
                 embedded_source.row_mut(i)[j] = self.sketches_out[i].read()[j];
             }
         }
-        let embedded = EmbeddedAsym::<usize>::new(embedded_source, embedded_target, Some(self.degrees.clone()), super::nodesketch::jaccard_distance);
+        let embedded = EmbeddedAsym::<usize>::new(embedded_source, embedded_target, Some(self.degrees.clone()), 
+                super::nodesketch::jaccard_distance);
         //
         Ok(embedded)
     } // end of compute_Embedded
