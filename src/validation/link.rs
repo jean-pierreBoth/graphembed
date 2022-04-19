@@ -76,7 +76,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
         let xsi = uniform.sample(rng);
         let mut discard = false;
         if xsi < delete_proba {
-            // WARNING we do not delete self loop beccause of nodesketch which use self loop augmentation!!! 
+            // We avoid making isolated node 
             if symetric {
                 // we check only for row < col as we will force coherent deletion at end of scan
                 if degrees[row].d_out > 1 && degrees[col].d_in > 1 && row < col {
@@ -87,8 +87,8 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
                 }
             }
             else {
-                if (degrees[row].degree_in() > 0 || degrees[row].degree_out() > 1) && 
-                            (degrees[col].degree_in() > 1 || degrees[row].degree_out() > 0) && row != col {
+                if (degrees[row].degree_out() > 1 || degrees[row].degree_in() > 0)  &&
+                    (degrees[col].degree_in() > 1 || degrees[col].degree_out() > 0) && row != col {
                     discard = true;
                 }
                 else {
@@ -103,15 +103,29 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
             values.push(*value);
         }
         else {
+            log::debug!("link:validation deleting edge {}->{}", row, col);
             deleted_edge.insert((row, col));
             degrees[row].d_out -= 1;
             degrees[col].d_in -= 1;
             discarded += 1;
             if symetric {
-                // beccause when we filled csrmat symetric terms were added. csrm stores a complete matrix
+                // maintian coherence of in and out degree in symetric case, and delete symetric edge!
+                degrees[row].d_in -= 1;
+                degrees[col].d_out -= 1;
                 deleted_edge.insert((col, row));
                 discarded += 1;
             }
+            if log_enabled!(log::Level::Debug) || log_enabled!(log::Level::Trace) {
+                if !(degrees[row].d_in > 0 || degrees[row].d_out > 0) {
+                    log::error!("degrees node row : {} degree = {:?}", row, degrees[row]);
+                }
+                if !(degrees[col].d_in > 0 || degrees[col].d_out > 0) {
+                    log::error!("degrees node col : {} degree = {:?}", row, degrees[row]);
+                }
+            }
+            // chech we do not have isolated nodes.
+            assert!(degrees[row].d_in > 0 || degrees[row].d_out > 0);
+            assert!(degrees[col].d_in > 0 || degrees[col].d_out > 0);            
         }
     }  // end while
     //

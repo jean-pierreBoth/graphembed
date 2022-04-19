@@ -12,6 +12,3 @@ pub mod nodesketch;
 pub mod nodesketchasym;
 
 pub mod sla;
-
-pub const IN : u8 = 1;
-pub const OUT : u8 = 0;

@@ -20,8 +20,8 @@ pub(crate) fn diagonal_augmentation(graphtrip : &mut TriMatI<f64, usize>, weight
     //
     for i in 0..shape.0 {
         // we do diagonal augmentation only for non isolated point
-        if rowmax[i] > 0. && weight > 0. {
-            // TODO could add rowmax ?
+        if weight > 0. {
+            // TODO could add rowmax[row]  if rowmax[row] > 0 ? Also beware of asymetric graph where node row can be only a target node!!
             graphtrip.add_triplet(i,i, weight);
 //            log::trace!("diagonal_augmentation row : {}, value : {}", i, 1.);
         }

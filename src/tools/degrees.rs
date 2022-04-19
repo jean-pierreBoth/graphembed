@@ -24,7 +24,9 @@ impl Degree {
 
 /// returns a vector of 2-uple consisting of degrees (in, out)
 /// fist component is in, second component is out!
-pub fn get_degrees<F>(csmat : &CsMatI<F, usize>) -> Vec<Degree> 
+/// Self loops are not taken into account as the objective of this function 
+/// to be able to delete edge in AUC link prediction and avoiding making disconnected nodes
+pub(crate) fn get_degrees<F>(csmat : &CsMatI<F, usize>) -> Vec<Degree> 
     where F : Copy + Default {
     //
     assert!(csmat.is_csr());
@@ -34,8 +36,10 @@ pub fn get_degrees<F>(csmat : &CsMatI<F, usize>) -> Vec<Degree>
     //
     let mut iter = csmat.iter();
     while let Some((_val, (i,j))) = iter.next() {
-        degrees[i].d_out += 1;  // one more out for i
-        degrees[j].d_in += 1; // one more in for j
+        if i!=j {
+            degrees[i].d_out += 1;  // one more out for i
+            degrees[j].d_in += 1; // one more in for j
+        }
     }
     degrees
 }  // end of get_degrees
