@@ -14,7 +14,7 @@ is given in the column *"ratio discarded"*.
 Computation times are those for **one embedding** with the same parameters as the validation and not the time 
 for the validation iterations.
 
-All computations are done on a 8-core i7@2.3 Ghz laptop
+All computations are done on a 8-core i7@2.3 Ghz laptop.
 
 ## Hope embedding results
 
@@ -72,8 +72,18 @@ AUC is run with 5 successive runs.
 |  :----------:      |  :---:   | :-------:  |  :-------:  |   :-------:  |  :-----:  |   :-----: |  :----:    | :-----:  | :-------: |
 | wiki_vote          | 7115     |  103689    |   100       |     20       |    5      |    0.1    |   0.147    |  0.883   |   0.5     |
 | wiki_vote          | 7115     |  103689    |   200       |     20       |    5      |    0.1    |   0.147    |  0.896   |   ~1      |
-| wiki_vote          | 7115     |  103689    |   500       |     20       |    5      |    0.1    |   0.147    |  0.93    |   ~1.5    |
+| wiki_vote          | 7115     |  103689    |   500       |     20       |    5      |    0.1    |   0.147    |  0.925   |   ~1.5    |
+| cora               | 23166    |  91500     |   200       |     20       |    5      |    0.2    |   0.143    |  0.924   |   ~1.     | 
 | mmunmun_twitter    | 465017   |  834797    |   500       |     20       |    5      |    0.1    |   0.085    |  0.78    |   73      |
+| mmunmun_twitter    | 465017   |  834797    |   500       |     20       |    5      |    0.2    |   0.085    |  0.787   |   74      |
+| mmunmun_twitter    | 465017   |  834797    |   1000      |     20       |    5      |    0.2    |   0.085    |  0.80    |  160      |
+| mmunmun_twitter    | 465017   |  834797    |   1000      |     20       |    5      |    0.5    |   0.085    |  0.788   |  160      |
 
 
-The munmun_twitter file is more difficult with very asymetric nodes having for example a in degree of 2 but an out degree of 493.
+The munmun_twitter graph has characteristics,known in the litterature dedicated to large sparse directed graphs, that make it difficult:
+   - very asymetric nodes having for example in degree of 2 but an out degree more than 450
+   - low mean degree.
+   - huge imbalance between a small number of existing directed edges (less than $10^6$) and a much larger set of potential edges (here more than $4 \cdot 10^{11}$) . 
+
+In fact there are only 1257 edges that are bidirectional in the munmun graph so we can measure the impact of symetrization and make all edges bidrectional.
+Keeping decay at 0.2, nb_hop = 5, we get AUC = 0.91 with dim = 500 and AUC = 0.942 with dim = 1000

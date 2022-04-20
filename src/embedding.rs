@@ -198,20 +198,14 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
         let mut distances = Vec::<f64>::with_capacity(3);
         //
         if let Some(degrees) = &self.degrees {
-            if degrees[node_rank1].d_out >= 0 &&  degrees[node_rank2].d_out >= 0 {
-                let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
-                distances.push(dist_s);
-            }
+            let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
+            distances.push(dist_s);
 
-            if degrees[node_rank1].d_in >= 0 &&  degrees[node_rank2].d_in >= 0 {
-                let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
-                distances.push(dist_t);
-            }
-            // 
-            if degrees[node_rank1].d_out >= 0 &&  degrees[node_rank2].d_in >= 0 {
-                let dist_t = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
-                distances.push(dist_t);
-            }
+            let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
+            distances.push(dist_t);
+            //
+            let dist_t = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
+            distances.push(dist_t);
             if distances.len() > 0 {
                 let dist = distances.iter().sum::<f64>() / distances.len() as f64;
                 return dist;

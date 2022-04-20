@@ -12,11 +12,11 @@ We use two strategies for graph embedding.
     D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux. 
 
 It is based on multi hop neighbourhood identification via sensitive hashing.  
-Instead of using **ICWS** for hashing we use the more recent algorithm **probminhash** See [probminhash](https://arxiv.org/abs/1911.00675).
+Instead of using **ICWS** for hashing we use the more recent algorithm **probminhash**. See [probminhash](https://arxiv.org/abs/1911.00675).
 The algorithm associates a probability distribution on neighbours of each point depending on edge weights and distance to the point.
 Then this distribution is hashed to build an embedding vector. The distance between embedded vectors is the Jaccard distance so we get
-a real distance on the embedding space.
-An extension of the paper is also implemented to get asymetric embedding for directed graph.
+a real distance on the embedding space, at least for the symetric embedding.
+An extension of the paper is also implemented to get asymetric embedding for directed graph. The similarity is also based on the hash of sets (nodes going to or from) a given node but then the dissimilarity is no more a distance (no symetry and some discrepancy with the triangular inequality).
 
 2. The second is based on the paper:
    
@@ -24,8 +24,8 @@ An extension of the paper is also implemented to get asymetric embedding for dir
     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
 
 The objective is to provide an asymetric graph embedding and get estimate of the precision of the embedding in function of its dimension.
-We use the Adamic-Adar representation of the graph.
-The asymetric embedding is obtained from the left and right singular eigenvectors of the Adamic-Adar representatino of the graph.
+We use the Adamic-Adar matricial representation of the graph. (It must be noted that the ponderation of a node by the number of couples joined by it is called Resource Allocation in the Graph Kernel litterature).
+The asymetric embedding is obtained from the left and right singular eigenvectors of the Adamic-Adar representation of the graph.
 Source node are related to left singular vectors and target nodes to the right ones. The similarity measure is the dot product, so it is not a norm.  
 The svd is approximated by randomization as described in Halko-Tropp 2011 as implmented in the annembed crate.
 
@@ -91,9 +91,9 @@ The Hope embedding relying on matrices computations limits the size of the graph
 It is intrinsically asymetric in nature. It nevertheless gives access to the spectrum of Adamic Adar representing the graph and
 so to the required dimension to get a valid embedding in $R^{n}$.  
 
-The Sketching embedding is much faster for large graphs but embeds in space consisting in sequences of node id equipped with the Jaccard Distance.
+The Sketching embedding is much faster for large graphs but embeds in a space consisting in sequences of node id equipped with the Jaccard distance.
 
-The *embed* module takes embedding and possibly validation in one directive.
+The *embed* module takes embedding and possibly validation commands in one directive.
 
 The general syntax is :
 
