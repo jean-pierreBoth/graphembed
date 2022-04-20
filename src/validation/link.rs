@@ -26,7 +26,7 @@ use sprs::{TriMatI, CsMatI};
 use rayon::prelude::*;
 
 use crate::embedding::{EmbeddedT};
-use crate::tools::{degrees::*, edge::Edge};
+use crate::tools::{degrees::*, edge::*};
 
 pub enum ValidationMode {
     NODELABEL,
@@ -103,7 +103,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
             values.push(*value);
         }
         else {
-            log::debug!("link:validation deleting edge {}->{}", row, col);
+            log::trace!("link:validation deleting edge {}->{}", row, col);
             deleted_edge.insert((row, col));
             degrees[row].d_out -= 1;
             degrees[col].d_in -= 1;
@@ -324,15 +324,15 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
 //            log::trace!(" dump node del_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(del_edge.0, 0));
 //            log::trace!(" dump node del_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(del_edge.1, 1));        
             if dist_no_edge <  dist_del_edge {
-                log::debug!(" node rank in del_edge.0, {:?} : {:?}", del_edge.0, embedded.get_embedded_node(del_edge.0, 0));
-                log::debug!(" node rank in del_edge.1, {:?} : {:?}", del_edge.1, embedded.get_embedded_node(del_edge.1, 0));
-                log::debug!(" node rank in no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, 0));
-                log::debug!(" node rank in no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, 0));                
+                log::debug!(" node rank out del_edge.0, {:?} : {:?}", del_edge.0, embedded.get_embedded_node(del_edge.0, OUT));
+                log::debug!(" node rank out del_edge.1, {:?} : {:?}", del_edge.1, embedded.get_embedded_node(del_edge.1, OUT));
+                log::debug!(" node rank out no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, OUT));
+                log::debug!(" node rank out no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, OUT));                
                 if !symetric {
-                    log::debug!(" node rank out del_edge.0, {:?} : {:?}", del_edge.0, embedded.get_embedded_node(del_edge.0, 1));
-                    log::debug!(" node rank out del_edge.1, {:?} : {:?}", del_edge.1, embedded.get_embedded_node(del_edge.1, 1));
-                    log::debug!(" node rank out no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, 1));
-                    log::debug!(" node rank out no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, 1)); 
+                    log::debug!(" node rank in del_edge.0, {:?} : {:?}", del_edge.0, embedded.get_embedded_node(del_edge.0, IN));
+                    log::debug!(" node rank in del_edge.1, {:?} : {:?}", del_edge.1, embedded.get_embedded_node(del_edge.1, IN));
+                    log::debug!(" node rank in no_edge.0, {:?} : {:?}", no_edge.0, embedded.get_embedded_node(no_edge.0, IN));
+                    log::debug!(" node rank in no_edge.1, {:?} : {:?}", no_edge.1, embedded.get_embedded_node(no_edge.1, IN)); 
                 }
             }
         }
