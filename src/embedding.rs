@@ -25,7 +25,7 @@
 use ndarray::{Array2, ArrayView1};
 use indexmap::IndexSet;
 
-use crate::sketching::{IN,OUT};
+use crate::tools::edge::{IN,OUT};
 use crate::tools::degrees::*;
 
 /// to represent the distance in embedded space between 2 vectors
@@ -173,8 +173,6 @@ impl <F> EmbeddedAsym<F> {
 } // end of impl block for EmbeddedAsym
 
 
-//const IN : u8 = 1;
-//const OUT : u8 = 0;
 
 impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
 
@@ -200,22 +198,30 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
         let mut distances = Vec::<f64>::with_capacity(3);
         //
         if let Some(degrees) = &self.degrees {
-            if degrees[node_rank1].d_out > 0 &&  degrees[node_rank2].d_out > 0 {
+            if degrees[node_rank1].d_out >= 0 &&  degrees[node_rank2].d_out >= 0 {
                 let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
                 distances.push(dist_s);
             }
 
-            if degrees[node_rank1].d_in > 0 &&  degrees[node_rank2].d_in > 0 {
+            if degrees[node_rank1].d_in >= 0 &&  degrees[node_rank2].d_in >= 0 {
                 let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
                 distances.push(dist_t);
             }
             // 
-            if degrees[node_rank1].d_out > 0 &&  degrees[node_rank2].d_in > 0 {
+            if degrees[node_rank1].d_out >= 0 &&  degrees[node_rank2].d_in >= 0 {
                 let dist_t = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
                 distances.push(dist_t);
             }
-            let dist = distances.iter().sum::<f64>() / distances.len() as f64;
-            return dist;
+            if distances.len() > 0 {
+                let dist = distances.iter().sum::<f64>() / distances.len() as f64;
+                return dist;
+            }
+            else {
+                log::error!("degrees node rank1 : {} degree = {:?}, node rank2 : {}, degree = {:?}", node_rank1, degrees[node_rank1], 
+                                        node_rank2, degrees[node_rank2]);
+                log::error!("get_noderank_distance asymetric no distance computed");
+                return 1.;
+            }
         }
         else {
             let dist = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
@@ -235,8 +241,12 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     /// For embedding that has multiple embedding by node (example asysmetric embedding , the tag is used)
     fn get_embedded_node(&self, node_rank: usize, tag : u8) -> ArrayView1<F> {
         match tag {
-            OUT => { return self.source.row(node_rank); }
-            IN => { return self.target.row(node_rank); }
+            OUT => { // returns embedding vector corresponding to node as a source or beginning of edge
+                return self.source.row(node_rank);
+            }
+            IN => { // returns embedding vector corresponding to node as a target or end of edge
+                return self.target.row(node_rank); 
+            }
             _ => { 
                     log::error!(" for asymetric embedding tag in get_embedded_node must be 0 or 1");
                     std::panic!("for asymetric embedding tag in get_embedded_node must be 0 or 1");

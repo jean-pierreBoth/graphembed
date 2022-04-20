@@ -362,7 +362,7 @@ impl NodeSketchAsym {
         log::debug!("NodeSketchAsym parallel mode : {}", parallel);
         self.sketch_slamatrix(parallel);    
         for i in 0.. self.params.get_nb_iter() {
-            log::debug!("compute_embedded , iteration {}", i);
+            log::debug!("compute_embedded , num hop {}", i);
             if parallel {
                 self.parallel_iteration();
             }

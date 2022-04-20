@@ -64,13 +64,16 @@ AUC is run with 5 successive runs.
 
 1. Asymetric Graphs
 
-AUC is run with 10 successive runs.
+
 10000 edges deleted by pass
 
 
 |  graph             | nb nodes | nb edges   | dimension   |  nb AUC pass | nb hops   |  decay    |  ratio     |  AUC     | time(s)   |
 |  :----------:      |  :---:   | :-------:  |  :-------:  |   :-------:  |  :-----:  |   :-----: |  :----:    | :-----:  | :-------: |
-| wiki_vote          | 7115     |  103689    |   100       |     20       |    5      |    0.1    |   0.147    |  0.904   |   0.5     |
+| wiki_vote          | 7115     |  103689    |   100       |     20       |    5      |    0.1    |   0.147    |  0.883   |   0.5     |
 | wiki_vote          | 7115     |  103689    |   200       |     20       |    5      |    0.1    |   0.147    |  0.896   |   ~1      |
-| wiki_vote          | 7115     |  103689    |   500       |     20       |    5      |    0.1    |    0.147   |  0.92    |   ~1.5    |
-| mmunmun_twitter    | 465017   |  834797    |   100       |              |     5     |    0.2    |   0.08     |  0.888   |   73      |
+| wiki_vote          | 7115     |  103689    |   500       |     20       |    5      |    0.1    |   0.147    |  0.93    |   ~1.5    |
+| mmunmun_twitter    | 465017   |  834797    |   500       |     20       |    5      |    0.1    |   0.085    |  0.78    |   73      |
+
+
+The munmun_twitter file is more difficult with very asymetric nodes having for example a in degree of 2 but an out degree of 493.
