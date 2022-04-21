@@ -22,7 +22,7 @@ use annembed::tools::svdapprox::*;
 pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where 
             F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F>  {
     //
-    log::debug!("csr_row_normalization");
+    log::trace!("csr_row_normalization");
     assert!(csr_mat.is_csr());
     //
     let (nb_row, _ ) = csr_mat.shape();
@@ -52,7 +52,7 @@ pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where
             }
         }
     } // end of for i
-    log::debug!("csr_row_normalization nb row with null sum : {}", nb_row - nb_non_null_row);
+    log::trace!("csr_row_normalization nb row with null sum : {}", nb_row - nb_non_null_row);
 } // end of csr_row_normalization
 
 
@@ -73,7 +73,9 @@ pub fn dense_row_normalization<F>(mat : &mut Array2<F>)
             log::trace!("dense_row_normalization null sum of row i {}", i);
         }
     }
-    log::debug!("dense_row_normalization nb row with null sum : {}", nb_null_row);
+    if nb_null_row > 0 {
+        log::error!("dense_row_normalization nb row with null sum : {}", nb_null_row);
+    }
 }  // end of for dense_row_normalization
 
 
@@ -132,7 +134,7 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
     where  F : Float + Scalar  + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> +
      Default + Send + Sync
 {
-    log::debug!("entering adamic_adar_normalization_csmat");
+    log::trace!("entering adamic_adar_normalization_csmat");
     //
     let (nb_row, nb_col) = mat.shape();
     assert_eq!(nb_row, nb_col);
@@ -165,13 +167,13 @@ pub fn adamic_adar_normalization_csmat<F> (mat : &mut CsMat<F>) -> Result<(), an
     let da = da_trimat.to_csr();
     // now we use sprs::smmp::mul_csr_csr
 
-    log::debug!("calling sprs::smmp::mul_csr_csr ");
+    log::trace!("calling sprs::smmp::mul_csr_csr ");
     let cpu_start = ProcessTime::now();
     let sys_start = SystemTime::now();  
     let csmat_ada = sprs::smmp::mul_csr_csr(mat.view(), da.view());
-    log::debug!("sprs::smmp::mul_csr_csr time elasped sys (s) sys, {}, cpu : {:?}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+    log::trace!("sprs::smmp::mul_csr_csr time elasped sys (s) sys, {}, cpu : {:?}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
     *mat = csmat_ada;
-    log::debug!("exiting at end of adamic_adar_normalization_csmat");
+    log::trace!("exiting at end of adamic_adar_normalization_csmat");
     //
     return Ok(());
 }  // end of adamic_adar_normalization_csmat

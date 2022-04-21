@@ -1,4 +1,9 @@
-//! Construct or dump a (small) graph or its matricial representation FULL or CSR from data from a csv file
+//! Construct or dump a (small) graph or its matricial representation FULL or CSR from data from a csv file.
+//! 
+//! If a file is declared as symetric but is in fact asymetric, the graph is symetrized upon reading.
+//! If some edges are multiply defined as a consequence, the code emits a warning on the first multiply defined edges, 
+//! dumps them, and finally gives a summary on the number edges multiply defined.
+//! 
 
 
 //use std::fmt::{Debug};
@@ -194,7 +199,7 @@ pub fn csv_to_csrmat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 /// Loads a csv file and returning a MatRepr and a reindexation of nodes to ensure that internally nodes are identified by 
 /// a rank in 0..nb_nodes
 ///  
-/// This function tests for the following delimiters [b'\t', b',', b' '] in the csv file.
+/// This function tests for the following delimiters [b'\t', b',' , b' '] in the csv file.
 /// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  
 /// For an asymetric graph directed must be set to true.
 pub fn csv_to_csrmat_delimiters<F:Float+FromStr>(filepath : &Path, directed : bool) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)> 

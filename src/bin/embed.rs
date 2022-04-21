@@ -2,22 +2,23 @@
 //! 
 //! The main arguments are 
 //!  - --csv filename
-//!  - --symetry true or false  specifies if is csv describe a symetric (half of the edges in csv) or asymetric graph
-//!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a). 
-//!     sometimes a symetric graph is fully described in the csv file, then declare asymetric  
+//!  - --symetry true or false  specifies if the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
+//!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
+//!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric.
+//!     It is also possible to declare as symetric an asymetric unweighted graph. It is then symetrised when reading the file.
+//!   
 //!  - a subcommand embedding for a simple embedding or validation for loop with AUC computation for the link prediction task
 //! 
 //! 1. **Embedding mode**
 //! 
 //! There are 2 types of embedding : hope or sketching see related docs [Hope], [NodeSketch] or [NodeSketchAsym]
 //! 
-//! The hope embedding requires the hope subcommand, the embedding relying on sketching is announced by the sketching subcommand.  
+//! The hope embedding requires the *hope* subcommand, the embedding relying on sketching is announced by the *sketching* subcommand.  
 //! 
 //! - Hope embedding can run in 2 approximations mode with a precision mode or a rank target approximation of the similatity matrix
 //! 
 //! - The sketching by default is adapted to the symetry declared for the csv file. It is possible to run with NodeSketchAsym on a symetric file 
-//! to see the impact on validation for example. Running in symetric mode on an asymetric graph is impossible, we do not provide a symetrization 
-//! function yet.
+//! to see the impact on validation for example.
 //! 
 //! example usage:
 //! 
@@ -35,18 +36,25 @@
 //! 
 //! 2. **Validation mode with estimation of AUC on link prediction task**.
 //! 
-//!     It suffices to add the command : **validation --npass nbpass --skip fraction** before the embedding specification.
+//!  The validation command has 2 parameters:
+//! - --nbpass 
+//!     It determines the number of validation pass to be done.
+//! - --skip
+//!     It determines the number of edges to delete in the validation pass. Recall that the real number of discarded edges
+//!     can be smaller as we must not make isolated points.
+//! 
+//!     It suffices to add the command : **validation --nbpass nbpass --skip fraction** before the embedding specification.
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   
 //!     embed --csv "p2p-Gnutella09.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 --decay 0.1
 //! 
 //!  
-//! The module can be launched by first setting the variable RUST_LOG to info (normal information) or debug (to get get related info) 
-//! as in *example export RUST_LOG=graphite=debug*
+//! The module can be launched (and it is recommended) by preceding the command by setting the variable RUST_LOG to info (normal information) or debug (to get related info) 
+//! as in *example RUST_LOG=graphite=debug embed ....*
 //! 
 //! It can be launched by setting  *export RUST_LOG=graphite::validation=trace*
-//! to get the maximum info in the validation module.
+//! to get the maximum info in the validation module. (it will dump huge file reporting info on each edge decision)
 //! 
 
 

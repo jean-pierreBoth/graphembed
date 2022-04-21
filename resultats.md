@@ -22,7 +22,7 @@ All computations are done on a 8-core i7@2.3 Ghz laptop.
 
 The eigenvalue range give the range between higher and lower extracted singular value.
 
-The colmun *svd* specify how the randomized approximation of the svd was done.
+The column *svd* specify how the randomized approximation of the svd was done.
 
 AUC is run with 5 successive runs and 5000 edges deleted by run
 
@@ -40,6 +40,18 @@ AUC is run with 5 successive runs and 5000 edges deleted by run
 
 
 2. Asymetric Graphs
+
+AUC is estimated on 10 passes. 10000 edges deleted at each run.
+
+|  graph     | nb nodes | nb edges   |  svd(rank/epsil)       | ratio discarded | eigenvalue range | AUC (link)|  time(s)  |
+|  :------:  |  :-----: | :-------:  |    :-------:           |   :-------:     |   :------:       |  ----     | :-----:   |
+|  Cora      | 23166    |  91500     | maxrank 50, bkiter 10  |     0.144       |  ~ 6. - 1.       |    0.81   |   0.3     |
+|  Cora      | 23166    |  91500     | maxrank 200, bkiter 10 |     0.144       |  ~ 7. - 0.8      |    0.837  |   1.7     |
+|  Cora      | 23166    |  91500     | rank 200, bkiter 10    |     0.144       |  ~ 7.5 - 1.5     |    0.86   |   5.9     |
+|  Cora      | 23166    |  91500     | rank 400, bkiter 10    |     0.144       |  ~ 7.5 - 1.1     |    0.84   |   14.4    |
+
+
+
 
 ## Sketching embedding results 
 

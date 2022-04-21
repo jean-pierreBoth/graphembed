@@ -370,8 +370,9 @@ impl NodeSketchAsym {
                 self.iteration(); 
             }
         }
-        log::info!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
-        println!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
+        log::info!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
+        println!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
         // allocate the asymetric Embedded
         let nbnodes = self.sketches_in.len();
         let embedded_dim = self.sketches_in[0].read().len();

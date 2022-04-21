@@ -498,7 +498,8 @@ impl <F> Hope<F>  where
                 embedding
             },
         };  // znd of match
-        log::info!(" compute_embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+        let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
+        log::info!(" compute_embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
         //
         return embedding;
     }  // end of compute_embedded
