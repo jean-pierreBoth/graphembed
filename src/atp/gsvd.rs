@@ -20,8 +20,8 @@ use ndarray_linalg::{Scalar, Lapack};
 use std::any::TypeId;
 use ndarray::{s,Array1, Array2, ArrayView1, ArrayView2, ArrayView, Dim, Ix1, Ix2};
 
-use lapacke::{Layout};
-
+// #[cfg(feature = "openblas-static")]
+use lapacke::{sggsvd3, dggsvd3, Layout};
 
 
 
@@ -534,7 +534,7 @@ impl  <'a, F> GSvd<'a, F>
                 // we must cast a and b to f32 slices!! unsafe but we know our types with TypeId
                 let mut af32 = std::slice::from_raw_parts_mut(self.a.as_slice_mut().unwrap().as_ptr() as * mut f32 , self.a.len());
                 let mut bf32 = std::slice::from_raw_parts_mut(self.b.as_slice_mut().unwrap().as_ptr() as * mut f32 , self.b.len());
-                let ires = lapacke::sggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
+                let ires = sggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
                         //nb row of m , nb columns , nb row of n
                         a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), self.b.dim().0.try_into().unwrap(),
                         &mut k, &mut l,
@@ -576,7 +576,7 @@ impl  <'a, F> GSvd<'a, F>
             _ires = unsafe {
                 let mut af64 = std::slice::from_raw_parts_mut(self.a.as_slice_mut().unwrap().as_mut_ptr() as * mut f64 , self.a.len());
                 let mut bf64 = std::slice::from_raw_parts_mut(self.b.as_slice_mut().unwrap().as_mut_ptr() as * mut f64 , self.b.len()); 
-                let ires = lapacke::dggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
+                let ires = dggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
                     //nb row of m , nb columns , p nb row of n
                     a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), self.b.dim().0.try_into().unwrap(),
                     &mut k, &mut l,
@@ -668,7 +668,7 @@ fn small_lapack_gsvd(a: &mut Array2<f64>, b : &mut Array2<f64>) -> GSvdResult::<
     let ires = unsafe {
         let a_slice = std::slice::from_raw_parts_mut(a.as_slice_mut().unwrap().as_ptr() as *mut f64 , a.len());
         let b_slice = std::slice::from_raw_parts_mut(b.as_slice_mut().unwrap().as_ptr() as *mut f64 , b.len()); 
-        lapacke::dggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
+        dggsvd3(Layout::RowMajor, jobu, jobv, jobq, 
                 //nb row of m , nb columns , nb row of n
                 a_nbrow.try_into().unwrap(), a_nbcol.try_into().unwrap(), b.dim().0.try_into().unwrap(),
                 &mut k, &mut l,
