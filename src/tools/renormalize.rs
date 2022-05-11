@@ -35,8 +35,7 @@ pub fn csr_row_normalization<F>(csr_mat : &mut CsMat<F>) where
             let data = csr_mat.data();
             for j in range_i.clone() {
                 if i == csr_mat.indices()[j] {
-                    println!("got diagonal term ({},{}) val : {} ", i,i, data[i]);
-                    std::panic!();
+                    log::trace!("got diagonal term ({},{}) val : {} ", i,i, data[i]);
                 }
                 sum_i = sum_i + data[j];
             }
@@ -65,7 +64,7 @@ pub fn dense_row_normalization<F>(mat : &mut Array2<F>)
     for i in 0..nb_row {
         let mut row = mat.row_mut(i);
         let sum_i = row.sum();
-        if!(sum_i > F::zero()) {
+        if sum_i > F::zero() {
             row.map_mut(|x| *x = *x/sum_i);
         }
         else {

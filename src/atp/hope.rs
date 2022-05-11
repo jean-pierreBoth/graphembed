@@ -643,7 +643,7 @@ fn test_hope_gnutella09() {
         assert_eq!(1, 0);
     }
     let (trimat, node_index) = res.unwrap();
-    let hope_m = HopeMode::KATZ;
+    let hope_m = HopeMode::ADA;
     let decay_f = 0.05;
 //    let range_m = RangeApproxMode::RANK(RangeRank::new(500, 2));
     let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.1, 10, 300));
@@ -653,13 +653,13 @@ fn test_hope_gnutella09() {
     let hope_embedding = Embedding::new(node_index, &mut hope);
     if hope_embedding.is_err() {
         log::error!("error : {:?}", hope_embedding.as_ref().err());
-        log::error!("test_wiki failed in compute_Embedded");
+        log::error!("test_hope_gnutella09 failed in compute_Embedded");
         assert_eq!(1, 0);        
     }
     //    
     let _embed_res = hope_embedding.unwrap();
 
-} // end of test_wiki
+} // end of test_hope_gnutella09
 
 
 

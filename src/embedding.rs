@@ -38,6 +38,7 @@ pub enum EmbeddingMode {
 }
 
 
+
 /// The Embedded trait. Defines interface satisfied by embedded data
 /// In our implementations the embedded data are store in Array2 and embedded node
 /// are identified by their rank.
@@ -267,14 +268,19 @@ pub trait EmbedderT<F>  {
 
 /// The structure collecting the result of the embedding process
 /// 
+/// - F the embedded vectors contains values of type F (mostmy f32, f64, usize ...)
+/// 
+/// - NodeId is the type representing nodes (most often an usize). It must
+///     implement Hash and Eq to be indexed.
+/// 
 /// - nodeindexation : an IndexSet storing Node identifier (as in datafile) and associating it to a rank in Array representing embedded nodes
 ///                      given a node id we get its rank in Array using IndexSet::get_index_of
 ///                      given a rank we get original node id by using IndexSet::get_index. 
 /// 
 /// - embbeded : the embedded data of type EmbeddedData. At present time Embedded<F> or EmbeddedAsym<F>
-pub struct Embedding<F,  EmbeddedData : EmbeddedT<F> >  {
+pub struct Embedding<F, NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> >  {
     /// association of nodeid to a rank. To be made generic to not restrict node id to usize
-    nodeindexation : IndexSet<usize>,
+    nodeindexation : IndexSet<NodeId>,
     ///
     embedded : EmbeddedData,
     ///
@@ -283,10 +289,11 @@ pub struct Embedding<F,  EmbeddedData : EmbeddedT<F> >  {
 
 
 
-impl <EmbeddedData,F> Embedding<F, EmbeddedData >  where  EmbeddedData: EmbeddedT<F> {
+impl <NodeId, EmbeddedData,F> Embedding<F, NodeId, EmbeddedData >  where  EmbeddedData: EmbeddedT<F> ,
+         NodeId :  std::hash::Hash + std::cmp::Eq {
     /// Creates an embedding of a Graph given a structure implementing an embedding (NodeSketch, NodeSketchAsym or Hope)
     /// If success return 
-    pub fn new(nodeindexation : IndexSet<usize>, embedder : &mut dyn EmbedderT<F, Output = EmbeddedData>) -> Result<Self, anyhow::Error > {
+    pub fn new(nodeindexation : IndexSet<NodeId>, embedder : &mut dyn EmbedderT<F, Output = EmbeddedData>) -> Result<Self, anyhow::Error > {
         let embedded_res = embedder.embed();
         if embedded_res.is_err() {
             log::error!("embedding failed");
@@ -299,7 +306,7 @@ impl <EmbeddedData,F> Embedding<F, EmbeddedData >  where  EmbeddedData: Embedded
 
 
     /// to retrieve the indexation
-    pub fn get_node_indexation(&self) -> &IndexSet<usize> {
+    pub fn get_node_indexation(&self) -> &IndexSet<NodeId> {
         return &self.nodeindexation
     } // end of get_node_indexation
 
@@ -310,7 +317,7 @@ impl <EmbeddedData,F> Embedding<F, EmbeddedData >  where  EmbeddedData: Embedded
 
 
     /// get distance between nodes, given their original node id
-    pub fn get_node_distance(&self, node1 : usize, node2 : usize) -> f64 {
+    pub fn get_node_distance(&self, node1 : NodeId, node2 : NodeId) -> f64 {
         let rank1 = self.nodeindexation.get_index_of(&node1).unwrap();
         let rank2 = self.nodeindexation.get_index_of(&node2).unwrap();
         self.embedded.get_noderank_distance(rank1, rank2)
@@ -318,12 +325,12 @@ impl <EmbeddedData,F> Embedding<F, EmbeddedData >  where  EmbeddedData: Embedded
 
 
     /// get rank of a node_id. 
-    pub fn get_node_rank(&self, node_id: usize) -> Option<usize>  {
+    pub fn get_node_rank(&self, node_id: NodeId) -> Option<usize>  {
         self.nodeindexation.get_index_of(&node_id)
     }
 
     /// get node_id given its rank in indexation (and matrix representation)
-    pub fn get_node_id(&self, rank: usize) -> Option<&usize> {
+    pub fn get_node_id(&self, rank: usize) -> Option<&NodeId> {
         self.nodeindexation.get_index(rank)
     }
 
