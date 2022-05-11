@@ -387,7 +387,8 @@ pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_p
             }
         }
         let mean_auc : f64 = auc.iter().sum::<f64>() / (auc.len() as f64);
-        log::info!("estimate_auc : mean auc : {:.3e}", mean_auc);
+        let sigma2 =  auc.iter().fold(0.0f64, | var : f64, x |  var + (*x - mean_auc) * (*x - mean_auc))/ (auc.len() as f64);
+        log::info!("estimate_auc : mean auc : {:.3e}, std dev : {:.3e}", mean_auc, (sigma2/ (auc.len() as f64)).sqrt());
         log::debug!("exiting estimate_auc");
         //
         auc
