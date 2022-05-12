@@ -89,7 +89,7 @@ Embedding and link prediction evaluation for the above data sets are given [here
 
 The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
 It is intrinsically asymetric in nature. It nevertheless gives access to the spectrum of Adamic Adar representing the graph and
-so to the required dimension to get a valid embedding in $R^{n}$.  
+so to the required dimension to get a valid embedding in $$R^{n}$$.  
 
 The Sketching embedding is much faster for large graphs but embeds in a space consisting in sequences of node id equipped with the Jaccard distance.
 
