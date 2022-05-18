@@ -79,13 +79,14 @@ AUC is run with 5 successive runs.
 
 10000 edges deleted by pass
 
-standard deviation on AUC is around 7.E0E-4 with 20 AUC pass
+standard deviation on AUC is around 8.E-4 with 20 AUC pass
 
 |  graph             | nb nodes | nb edges   | dimension   |  nb AUC pass | nb hops   |  decay    |  ratio     |  AUC     | time(s)   |
 |  :----------:      |  :---:   | :-------:  |  :-------:  |   :-------:  |  :-----:  |   :-----: |  :----:    | :-----:  | :-------: |
 | wiki_vote          | 7115     |  103689    |   100       |     20       |    5      |    0.1    |   0.147    |  0.883   |   0.5     |
 | wiki_vote          | 7115     |  103689    |   200       |     20       |    5      |    0.1    |   0.147    |  0.896   |   ~1      |
-| wiki_vote          | 7115     |  103689    |   500       |     20       |    5      |    0.1    |   0.147    |  0.925   |   ~1.5    |
+| wiki_vote          | 7115     |  103689    |   500       |     20       |    5      |    0.1    |   0.147    |  0.922   |   ~1.5    |
+| wiki_vote          | 7115     |  103689    |   500       |     20       |    2      |    0.25   |   0.147    |  0.94    |   ~1.5    |
 | cora               | 23166    |  91500     |   200       |     20       |    5      |    0.2    |   0.143    |  0.924   |   ~1.     | 
 | cora               | 23166    |  91500     |   300       |     40       |    5      |    0.5    |   0.143    |  0.932   |   ~2.     | 
 | mmunmun_twitter    | 465017   |  834797    |   500       |     20       |    5      |    0.1    |   0.085    |  0.78    |   73      |
