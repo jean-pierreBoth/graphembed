@@ -38,7 +38,7 @@
 //! 
 //!  The validation command has 2 parameters:
 //! - --nbpass 
-//!     It determines the number of validation pass to be done.
+//!     It determines the number of validation pass to be done.  
 //! - --skip
 //!     It determines the number of edges to delete in the validation pass. Recall that the real number of discarded edges
 //!     can be smaller as we must not make isolated points.
@@ -47,9 +47,10 @@
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   
-//!     embed --csv "p2p-Gnutella09.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 --decay 0.1
+//!     embed --csv "p2p-Gnutella09.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3
 //! 
-//!  
+//!     embed --csv wiki-Vote.txt --symetric false validation --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
+//! 
 //! The module can be launched (and it is recommended) by preceding the command by setting the variable RUST_LOG to info (normal information) or debug (to get related info) 
 //! as in *example RUST_LOG=graphite=debug embed ....*
 //! 
