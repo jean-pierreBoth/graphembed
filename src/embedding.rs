@@ -222,7 +222,6 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
             let dist = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
             return dist;
         }
-        // TODO the mixed case source -> target
 
     } // end of get_noderank_distance
 
