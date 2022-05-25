@@ -38,7 +38,7 @@ pub type NodeIndexation<N> = IndexSet<N>;
 
 
 // count number of first lines beginning with '#' or '%'
-fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
+pub(crate) fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
     //
     log::debug!("get_header_size");
     //

@@ -85,18 +85,25 @@ Embedding and link prediction evaluation for the above data sets are given [here
 
 ### Some qualitative comments
 
-## Usage
+## Installation and Usage
 
-The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
+### Installation
+
+The crate provides two features, required by the *annembed* dependency, to specify which version of lapack you want to use.  
+For example compilation is done by :
+*cargo build --release --features="openblas-static"* to link statically with openblas.
+### Usage
+
+* The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
 It is intrinsically asymetric in nature. It nevertheless gives access to the spectrum of Adamic Adar representing the graph and
 so to the required dimension to get a valid embedding in $R^{n}$.  
-
 The Sketching embedding is much faster for large graphs but embeds in a space consisting in sequences of node id equipped with the Jaccard distance.
 
-The *embed* module takes embedding and possibly validation commands in one directive.
-
+* The *embed* module takes embedding and possibly validation commands in one directive.  
 The general syntax is :
 
-embed file_description [validation_command --validation_arguments] embedding_command --embedding_argumeents
+    embed file_description [validation_command --validation_arguments] embedding_command --embedding_arguments
 
-It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
+    It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
+
+* Using the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.

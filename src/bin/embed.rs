@@ -22,16 +22,16 @@
 //! 
 //! example usage:
 //! 
-//! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 1000 and 3 iterations
+//! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 100 and 10 iterations
 //! in the range approximations:  
-//! embed --csv "p2p-Gnutella09.txt" --symetric "true" embedding hope  --approx "ADA" rank --targetrank 1000 --nbiter 3 --decay 0.1
+//! embed --csv "p2p-Gnutella09.txt" --symetric "true" embedding hope  --approx "ADA" rank --targetrank 100 --nbiter 10 
 //! 
 //! with precision target:  
-//! embed --csv "p2p-Gnutella09.txt" --symetric "true" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
+//! embed --csv "p2p-Gnutella08.txt" --symetric "true" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
 //! 
 //! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 :
 //! 
-//! embed --csv "p2p-Gnutella09.txt"  --symetric "true" embedding sketching --decay 0.1  --dim 500 --nbiter 3 
+//! embed --csv "p2p-Gnutella08.txt"  --symetric "true" embedding sketching --decay 0.1  --dim 500 --nbiter 3 
 //! 
 //! 
 //! 2. **Validation mode with estimation of AUC on link prediction task**.
@@ -47,7 +47,12 @@
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   
-//!     embed --csv "p2p-Gnutella09.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3
+//! 
+//!
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --npass 10 --skip 0.1 hope --approx ADA precision --epsil 0.2 --maxrank 200  --blockiter 3
+//!
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --npass 10 --skip 0.1 hope --approx ADA rank --targetrank 100  --nbiter 10
 //! 
 //!     embed --csv wiki-Vote.txt --symetric false validation --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
 //! 

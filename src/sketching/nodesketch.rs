@@ -331,7 +331,7 @@ fn test_nodesketch_lesmiserables() {
     }
     let (trimat, node_index) = res.unwrap();
     let sketch_size = 15;
-    let decay = 100.;
+    let decay = 0.1;
     let nb_iter = 2;
     let parallel = false;
     let symetric = true;

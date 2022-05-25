@@ -62,13 +62,13 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
     log::debug!("entering bson_dump");
     //
     let path = Path::new(fname);
-    let fileres = OpenOptions::new().write(true).open(&path);
+    let fileres = OpenOptions::new().write(true).create(true).open(path);
     let file;
     if fileres.is_ok() {
         file = fileres.unwrap();
     }
     else {
-        return Err(anyhow!("could not open file : {}", fname));
+        return Err(anyhow!("could not open file : {}", path.display()));
     }
     let bufwriter = BufWriter::new(file);
     let mut doc = Document::new();
@@ -110,10 +110,14 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
     let res = doc.to_writer(bufwriter);
     if res.is_ok() {
         log::info!("dump bson in {} done", path.display());
+        return Ok(());
+    }
+    else {
+        return Err(anyhow!("dump of bson failed: {}", res.err().unwrap()));
     }
     //
-    return Err(anyhow!("not yet"));
 }  // end of bson_dump
+
 
 
 pub fn bson_load<F, NodeId, EmbeddedData>(fname : &String) -> Result<Embedding<F, NodeId, EmbeddedData>, anyhow::Error>
@@ -123,13 +127,14 @@ pub fn bson_load<F, NodeId, EmbeddedData>(fname : &String) -> Result<Embedding<F
     log::debug!("entering bson_dump");
     //
     let path = Path::new(fname);
-    let fileres = OpenOptions::new().write(true).open(&path);
+    let fileres = OpenOptions::new().read(true).open(&path);
     let file;
     if fileres.is_ok() {
         file = fileres.unwrap();
     }
     else {
-        return Err(anyhow!("could not open file : {}", fname));
+        log::error!("reload of bson dump failed");
+        return Err(anyhow!("reloadfailed: {}", fileres.err().unwrap()));
     }
     let mut bufreader = BufReader::new(file);
     let res = Document::from_reader(&mut bufreader);
@@ -155,7 +160,6 @@ pub fn bson_load<F, NodeId, EmbeddedData>(fname : &String) -> Result<Embedding<F
 #[cfg(test)]
 mod tests {
 
-    use sprs::TriMatI;
     use super::*;
     use crate::prelude::*;
 
@@ -167,18 +171,54 @@ mod tests {
     }  // end of log_init_test
 
 
-    // craft by hand mini graph by filling directly a trimat and nodeindexation
-#[allow(unused)]
-    fn build_mini_graph() ->  anyhow::Result<(TriMatI<f64, usize>, NodeIndexation<usize>)> {
-        return Err(anyhow!("not yet"));
-    } // end of build_mini_graph
 
 
 
 #[test]
-    fn test_bson_mini() {
+    fn test_bson_moreno() {
         log_init_test();
         //
+        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::debug!("\n\n test_weighted_csv_to_trimat, loading file {:?}", path);
+        let header_size = crate::io::csv::get_header_size(&path);
+        assert_eq!(header_size.unwrap(),2);
+        println!("\n\n test_weighted_csv_to_trimat, data : {:?}", path);
+        //
+        let trimat_res  = csv_to_trimat::<f64>(&path, false, b' ');
+        if let Err(err) = &trimat_res {
+            eprintln!("ERROR: {}", err);
+            assert_eq!(1,0);
+        }
+        let (trimat, node_indexation)  = trimat_res.unwrap();
+        // embed
+        let sketch_size = 15;
+        let decay = 0.1;
+        let nb_iter = 2;
+        let parallel = false;
+        let symetric = true;
+        let sketching_params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
+        let mut nodesketch = NodeSketch::new(sketching_params, trimat);
+        let embedding = Embedding::new(node_indexation, &mut nodesketch);
+        if embedding.is_err() {
+            log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
+            std::process::exit(1);
+        };
+        let embedding = embedding.unwrap();
+        // now we can do a bson dump
+        let dumpfname = String::from("moreno_bson");
+        let bson_res = bson_dump(&embedding, &String::from("moreno_bson"));
+        if bson_res.is_err() {
+            log::error!("bson dump in file {} failed", &dumpfname);
+            log::error!("error returned : {:?}", bson_res.err().unwrap());
+            assert_eq!(1,0);
+        } 
+        //
+        log::info!("trying reload from {}", &dumpfname);
+        let reloaded = bson_load::<usize, usize, Embedded<usize>>(&dumpfname);
+        if reloaded.is_err() {
+            log::error!("reloading of bson from {} failed", dumpfname);
+        }
+        // now we must compare
 
     } // end of test_bson_mini
 
