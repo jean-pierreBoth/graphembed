@@ -20,8 +20,10 @@
 ///     so first vector of the second group of embedded vectors corresponding to nodes as target has key
 ///     "0,1" the second vector has key "1,1"
 /// 
-/// 3. The nodeindexation is encoded in a subdocument associated to key indexation
-/// 
+/// 3. The nodeindexation can also be encoded in a subdocument associated to key indexation.
+///    The dump of nodeindexation is not mandatory as it can be retrieved by loading the original graph again.
+///    The presence of nodeindexation can be tested by checking if the main document has ky "indexation".  
+///    If the sub-document is present :  
 ///    each nodeid is encoded as string  providing a key in document indeaxtion associated to the node rank as i64.
 /// 
 /// 
@@ -36,6 +38,7 @@ use std::io::{BufWriter, BufReader};
 // to convert NodeId to a string, so NodeId must satisfy NodeId : ToString 
 // this  requires NodeId :  Display + ?Sized to get auto implementation
 use std::string::ToString;
+use std::str::FromStr;
 
 // for serilaizatio, desreialization
 use bson::{bson, DeserializerOptions,  Bson, Document};
@@ -43,7 +46,8 @@ use serde::{Serialize, Deserialize};
 
 
 use num::cast::FromPrimitive;
-use ndarray::{Array1,Array2, ArrayView1};
+use ndarray::{Array2, ArrayView1};
+use indexmap::IndexSet;
 
 use crate::embedding::*;
 use crate::tools::edge::{IN,OUT};
@@ -155,12 +159,6 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
 }  // end of bson_dump
 
 
-fn get_vector<F>(bsondata : &Bson) -> Result<Array1<F>, anyhow::Error>  {
-
-    Err(anyhow!("not yet"))
-} // end of get_vector
-
-
 
 /// returns the bson header of an embedding
 /// This can be useful to retrieve the type of the embedding
@@ -193,11 +191,40 @@ pub fn get_bson_header(fname : &String) -> Result<BsonHeader, anyhow::Error> {
 } // end of get_bson_header
 
 
+/// The structure returned by bson_load.
+pub struct BsonReload<F, NodeId> {
+    /// The minimal embedded data when graph is symetric
+    out_embedded: Array2<F>,
+    /// If grap is asymetric we get embedding of nodes as targets (or destinations) in_embedded
+    in_embedded : Option<Array2<F>>,
+    /// If nodeindexation was dumped in bson
+    node_indexation : Option< IndexSet<NodeId>>
+}  // end of BsonReload
 
-pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<Embedding<F, NodeId, EmbeddedData>, anyhow::Error>
+
+
+impl <F, NodeId> BsonReload<F, NodeId> {
+    pub fn new(out_embedded : Array2<F>, in_embedded : Option<Array2<F>>, 
+                                node_indexation : Option< IndexSet<NodeId>>) -> Self {
+        BsonReload{out_embedded, in_embedded, node_indexation}
+    }
+    /// returns embedded data. If asymetric embedding it is embedded as a source. 
+    /// If embedding is symetric it is the whole embedding.
+    pub fn get_out_embedded(&self) -> &Array2<F> { &self.out_embedded}
+    /// returns node indexation if present
+    pub fn get_node_indexation(&self) -> Option<&IndexSet<NodeId>> { self.node_indexation.as_ref() }
+    /// 
+    pub fn get_in_embedded(&self) -> Option<&Array2<F>> { self.in_embedded.as_ref()}
+}  // enf of impl BsonReload
+
+
+/// reloads embedded data from a previous bson dump. Returns a BsonReload structure.
+/// The structure  Embedded or EmbeddedAsym can be reconstituted from it (or with a graph reload to get nodeindexation)
+///
+pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonReload<F, NodeId>, anyhow::Error>
     where   NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> ,
             F : num_traits::Zero + Clone + serde::de::DeserializeOwned,
-            NodeId : ToString {
+            NodeId : ToString + FromStr {
     //
     log::debug!("entering bson_dump");
     //
@@ -259,6 +286,7 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<Embeddi
     }
     log::debug!("got OUT part of embedding");
     // 
+    let mut in_array_opt: Option<Array2<F>> = None;
     if !header.symetric {
         let mut in_array = Array2::<F>::zeros((0, dim));
         log::debug!("asymetric embedding, decoding IN part of embedding");
@@ -278,10 +306,49 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<Embeddi
                 return Err(anyhow!("could not insert IN array vector {:?}", i));
             }
         } 
+        in_array_opt = Some(in_array);
     }  
-    log::debug!("finished bsoon decoding of embedding");
-    //
-    return Err(anyhow!("not yet"));
+    log::debug!("finished bsoon decoding of embedded vectors");
+    // trying node indexation
+    let res =  doc.get_document("indexation");
+    if let Err(e) = &res {
+        match e {
+            bson::document::ValueAccessError::UnexpectedType => {
+                log::error!("could load indexation error : {}", e);
+                return Err(anyhow!("could not find indexation document, error : {}", e));                
+            }
+            bson::document::ValueAccessError::NotPresent => {
+                log::info!("No indexation in bson file : {}", path.display());
+                return Ok(BsonReload::new(out_array, in_array_opt, None));
+            }
+            _ => {
+               panic!("not exhaustive pattern encountered in bson error"); 
+            }
+        }
+    }
+    else {
+        let bson_indexation = res.unwrap();
+        let mut node_indexation = IndexSet::<NodeId>::with_capacity(bson_indexation.len());
+        let mut index_iter = bson_indexation.iter();
+        while let Some(item) = index_iter.next() {
+            let res = NodeId::from_str(item.0);
+            let node_id = match res {
+                Ok(node_id)  => node_id,
+                Err(_e) => {
+                    log::error!("could get node rank for node_id {}", item.0);   
+                    return Err(anyhow!("could get node rank for node_id {}", item.0));
+                }
+            };
+            let res = item.1.as_i64();
+            if res.is_none() {
+                log::error!("could get node rank for node_id {}", item.0);   
+                return Err(anyhow!("could get node rank for node_id {}", item.0));      
+            }
+            node_indexation.insert(node_id);
+        }
+        assert_eq!(node_indexation.len(), nb_data);
+        return Ok(BsonReload::new(out_array, in_array_opt, Some(node_indexation)));
+    }   // end case we have indexation in bson file
 } // end of bson_load
 
 
