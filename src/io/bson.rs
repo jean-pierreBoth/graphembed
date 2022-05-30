@@ -1,33 +1,31 @@
 //! file to do bson io for embedding results
-
-/// 
-///  Data are formatted in a bson Document, each value as a key.
-/// 
-///  The encoding is done in 3 parts:
-/// 1. A header structure with key "header". The structure is described below [Header](BsonHeader)
-/// - a version index
-/// - base type essentially usize , f32 or f64 as a String. key is type_name
-/// - symetric or asymetric flag
-/// - dimension of vectors
-/// - number of vectors
-/// 
-/// 2. The embedded arrays one or two depending on asymetry
-/// - loop on number of vectors
-///     each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN
-///     so the first vector of embedding has key "0,0" , the second "1,0"
-/// - if embedding is asymetric the first loop gives outgoing (or source) representation of node
-///   and there is another loop giving ingoing or target) representation of node with key made by IN encoding
-///     so first vector of the second group of embedded vectors corresponding to nodes as target has key
-///     "0,1" the second vector has key "1,1"
-/// 
-/// 3. The nodeindexation can also be encoded in a subdocument associated to key indexation.
-///    The dump of nodeindexation is not mandatory as it can be retrieved by loading the original graph again.
-///    The presence of nodeindexation can be tested by checking if the main document has ky "indexation".  
-///    If the sub-document is present :  
-///    each nodeid is encoded as string  providing a key in document indeaxtion associated to the node rank as i64.
-/// 
-/// 
-/// 
+//! 
+//!  Data are formatted in a bson Document, each value as a key.
+//!
+//!  The encoding is done in 3 parts:
+//! 1. A header structure with key "header". The structure is described below see struct [Header](BsonHeader)
+//! - a version index
+//! - base type name essentially f32,f64 or usize encoded as a String. key is type_name.  
+//!     **Beware that as bson requires usize to be encoded as i64, an independant implementation of a reload
+//!     will need to parse as i64 in the Nodesketch embedding which uses usize vectors. (See sources)**
+//! - symetric or asymetric flag
+//! - dimension of vectors
+//! - number of vectors
+//! 
+//! 2. The embedded arrays, one or two depending on asymetry
+//!     - loop on number of vectors
+//!     each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN
+//!     so the first vector of embedding has key "0,0" , the second "1,0"
+//!     - if embedding is asymetric the first loop gives outgoing (or source) representation of node
+//!     and there is another loop giving ingoing or target) representation of node with key made by IN encoding
+//!     so first vector of the second group of embedded vectors corresponding to nodes as target has key
+//!     "0,1" the second vector has key "1,1"
+//! 
+//! 3. The nodeindexation can also be encoded in a subdocument associated to key *"indexation"*.
+//!    The dump of nodeindexation is not mandatory as it can be retrieved by loading the original graph again.  
+//!    The presence of nodeindexation can be tested by checking if the main document has ky *"indexation"*.  
+//!    If the sub-document is present : each nodeid is encoded as string  providing a key in document indeaxtion associated to the node rank as i64.
+//!  
 
 use anyhow::{anyhow};
 
@@ -76,13 +74,16 @@ impl BsonHeader {
 } // end of impl BsonHeader
 
 
-///
-pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, EmbeddedData>, fname : &String) -> Result<(), anyhow::Error>
+/// dump an embedding in bson format in filename fname.
+/// If dump_indexation is true, nodeindexation will also be dumped, and retrived from bson main document
+/// by searching for the subdocumnt accessed by key "indexation"
+/// 
+pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, EmbeddedData>, dump_indexation : bool, fname : &String) -> Result<(), anyhow::Error>
     where   NodeId : std::hash::Hash + std::cmp::Eq + std::fmt::Display,  
             EmbeddedData : EmbeddedT<F> ,
             F : Serialize {
     //
-    log::debug!("entering bson_dump");
+    log::info!("entering bson_dump");
     //
     let path = Path::new(fname);
     let fileres = OpenOptions::new().write(true).create(true).open(path);
@@ -110,7 +111,6 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
         }
     ); 
     doc.insert("header", bson_header);
-    // TODO we should store a nodeId to NodeId should satisfy NodeId : ToString ? or separate , or just reload csv file
     // now loop on data vectors
     for i in 0..nbdata as usize {
         let data : Vec<Bson> = embedded.get_embedded_node(i, OUT).iter().map(|x| bson::to_bson(x).unwrap()).collect();
@@ -118,7 +118,6 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
         let mut key = ival.to_string();
         key.push_str(",");
         key.push_str(&OUT.to_string());
-        // TODO we should store a nodeId to NodeId should satisfy NodeId : ToString ? or separate , or just reload csv file
         doc.insert(key, data);
     }
     // if asymetric we must dump in part
@@ -134,34 +133,36 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
         }
         log::debug!("asymetric part converted to bson");
     }
-    log::debug!("dumping NodeIndexation");
+    log::info!("dumping NodeIndexation");
     // We dump nodeindexation as a document with 
     // each key being nodeid converted to a String
-    let mut bson_indexation = Document::new();
-    let node_indexation = embedding.get_node_indexation();
-    for i in 0..node_indexation.len() {
-        let node_id = node_indexation.get_index(i).unwrap();
-        bson_indexation.insert(node_id.to_string(), i as i64);
-    }
-    doc.insert("indexation", bson_indexation);
-    log::debug!("NodeIndexation bson encoded");
+    if dump_indexation {
+        let mut bson_indexation = Document::new();
+        let node_indexation = embedding.get_node_indexation();
+        for i in 0..node_indexation.len() {
+            let node_id = node_indexation.get_index(i).unwrap();
+            bson_indexation.insert(node_id.to_string(), i as i64);
+        }
+        doc.insert("indexation", bson_indexation);
+        log::info!("NodeIndexation bson encoded");
+    } // end dump indexation
     // write document
     let res = doc.to_writer(bufwriter);
-
     if res.is_err() {
-        log::info!("dump bson in {} done", path.display());
+        log::error!("dump bson in {} done", path.display());
         return Err(anyhow!("dump of bson failed: {}", res.err().unwrap()));
     }
-
- 
+    log::info!("bson dump in file {} finished",  path.display());
     //
-    Err(anyhow!("dump of bson not yet"))
+    Ok(())
+//    Err(anyhow!("dump of bson not yet"))
 }  // end of bson_dump
 
 
 
-/// returns the bson header of an embedding
-/// This can be useful to retrieve the type of the embedding
+/// returns the bson header of an embedding.  
+/// This can be useful to retrieve the type of the embedding (dumped via a call to std::any::type_name::<F>()).
+/// The type will be "f64", "f32" or "i64" as Bson imposes the conversion of usize to i64
 pub fn get_bson_header(fname : &String) -> Result<BsonHeader, anyhow::Error> {
     let path = Path::new(fname);
     let fileres = OpenOptions::new().read(true).open(&path);
@@ -213,7 +214,7 @@ impl <F, NodeId> BsonReload<F, NodeId> {
     pub fn get_out_embedded(&self) -> &Array2<F> { &self.out_embedded}
     /// returns node indexation if present
     pub fn get_node_indexation(&self) -> Option<&IndexSet<NodeId>> { self.node_indexation.as_ref() }
-    /// 
+    /// If the embedding dumped is asymetric this returns an array giving the embedding as a target (or destination) node.
     pub fn get_in_embedded(&self) -> Option<&Array2<F>> { self.in_embedded.as_ref()}
 }  // enf of impl BsonReload
 
@@ -375,7 +376,7 @@ mod tests {
         log_init_test();
         //
         let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
-        log::debug!("\n\n test_weighted_csv_to_trimat, loading file {:?}", path);
+        log::debug!("\n\n test_bson_moreno, loading file {:?}", path);
         let header_size = crate::io::csv::get_header_size(&path);
         assert_eq!(header_size.unwrap(),2);
         println!("\n\n test_weighted_csv_to_trimat, data : {:?}", path);
@@ -402,7 +403,9 @@ mod tests {
         let embedding = embedding.unwrap();
         // now we can do a bson dump
         let dumpfname = String::from("moreno_bson");
-        let bson_res = bson_dump(&embedding, &String::from("moreno_bson"));
+        // testing with indexation
+        let dump_indexation = true;
+        let bson_res = bson_dump(&embedding, dump_indexation, &String::from("moreno_bson"));
         if bson_res.is_err() {
             log::error!("bson dump in file {} failed", &dumpfname);
             log::error!("error returned : {:?}", bson_res.err().unwrap());

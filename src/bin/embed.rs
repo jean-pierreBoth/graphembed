@@ -69,11 +69,11 @@ use log::{log_enabled};
 use anyhow::{anyhow};
 use clap::{Arg, ArgMatches, Command, arg};
 
-use graphite::prelude::*;
+use graphembed::prelude::*;
 use sprs::{TriMatI};
 
-/// variable to be changed to run tests
-static DATADIR : &str = &"/home/jpboth/Data/Graphs";
+/// variable to be used to run tests
+const _DATADIR : &str = &"/home/jpboth/Data/Graphs";
 
 #[doc(hidden)]
 fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
@@ -533,7 +533,8 @@ pub fn main() {
     log::info!(" parsing of commands succeeded"); 
     log::debug!("\n embedding paramertes : {:?}", embedding_parameters.as_ref());
     //
-    let path = std::path::Path::new(crate::DATADIR).join(fname.clone().as_str());
+//    let path = std::path::Path::new(_DATADIR).join(fname.clone());
+    let path = std::path::Path::new(&fname);
     if log_enabled!(log::Level::Info) {
         log::info!("\n\n loading file {:?}, symetric = {}", path, symetric_graph);
     }

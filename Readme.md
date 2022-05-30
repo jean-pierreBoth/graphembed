@@ -1,4 +1,4 @@
-# Graphite
+# Graphembed
 
 The purpose of this crate is to provide asymetric (and also symetric) embedding of graphs positively weighted edges.
 
@@ -29,9 +29,7 @@ The asymetric embedding is obtained from the left and right singular eigenvector
 Source node are related to left singular vectors and target nodes to the right ones. The similarity measure is the dot product, so it is not a norm.  
 The svd is approximated by randomization as described in Halko-Tropp 2011 as implmented in the annembed crate.
 
-Katz index or Rooted Page Rank should also be possible using randomized Gsvd as described in :
- *Randomized Generalized Singular Value Decomposition CAMC 2021*
-    W. Wei H. Zhang, X. Yang, X. Chen
+
 
 
 ## Some data sets
@@ -92,6 +90,7 @@ Embedding and link prediction evaluation for the above data sets are given [here
 The crate provides two features, required by the *annembed* dependency, to specify which version of lapack you want to use.  
 For example compilation is done by :
 *cargo build --release --features="openblas-static"* to link statically with openblas.
+The choice of one feature is mandatory to provide required linear algebra library.
 ### Usage
 
 * The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
