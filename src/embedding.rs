@@ -244,7 +244,7 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
             _ => { 
                     log::error!(" for asymetric embedding tag in get_embedded_node must be 0 or 1");
                     std::panic!("for asymetric embedding tag in get_embedded_node must be 0 or 1");
-                }
+            }
         }
     }
 } // end impl EmbeddedT<F>

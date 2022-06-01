@@ -49,6 +49,7 @@ use indexmap::IndexSet;
 
 use crate::embedding::*;
 use crate::tools::edge::{IN,OUT};
+use crate::io;
 
 
 /// This structure defines the header of the bson document
@@ -78,14 +79,14 @@ impl BsonHeader {
 /// If dump_indexation is true, nodeindexation will also be dumped, and retrived from bson main document
 /// by searching for the subdocumnt accessed by key "indexation"
 /// 
-pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, EmbeddedData>, dump_indexation : bool, fname : &String) -> Result<(), anyhow::Error>
+pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, EmbeddedData>, output : &io::output::Output) -> Result<(), anyhow::Error>
     where   NodeId : std::hash::Hash + std::cmp::Eq + std::fmt::Display,  
             EmbeddedData : EmbeddedT<F> ,
             F : Serialize {
     //
     log::info!("entering bson_dump");
     //
-    let path = Path::new(fname);
+    let path = Path::new(output.get_output_name());
     let fileres = OpenOptions::new().write(true).create(true).open(path);
     let file;
     if fileres.is_ok() {
@@ -136,7 +137,7 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
     log::info!("dumping NodeIndexation");
     // We dump nodeindexation as a document with 
     // each key being nodeid converted to a String
-    if dump_indexation {
+    if output.get_indexation() {
         let mut bson_indexation = Document::new();
         let node_indexation = embedding.get_node_indexation();
         for i in 0..node_indexation.len() {
@@ -353,6 +354,10 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonRel
 } // end of bson_load
 
 
+// This function checks equality of embedded and reloaded
+fn check_equality() {
+    
+}  // end of check equality
 
 #[cfg(test)]
 mod tests {
@@ -402,23 +407,51 @@ mod tests {
         };
         let embedding = embedding.unwrap();
         // now we can do a bson dump
-        let dumpfname = String::from("moreno_bson");
-        // testing with indexation
-        let dump_indexation = true;
-        let bson_res = bson_dump(&embedding, dump_indexation, &String::from("moreno_bson"));
+        let output = io::output::Output::new(io::output::Format::BSON, true, &Some(String::from("moreno.bson")) );
+        let bson_res = bson_dump(&embedding, &output);
         if bson_res.is_err() {
-            log::error!("bson dump in file {} failed", &dumpfname);
+            log::error!("bson dump in file {} failed", &output.get_output_name());
             log::error!("error returned : {:?}", bson_res.err().unwrap());
             assert_eq!(1,0);
         } 
         //
-        log::info!("trying reload from {}", &dumpfname);
-        let reloaded = bson_load::<usize, usize, Embedded<usize>>(&dumpfname);
+        log::info!("trying reload from {}", &output.get_output_name());
+        let reloaded = bson_load::<usize, usize, Embedded<usize>>(output.get_output_name());
         if reloaded.is_err() {
-            log::error!("reloading of bson from {} failed", dumpfname);
+            log::error!("reloading of bson from {} failed", output.get_output_name());
         }
+        let reloaded = reloaded.unwrap();
+        let out_reloaded = reloaded.get_out_embedded();
+        // check reloaded out
         // now we must compare
-
-    } // end of test_bson_mini
+        let embedded_data = embedding.get_embedded_data();
+        assert_eq!(out_reloaded.dim(), (embedded_data.get_nb_nodes(), embedded_data.get_dimension()));
+        // first chech out as it is the default and is always present
+        log::info!("test_bson_moreno checking equality of reload, OUT embedding");
+        for i in 0..embedded_data.get_nb_nodes() {
+            let vec_e = embedded_data.get_embedded_node(i, OUT);
+            for j in 0..embedded_data.get_dimension() {
+                if vec_e[j] != out_reloaded[[i,j]] {
+                    log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
+                            vec_e[j], out_reloaded[[i,j]]);
+                }
+            }
+        }
+        if !embedded_data.is_symetric() {
+            log::info!("test_bson_moreno checking equality of reload : IN embedding");
+            // same thing with tag = IN
+            for i in 0..embedded_data.get_nb_nodes() {
+                let vec_e = embedded_data.get_embedded_node(i, IN);
+                for j in 0..embedded_data.get_dimension() {
+                    if vec_e[j] != out_reloaded[[i,j]] {
+                        log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
+                                vec_e[j], out_reloaded[[i,j]]);
+                    }
+                }
+            }
+        }  // enc check IN in asymetric case
+        // check equality of node indexation
+    
+    } // end of test_bson_moreno
 
 } // end of mod tests

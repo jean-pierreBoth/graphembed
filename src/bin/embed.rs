@@ -6,7 +6,9 @@
 //!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
 //!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric.
 //!     It is also possible to declare as symetric an asymetric unweighted graph. It is then symetrised when reading the file.
-//!   
+//!  - --output or -o filename  
+//!     This dumps the embedding in a bson file named filename.bson. See module [bson]
+//! 
 //!  - a subcommand embedding for a simple embedding or validation for loop with AUC computation for the link prediction task
 //! 
 //! 1. **Embedding mode**
@@ -57,9 +59,9 @@
 //!     embed --csv wiki-Vote.txt --symetric false validation --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
 //! 
 //! The module can be launched (and it is recommended) by preceding the command by setting the variable RUST_LOG to info (normal information) or debug (to get related info) 
-//! as in *example RUST_LOG=graphite=debug embed ....*
+//! as for example :  *RUST_LOG=graphembed=debug embed ....*
 //! 
-//! It can be launched by setting  *export RUST_LOG=graphite::validation=trace*
+//! It can be launched by setting  *export RUST_LOG=graphembed::validation=trace*
 //! to get the maximum info in the validation module. (it will dump huge file reporting info on each edge decision)
 //! 
 
@@ -71,6 +73,10 @@ use clap::{Arg, ArgMatches, Command, arg};
 
 use graphembed::prelude::*;
 use sprs::{TriMatI};
+
+use graphembed::io;
+
+use graphembed::io::bson::*;
 
 /// variable to be used to run tests
 const _DATADIR : &str = &"/home/jpboth/Data/Graphs";
@@ -372,8 +378,9 @@ fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow
 #[doc(hidden)]
 pub fn main() {
     //
-    let _ = env_logger::builder().is_test(true).try_init();
-    log::info!("logger initialized"); 
+    println!("initializing default logger from environment ...");
+    let _ = env_logger::Builder::from_default_env().init();
+    log::info!("logger initialized from default environment"); 
     //
     // first we define subcommands we will need, hope , sketching , validation
     // the hope command
@@ -443,6 +450,11 @@ pub fn main() {
         .arg(Arg::new("symetry")
             .short('s').long("symetric").required(true).default_value("yes")
             .help(" -s for a symetric embedding, default is symetric"))
+        .arg(Arg::new("bson")
+            .long("output")
+            .short('o')
+            .takes_value(true)
+            .help("-o fname for a dump in fname.bson"))
         .subcommand(embedding_command)
         .subcommand(validation_cmd)
     .get_matches();
@@ -462,7 +474,8 @@ pub fn main() {
             log::info!("input file : {:?}", csv_file.clone());
             fname = csv_file.clone();
         }
-    };
+    }
+    
     let symetric_graph =  match matches.value_of("symetry") {
         Some(str) => {
             let res = str.parse::<bool>();
@@ -478,6 +491,20 @@ pub fn main() {
             true 
         },
     }; // end match symetry
+
+    let mut output_params : io::output::Output = io::output::Output::default();
+    if matches.is_present("output") {
+        let bson_name = matches.value_of("output").ok_or("").unwrap().parse::<String>().unwrap();
+        if bson_name == "" {
+            println!("parsing of request_dir failed");
+            std::process::exit(1);
+        }
+        else {
+            log::info!("input file : {:?}", bson_name.clone());
+            let bson_output_name = Some(bson_name);
+            output_params = io::output::Output::new(graphembed::io::output::Format::BSON, true, &bson_output_name);
+        }
+    } //end match output bson
 
     // now we have datafile and symetry we can parse subcommands and parameters
     let mut embedding_parameters : Option<EmbeddingParams> = None;
@@ -567,8 +594,12 @@ pub fn main() {
                     log::error!("hope embedding failed, error : {:?}", embedding.as_ref().err());
                     std::process::exit(1);
                 };
-                let _embed_res = embedding.unwrap();
+                let embed_res = embedding.unwrap();
                 // should dump somewhere
+                let res = bson_dump(&embed_res, &output_params);
+                if res.is_err() {
+                    log::error!("bson dump in {} failed", output_params.get_output_name());
+                }
             }
             else  {
                 let mut params = validation_params.unwrap();
@@ -623,8 +654,13 @@ pub fn main() {
                             log::error!("nodesketchasym embedding failed error : {:?}", embedding.as_ref().err());
                             std::process::exit(1);
                         };
-                        let _embed_res = embedding.unwrap();    
-                    },
+                        let embed_res = embedding.unwrap();
+                        // should dump somewhere
+                        let res = bson_dump(&embed_res, &output_params);
+                        if res.is_err() {
+                            log::error!("bson dump in {} failed", output_params.get_output_name());
+                        }    
+                    },  // end asymetric sketching
                 };
             } // end case no validation
             else {

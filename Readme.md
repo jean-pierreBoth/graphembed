@@ -105,4 +105,4 @@ The general syntax is :
 
     It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
 
-* Using the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.
+* Use the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.
