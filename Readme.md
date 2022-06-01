@@ -1,8 +1,8 @@
 # Graphembed
 
 The purpose of this crate is to provide asymetric (and also symetric) embedding of graphs positively weighted edges.
-
-**work in progress...**
+The crate comes as a library and as a simple executable with a validation option.  
+It is still in an early version.
 ## Methods
 
 We use two strategies for graph embedding.
@@ -50,9 +50,10 @@ be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
     les miserables  co occurence de mots dans un chapitre
 
 * CA-GrQc.txt       <https://snap.stanford.edu/data/ca-GrQc.html>
-*   p2p-Gnutella09.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella09.html>
 
-2. Asymetric graphs
+*   p2p-Gnutella08.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella08.html>
+
+1. Asymetric graphs
    
 *   wiki-vote               <https://snap.stanford.edu/data/wiki-Vote.html>
         7115 nodes 103689 edges
@@ -65,7 +66,10 @@ be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
 
 #### Some larger data tests for user to download
 
-Beware that some data are in Tsv format and need to be converted to Csv, before being read by the program.  
+These graphs were used in results see below.
+
+Beware of the possible need to convert from Windows to Linux End Of Line, see the dos2unix utility.  
+Possibly some data can need to be converted from Tsv format to Csv, before being read by the program. 
 
 1. Symetric 
 

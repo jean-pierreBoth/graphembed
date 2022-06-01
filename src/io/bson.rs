@@ -386,7 +386,7 @@ fn check_equality<F,NodeId, EmbeddedData> (embedding : &Embedding<F, NodeId, Emb
                     log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
                             vec_e[j], in_reloaded[[i,j]]);
                     return Ok(false);
-;                }
+                }
             }
         }
     }  // end check IN in asymetric case
