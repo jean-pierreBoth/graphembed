@@ -355,9 +355,62 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonRel
 
 
 // This function checks equality of embedded and reloaded
-fn check_equality() {
-    
+#[allow(unused)]
+fn check_equality<F,NodeId, EmbeddedData> (embedding : &Embedding<F, NodeId, EmbeddedData>, reloaded : &BsonReload<F, NodeId>) -> Result<bool, anyhow::Error> 
+    where   NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> ,
+            F : num_traits::Zero + Clone + serde::de::DeserializeOwned + PartialEq + std::fmt::Display,
+            NodeId : ToString + FromStr {
+        
+    let embedded_data = embedding.get_embedded_data();
+    let out_reloaded = reloaded.get_out_embedded();
+    assert_eq!(out_reloaded.dim(), (embedded_data.get_nb_nodes(), embedded_data.get_dimension()));
+    // first chech out as it is the default and is always present
+    log::info!("test_bson_moreno checking equality of reload, OUT embedding");
+    for i in 0..embedded_data.get_nb_nodes() {
+        let vec_e = embedded_data.get_embedded_node(i, OUT);
+        for j in 0..embedded_data.get_dimension() {
+            if vec_e[j] != out_reloaded[[i,j]] {
+                log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
+                        vec_e[j], out_reloaded[[i,j]]);
+            }
+        }
+    }
+    if !embedded_data.is_symetric() {
+        log::info!("test_bson_moreno checking equality of reload : IN embedding");
+        // same thing with tag = IN
+        let in_reloaded = reloaded.get_in_embedded().unwrap();
+        for i in 0..embedded_data.get_nb_nodes() {
+            let vec_e = embedded_data.get_embedded_node(i, IN);
+            for j in 0..embedded_data.get_dimension() {
+                if vec_e[j] != in_reloaded[[i,j]] {
+                    log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
+                            vec_e[j], in_reloaded[[i,j]]);
+                    return Ok(false);
+;                }
+            }
+        }
+    }  // end check IN in asymetric case
+    // check equality of node indexation
+    if reloaded.get_node_indexation().is_some() {
+        log::debug!("checking node indeation");
+        let loaded_indexation = reloaded.get_node_indexation().unwrap();
+        let node_indexation = embedding.get_node_indexation();
+        assert_eq!(loaded_indexation.len(), node_indexation.len());
+        for i in 0..node_indexation.len() {
+            let indexed = node_indexation.get_index(i).unwrap();
+            let reload_indexed = loaded_indexation.get_index(i).unwrap();
+            if indexed != reload_indexed {
+                log::error!("chech equality of node indexation failed at slot i : {} , node_indexation : {}, reloaded {}", i, indexed.to_string(), reload_indexed.to_string());
+                return Ok(false);
+            }
+        }
+    } // end case node_indexation
+    log::debug!("check_equality exiting");
+    Ok(true)
 }  // end of check equality
+
+
+
 
 #[cfg(test)]
 mod tests {
@@ -421,37 +474,23 @@ mod tests {
             log::error!("reloading of bson from {} failed", output.get_output_name());
         }
         let reloaded = reloaded.unwrap();
-        let out_reloaded = reloaded.get_out_embedded();
-        // check reloaded out
-        // now we must compare
-        let embedded_data = embedding.get_embedded_data();
-        assert_eq!(out_reloaded.dim(), (embedded_data.get_nb_nodes(), embedded_data.get_dimension()));
-        // first chech out as it is the default and is always present
-        log::info!("test_bson_moreno checking equality of reload, OUT embedding");
-        for i in 0..embedded_data.get_nb_nodes() {
-            let vec_e = embedded_data.get_embedded_node(i, OUT);
-            for j in 0..embedded_data.get_dimension() {
-                if vec_e[j] != out_reloaded[[i,j]] {
-                    log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
-                            vec_e[j], out_reloaded[[i,j]]);
+        //
+        let res_equality = check_equality(&embedding, &reloaded);
+        match &res_equality {
+            Err(_e) => {
+                log::error!("check equality encountered error in test_bson_moreno");
+                assert_eq!(1,0);                
+            }
+            Ok(val) => {
+                match val {
+                    false => {
+                        log::error!("check equality returned false in test_bson_moreno");
+                        assert_eq!(1, 0);                        
+                    }
+                    true => {},
                 }
             }
         }
-        if !embedded_data.is_symetric() {
-            log::info!("test_bson_moreno checking equality of reload : IN embedding");
-            // same thing with tag = IN
-            for i in 0..embedded_data.get_nb_nodes() {
-                let vec_e = embedded_data.get_embedded_node(i, IN);
-                for j in 0..embedded_data.get_dimension() {
-                    if vec_e[j] != out_reloaded[[i,j]] {
-                        log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
-                                vec_e[j], out_reloaded[[i,j]]);
-                    }
-                }
-            }
-        }  // enc check IN in asymetric case
-        // check equality of node indexation
-    
     } // end of test_bson_moreno
 
 } // end of mod tests
