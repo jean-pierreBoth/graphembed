@@ -36,8 +36,8 @@ The svd is approximated by randomization as described in Halko-Tropp 2011 as imp
 
 
 
-Small datasets are given in the Data subdirectory. Larger datasets can 
-be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
+Small datasets are given in the Data subdirectory (with 7z compression) to run tests.  
+Larger datasets can be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
 
 
 
