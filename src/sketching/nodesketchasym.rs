@@ -418,8 +418,8 @@ impl EmbedderT<usize> for NodeSketchAsym {
 mod tests {
  
  
-//    cargo test validation::link::tests::test_name -- --nocapture
-//    RUST_LOG=graphembed::sketching=TRACE cargo test test_nodesketchasym_wiki -- --nocapture
+//    cargo test --features="openblas-static" validation::link::tests::test_name -- --nocapture
+//    RUST_LOG=graphembed::sketching=TRACE cargo test --features="openblas-static" test_nodesketchasym_wiki -- --nocapture
 
 
 use crate::io::csv::csv_to_trimat;
@@ -450,7 +450,7 @@ fn test_nodesketchasym_wiki() {
     let decay = 0.1;
     let nb_iter = 2;
     let symetric = false;
-    let parallel = false;
+    let parallel = true;
     let params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
      // now we embed
     let mut nodesketch = NodeSketchAsym::new(params, trimat);   

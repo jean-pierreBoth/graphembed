@@ -428,9 +428,9 @@ mod tests {
 
 
 
-
+// test with usize embedding
 #[test]
-    fn test_bson_moreno() {
+    fn test_bson_moreno_usize() {
         log_init_test();
         //
         let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
@@ -460,7 +460,7 @@ mod tests {
         };
         let embedding = embedding.unwrap();
         // now we can do a bson dump
-        let output = io::output::Output::new(io::output::Format::BSON, true, &Some(String::from("moreno.bson")) );
+        let output = io::output::Output::new(io::output::Format::BSON, true, &Some(String::from("moreno_usize.bson")) );
         let bson_res = bson_dump(&embedding, &output);
         if bson_res.is_err() {
             log::error!("bson dump in file {} failed", &output.get_output_name());
@@ -478,7 +478,7 @@ mod tests {
         let res_equality = check_equality(&embedding, &reloaded);
         match &res_equality {
             Err(_e) => {
-                log::error!("check equality encountered error in test_bson_moreno");
+                log::error!("check equality encountered error in test_bson_moreno_usize");
                 assert_eq!(1,0);                
             }
             Ok(val) => {
@@ -492,5 +492,68 @@ mod tests {
             }
         }
     } // end of test_bson_moreno
+
+
+
+
+    #[test]
+    fn test_bson_moreno_f32() {
+        log_init_test();
+        //
+        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::debug!("\n\n test_bson_moreno, loading file {:?}", path);
+        let header_size = crate::io::csv::get_header_size(&path);
+        assert_eq!(header_size.unwrap(),2);
+        println!("\n\n test_weighted_csv_to_trimat, data : {:?}", path);
+        //
+        let trimat_res  = csv_to_trimat::<f32>(&path, false, b' ');
+        if let Err(err) = &trimat_res {
+            eprintln!("ERROR: {}", err);
+            assert_eq!(1,0);
+        }
+        let (trimat, node_indexation)  = trimat_res.unwrap();
+        // embed
+        let hope_m = HopeMode::ADA;
+        let decay_f = 0.05;
+    //    let range_m = RangeApproxMode::RANK(RangeRank::new(500, 2));
+        let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.1, 10, 300));
+        let params = HopeParams::new(hope_m, range_m, decay_f);
+         // now we embed
+        let mut hope = Hope::new(params, trimat); 
+        let hope_embedding = Embedding::new(node_indexation, &mut hope).unwrap();
+        // now we can do a bson dump
+        let output = io::output::Output::new(io::output::Format::BSON, true, &Some(String::from("moreno_f32.bson")) );
+        let bson_res = bson_dump(&hope_embedding, &output);
+        if bson_res.is_err() {
+            log::error!("bson dump in file {} failed", &output.get_output_name());
+            log::error!("error returned : {:?}", bson_res.err().unwrap());
+            assert_eq!(1,0);
+        } 
+        //
+        log::info!("trying reload from {}", &output.get_output_name());
+        let reloaded = bson_load::<f32, usize, Embedded<f32>>(output.get_output_name());
+        if reloaded.is_err() {
+            log::error!("reloading of bson from {} failed", output.get_output_name());
+        }
+        let reloaded = reloaded.unwrap();
+        //
+        let res_equality = check_equality(&hope_embedding, &reloaded);
+        match &res_equality {
+            Err(_e) => {
+                log::error!("check equality encountered error in test_bson_moreno");
+                assert_eq!(1,0);                
+            }
+            Ok(val) => {
+                match val {
+                    false => {
+                        log::error!("check equality returned false in test_bson_moreno");
+                        assert_eq!(1, 0);                        
+                    }
+                    true => {},
+                }
+            }
+        }
+    } // end of test_bson_moreno_f32
+
 
 } // end of mod tests
