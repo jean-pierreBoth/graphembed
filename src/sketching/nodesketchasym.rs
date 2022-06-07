@@ -1,6 +1,5 @@
-//! this file implements a small extension of the nodesketch algorithm for directed graph
-//! The original algorith is implemented in [nodesketch`](super::nodesketch)  and described in 
-//! <https://dl.acm.org/doi/10.1145/3292500.3330951>
+//! this file implements an extension of the nodesketch algorithm for directed graph.  
+//! The original algorithm is implemented in [nodesketch](super::nodesketch)
 //! 
 
 
@@ -33,7 +32,7 @@ use crate::embedding::{EmbeddedAsym, EmbedderT};
 pub type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 /// Compute the sketch of node proximity for a directed graph.  
-/// Sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight)
+/// Sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight).  
 /// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
 /// for a node considered separately as a source and as a target
 pub struct NodeSketchAsym {

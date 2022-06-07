@@ -27,7 +27,7 @@ use lapacke::{sggsvd3, dggsvd3, Layout};
 
 
 #[derive(Copy, Clone, Debug)]
-/// This structure describes optional parameters used to specify the Gsvd approximation to do by GSvdApprox
+/// This structure describes optional parameters used to specify the Gsvd approximation to do by GSvdApprox.  
 /// It can be useful to keep the two matrices mat1 and mat2 stored in GSvdApprox in one order but to solve the problem for their transpose
 /// (as is the case in the Hope algorithm).  
 /// In this case the transpose flags are used to send to lapack the matrices with a transpose flag.
@@ -162,12 +162,12 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         (self.p, self.n)
     }
 
-    /// retunns 
+    /// returns k.
     pub fn get_k(&self) -> usize {
         self.k
     }
 
-    ///
+    /// returns l
     pub fn get_l(&self) -> usize {
         self.l
     } 
@@ -212,7 +212,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
     } // end of get_s2
 
 
-    /// get alpha 
+    /// get alpha.   
     /// see lapack doc <http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html>
     pub fn get_alpha(&self) -> Option<&Array1<F>> {
         let s = match  self.alpha.as_ref() {
@@ -222,7 +222,7 @@ impl <F> GSvdResult<F>  where  F : Float + Lapack + Scalar + ndarray::ScalarOper
         s
     } // end of get_alpha
 
-    /// get beta
+    /// get beta.  
     /// see lapack doc <http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html>
     pub fn get_beta(&self) -> Option<&Array1<F>> {
         let s = match  self.beta.as_ref() {

@@ -2,12 +2,13 @@
 //! 
 //! The main arguments are 
 //!  - --csv filename
-//!  - --symetry true or false  specifies if the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
+//!  - --symetric true or false  specifies if the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
 //!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
 //!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric.
 //!     It is also possible to declare as symetric an asymetric unweighted graph. It is then symetrised when reading the file.
 //!  - --output or -o filename  
-//!     This dumps the embedding in a bson file named filename.bson. See module [bson]
+//!     This dumps the embedding in a bson file named filename.bson. See module [bson].  
+//!     By default an embedding is written in the file **embedding.bson**.
 //! 
 //!  - a subcommand embedding for a simple embedding or validation for loop with AUC computation for the link prediction task
 //! 

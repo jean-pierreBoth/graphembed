@@ -15,10 +15,9 @@
 //! We have 2 Embedded modes.
 //! - Hope is described by the paper :
 //!     *Asymetric Transitivity Preserving Graph Embedded 2016* 
-//!     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.*.
+//!     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
 //! 
-//! - Nodesketch
-//!     it is described by the paper <https://dl.acm.org/doi/10.1145/3292500.3330951>
+//! - Nodesketch is described in the paper <https://dl.acm.org/doi/10.1145/3292500.3330951>
 //! 
 
 
@@ -39,9 +38,9 @@ pub enum EmbeddingMode {
 
 
 
-/// The Embedded trait. Defines interface satisfied by embedded data
-/// In our implementations the embedded data are store in Array2 and embedded node
-/// are identified by their rank.
+/// The Embedded trait. It defines the interface satisfied by embedded data.  
+/// In our implementations the embedded data are stored in Array2 and embedded node
+/// are identified by their rank.  
 /// F is the type contained in embedded vectors
 pub trait EmbeddedT<F> {
     /// returns true if Embedded is symetric
@@ -255,7 +254,7 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
 
 /// The trait Embedder is something that has as output :  
 /// something satisfying the trait EmbeddedT<F>, for example  EmbeddedAsym<usize> for nodesketch embedding.  
-/// F is the type contained in embedded vectors , mostly f64, f32, usize
+/// F is the type contained in embedded vectors , mostly f64, f32, usize.  
 /// Useful just to make cross validation generic.
 pub trait EmbedderT<F>  {
     type Output : EmbeddedT<F> ;

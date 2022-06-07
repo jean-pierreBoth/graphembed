@@ -1,4 +1,4 @@
-//! do self loop augmentation
+//! do self loop augmentation as described in the [Nodesketch paper](https://dl.acm.org/doi/10.1145/3292500.3330951)
 
 use sprs::{TriMatI, CsMatI};
 

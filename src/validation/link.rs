@@ -225,7 +225,8 @@ fn one_precision_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f6
 
 
 
-/// estimate precision on nbiter iterations and delete_proba
+/// estimate precision on nbiter iterations and edge deletion probability.
+/// 
 /// Precision estimation is a costly operation as it requires computing the whole (nbnode, nbnode) matrix similarity
 /// between embedded nodes and sorting them to compare with the deleted edges. So precision uses a comparison of each deleted edge
 /// with most probables inexistant edges.  

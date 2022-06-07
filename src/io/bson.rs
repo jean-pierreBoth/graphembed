@@ -1,4 +1,4 @@
-//! file to do bson io for embedding results
+//! module to do bson io for embedding results
 //! 
 //!  Data are formatted in a bson Document, each value as a key.
 //!
@@ -75,8 +75,8 @@ impl BsonHeader {
 } // end of impl BsonHeader
 
 
-/// dump an embedding in bson format in filename fname.
-/// If dump_indexation is true, nodeindexation will also be dumped, and retrived from bson main document
+/// dump an embedding in bson format in filename fname.  
+/// If dump_indexation is true, nodeindexation will also be dumped, and retrieved from bson main document
 /// by searching for the subdocumnt accessed by key "indexation"
 /// 
 pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, EmbeddedData>, output : &io::output::Output) -> Result<(), anyhow::Error>
@@ -220,7 +220,7 @@ impl <F, NodeId> BsonReload<F, NodeId> {
 }  // enf of impl BsonReload
 
 
-/// reloads embedded data from a previous bson dump. Returns a BsonReload structure.
+/// reloads embedded data from a previous bson dump and returns a BsonReload structure.  
 /// The structure  Embedded or EmbeddedAsym can be reconstituted from it (or with a graph reload to get nodeindexation)
 ///
 pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonReload<F, NodeId>, anyhow::Error>

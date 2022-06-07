@@ -33,7 +33,7 @@ use petgraph::graphmap::{GraphMap, NodeTrait};
 use petgraph::{Directed,EdgeType};
 
 // TODO propagate genericity on N everywhehre ?
-/// maps the type N id of a node to a rank in a matrix
+/// maps the type N giving the id of a node to a rank in a matrix
 pub type NodeIndexation<N> = IndexSet<N>;
 
 
