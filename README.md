@@ -14,7 +14,8 @@ We use two strategies for graph embedding.
 It is based on multi hop neighbourhood identification via sensitive hashing.   
 Instead of using **ICWS** for hashing we use the more recent algorithm **probminhash**. See [probminhash](https://arxiv.org/abs/1911.00675).
 The algorithm associates a probability distribution on neighbours of each point depending on edge weights and distance to the point.
-Then this distribution is hashed to build an embedding vector. The distance between embedded vectors is the Jaccard distance so we get
+Then this distribution is hashed to build an embedding vector.  
+The distance between embedded vectors is the Jaccard distance so we get
 a real distance on the embedding space, at least for the symetric embedding.  
 
 An extension of the paper is also implemented to get asymetric embedding for directed graph. The similarity is also based on the hash of sets (nodes going to or from) a given node but then the dissimilarity is no more a distance (no symetry and some discrepancy with the triangular inequality).
@@ -28,8 +29,9 @@ The objective is to provide an asymetric graph embedding and get estimate of the
 
 We use the Adamic-Adar matricial representation of the graph. (It must be noted that the ponderation of a node by the number of couples joined by it is called Resource Allocation in the Graph Kernel litterature).
 The asymetric embedding is obtained from the left and right singular eigenvectors of the Adamic-Adar representation of the graph.
-Source node are related to left singular vectors and target nodes to the right ones. The similarity measure is the dot product, so it is not a norm.  
-The svd is approximated by randomization as described in Halko-Tropp 2011 as implemented in the annembed crate.
+Source node are related to left singular vectors and target nodes to the right ones.  
+The similarity measure is the dot product, so it is not a norm.  
+The svd is approximated by randomization as described in Halko-Tropp 2011 as implemented in the [annembed crate](https://crates.io/crates/annembed).
 
 
 
@@ -86,7 +88,7 @@ Embedding and link prediction evaluation for the above data sets are given [here
 
 ### Some qualitative comments
 
-* For the embedding using the randomized Svd, increasing the embedding dimension is interesting as far as the corresponding eigenvalues continue to decrease significantly.
+* For the embedding using the randomized svd, increasing the embedding dimension is interesting as far as the corresponding eigenvalues continue to decrease significantly.
 
 * The munmun_twitter_social graph shows that treating a directed graph as an undirected graph give significantly different results in terms of link prediction AUC. 
 ## Installation and Usage
