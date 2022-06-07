@@ -46,8 +46,8 @@ Larger datasets can be downloaded from the SNAP data collections <https://snap.s
 
 1. Symetric graphs 
 
-* Les miserables  <http://konect.cc/>   
-    les miserables  co occurence de mots dans un chapitre
+* Les miserables  <http://konect.cc/networks/moreno_lesmis>   
+    les miserables  co occurence of characters in Victor Hugo's novel 'Les Misérables'.
 
 * CA-GrQc.txt       <https://snap.stanford.edu/data/ca-GrQc.html>
 
@@ -57,11 +57,8 @@ Larger datasets can be downloaded from the SNAP data collections <https://snap.s
    
 *   wiki-vote               <https://snap.stanford.edu/data/wiki-Vote.html>
         7115 nodes 103689 edges
-    
-*   soc-epinions            <https://snap.stanford.edu/data/soc-Epinions1.html>
-        8114 nodes, 26013 edges
    
-* Cora : <http://konect.cc/networks/subelj_cora>
+*   Cora : <http://konect.cc/networks/subelj_cora>
         citation network 23166 nodes 91500 edges
 
 #### Some larger data tests for user to download

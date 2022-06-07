@@ -645,7 +645,11 @@ pub fn main() {
                             log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
                             std::process::exit(1);
                         };
-                        let _embed_res = embedding.unwrap();             
+                        let embed_res = embedding.unwrap();             
+                        let res = bson_dump(&embed_res, &output_params);
+                        if res.is_err() {
+                            log::error!("bson dump in {} failed", output_params.get_output_name());
+                        }   
                     },
                     false => {  
                         let mut nodesketchasym = NodeSketchAsym::new(embedding_parameters.sketching.unwrap(), trimat);
