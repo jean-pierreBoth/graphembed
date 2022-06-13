@@ -84,7 +84,7 @@ Possibly some data can need to be converted from Tsv format to Csv, before being
 
 ## Some results
 
-Embedding and link prediction evaluation for the above data sets are given [here](./resultats.md)
+Embedding and link prediction evaluation for the above data sets are given in file [resultats.md](./resultats.md)
 
 ### Some qualitative comments
 
