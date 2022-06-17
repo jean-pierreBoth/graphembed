@@ -451,7 +451,7 @@ pub fn main() {
         .arg(Arg::new("symetry")
             .short('s').long("symetric").required(true).default_value("yes")
             .help(" -s for a symetric embedding, default is symetric"))
-        .arg(Arg::new("bson")
+        .arg(Arg::new("output")
             .long("output")
             .short('o')
             .takes_value(true)
@@ -495,13 +495,15 @@ pub fn main() {
 
     let mut output_params : io::output::Output = io::output::Output::default();
     if matches.is_present("output") {
+        log::debug!("got output directive");
         let bson_name = matches.value_of("output").ok_or("").unwrap().parse::<String>().unwrap();
         if bson_name == "" {
-            println!("parsing of request_dir failed");
+            println!("parsing of bson output name failed");
+            log::error!("parsing of bson output name failed");
             std::process::exit(1);
         }
         else {
-            log::info!("input file : {:?}", bson_name.clone());
+            log::info!("output file : {:?}", bson_name.clone());
             let bson_output_name = Some(bson_name);
             output_params = io::output::Output::new(graphembed::io::output::Format::BSON, true, &bson_output_name);
         }
