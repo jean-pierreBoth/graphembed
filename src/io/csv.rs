@@ -4,6 +4,7 @@
 //! If some edges are multiply defined as a consequence, the code emits a warning on the first multiply defined edges, 
 //! dumps them, and finally gives a summary on the number edges multiply defined.
 //! 
+//! If the graph is weighted the third field of each line is the weight.
 
 
 //use std::fmt::{Debug};

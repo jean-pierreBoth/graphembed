@@ -1,6 +1,6 @@
 # Graphembed
 
-The purpose of this crate is to provide asymetric (and also symetric) embedding of graphs positively weighted edges.
+The purpose of this crate is to provide asymetric (and also symetric) embedding of graphs with positively weighted edges.
 The crate comes as a library and as a simple executable with a validation option.  
 It is still in an early version.
 ## Methods

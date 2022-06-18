@@ -1,6 +1,6 @@
 //! module to do bson io for embedding results
 //! 
-//!  Data are formatted in a bson Document, each value as a key.
+//!  Data are formatted in a bson Document, each value has a key.
 //!
 //!  The encoding is done in 3 parts:
 //! 1. A header structure with key "header". The structure is described below see struct [Header](BsonHeader)
