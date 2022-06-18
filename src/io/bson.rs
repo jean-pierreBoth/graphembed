@@ -14,7 +14,7 @@
 //! 
 //! 2. The embedded arrays, one or two depending on asymetry
 //!     - loop on number of vectors
-//!     each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN
+//!     each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN (1)
 //!     so the first vector of embedding has key "0,0" , the second "1,0"
 //!     - if embedding is asymetric the first loop gives outgoing (or source) representation of node
 //!     and there is another loop giving ingoing or target) representation of node with key made by IN encoding
@@ -24,7 +24,7 @@
 //! 3. The nodeindexation can also be encoded in a subdocument associated to key *"indexation"*.
 //!    The dump of nodeindexation is not mandatory as it can be retrieved by loading the original graph again.  
 //!    The presence of nodeindexation can be tested by checking if the main document has ky *"indexation"*.  
-//!    If the sub-document is present : each nodeid is encoded as string  providing a key in document indeaxtion associated to the node rank as i64.
+//!    If the sub-document is present : each nodeid is encoded as string  providing a key in document indexation associated to the node rank as i64.
 //!  
 
 use anyhow::{anyhow};

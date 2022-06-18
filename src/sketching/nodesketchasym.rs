@@ -1,7 +1,10 @@
 //! this file implements an extension of the nodesketch algorithm for directed graph.  
 //! The original algorithm is implemented in [nodesketch](super::nodesketch)
 //! 
-
+//! The iterations consists in iteratively constructing new weighted list of neighbours of each node considered 
+//! once as a source and once as a target.  
+//! The final dissimilarity between 2 nodes is a mix of the distances between nodes considered as sources, as target and as linked
+//! by a weighted edge if any.
 
 // For a directed graph we suppose the Csr matrix so that mat[[i,j]] is edge from i to j.
 
@@ -33,8 +36,6 @@ pub type RowSketch = Arc<RwLock<Array1<usize>>>;
 
 /// Compute the sketch of node proximity for a directed graph.  
 /// Sketch vector of a node is a list of integers obtained by hashing the weighted list of it neighbours (neigbour, weight).  
-/// The iterations consists in iteratively constructing new weighted list by combining initial adjacency list and successive weighted lists
-/// for a node considered separately as a source and as a target
 pub struct NodeSketchAsym {
     /// specific arguments
     params : NodeSketchParams,
@@ -348,9 +349,8 @@ impl NodeSketchAsym {
     } // end of treat_row
 
 
-    /// computes the Embedded. 
-    ///  - nb_iter  : corresponds to number of hops explored around a node.  
-    ///  - parallel : if true each iteration treats node in parallel
+ 
+    /// computes the embedding.
     pub fn compute_embedded(&mut self) -> Result<EmbeddedAsym<usize>, anyhow::Error> {
         //
         log::debug!("NodeSketchAsym compute_Embedded");
