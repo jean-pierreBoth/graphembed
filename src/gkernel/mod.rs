@@ -44,3 +44,6 @@
 // 
 //  - How powerful are Graph Neural Networks Xu-Hu Leskovec 2019
 //      GNN <= Weisfeiler-Lehman test
+
+
+pub mod mgraph;
