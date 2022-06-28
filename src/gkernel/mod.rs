@@ -32,6 +32,7 @@
 //  
 // - Faster Kernels for Graphs with continuous Attributes via Hashing. 2016
 // - Weisfeiler and Lehman go sparse Morris Rattan Mutzel 2020
+// - Global Weisfeiler Lehman Kernel Morris-Kersting 2017
 // 
 // - Graph invariant Kernels Orsini IJCAI 2015   
 //     definit un kernel pour les attributs. Le kernel global est le kernel sur les attributs * poids 
@@ -47,3 +48,5 @@
 
 
 pub mod mgraph;
+pub mod sketch;
+pub mod params;

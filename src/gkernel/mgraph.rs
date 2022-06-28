@@ -1,30 +1,43 @@
 //! mini implementation of a multigraph.
 //! 
 //! This multigraph is devoted to an implementation of a nodesketch type algorithm
-//! with hashing based on label transitions during edge traversal around a node.  
-//! Nodes can have multiple discrete labels to modelize multi communities membership.   
-//! Edges can be directed or not and can have at most one discrete label. Edge can also have a weight, by default set 1.
+//! with hashing based on couple (origin node label, edge label) during edge traversal toward a node.   
+//! Nodes can have multiple discrete labels to modelize multi communities membership and various relations
+//! between nodes.     
+//! Edges can be directed or not and can have at most one discrete label, but there can be many edges between 2 given nodes
+//! as log as the labels of edge are unique.   
+//! Edge can also have a weight, by default set 1.
 //! 
-//! We should get both an embedding of each node and a global graph summary vector  
+//! We should get both an embedding of each node in terms of (Nlabel, Elabel) and a global graph summary vector  
 //! 
 
 
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Iter;
+
 use std::hash::Hash;
 use std::cmp::Eq;
 
 use std::fmt::Display;
 
 use std::marker::PhantomData;
+
+
+
 // a node must have an id and has possibly multiple labels
 pub trait NodeT<NodeId, Nlabel> {
     fn get_id(&self) -> NodeId;
     ///
-    fn get_labels(&self) ->  &Vec<Nlabel>;
-}
+    fn get_labels(&self) ->  &HashSet<Nlabel>;
+} // end of trait NodeT
+
+
 /// A multigraph node
-/// It must be possible to hash a label so it must satisfy Hash (possibly the Sig from probminhash if needed).  
+/// It must be possible to hash a label so it must satisfy Hash (possibly the Sig from probminhash if needed).
+/// If the node has no label (yet) the lables hashset can be empty (useful for community detection)  
 /// Each transition from a node to an edge will generate the 2-uples (label, edge_label) for each label of the node.
+/// We want Mnode to be Sync so NodeId, Nlabel and Medge should be Sync
+/// Nlabel and Elabel must satisfy to provide default initialization of sketched values
 pub struct Mnode<NodeId, Nlabel, Medge> {
     /// node unique identification
     id : NodeId, 
@@ -36,18 +49,24 @@ pub struct Mnode<NodeId, Nlabel, Medge> {
 
 
 
+impl <NodeId, Nlabel, Medge> NodeT<NodeId, Nlabel> for Mnode<NodeId, Nlabel, Medge> 
+    where NodeId : Copy {
 
-impl <NodeId, Nlabel, Medge> Mnode<NodeId, Nlabel, Medge> where 
-    Nlabel : Hash + Eq + Clone,
-    NodeId : Eq + Copy {
     ///
-    pub fn get_id(&self) -> NodeId {
-        self.id
+    fn get_id(&self) -> NodeId {
+        self.id.clone()
     }
     /// get all the labels of this node
-    pub fn get_labels(&self) -> &HashSet<Nlabel> {
+    fn get_labels(&self) -> &HashSet<Nlabel> {
         &self.labels
     }
+
+}  // 
+
+impl <NodeId, Nlabel, Medge> Mnode<NodeId, Nlabel, Medge> where 
+    Nlabel : Hash + Eq + Clone + Default,
+    NodeId : Eq + Copy {
+
     ///
     pub fn get_edges(&self) -> &Vec<Medge> {
         &self.edges
@@ -77,15 +96,20 @@ impl <NodeId, Nlabel, Medge> Mnode<NodeId, Nlabel, Medge> where
 
 pub trait EdgeT<NodeId, Elabel> {
     ///
-    fn get_label(&self) -> Elabel;
+    fn get_label(&self) -> &Elabel;
     ///
     fn is_directed(&self) -> bool;
     ///
-    fn get_nodes(&self) -> (NodeId, NodeId);
-}
+    fn get_nodes(&self) -> &(NodeId, NodeId);
+    ///
+    fn get_weight(&self) -> f32;
+}  // end of impl EdgeT
+
+
 /// An edge of our multigraph.
 /// An edge is characterized by a 2-uple of NodeId.
 /// If the edge has no specific label attached, its rank can be used.
+/// We want Medge to be Sync so NodeId, Elabel should be Sync
 pub struct Medge<NodeId, Elabel>
     where NodeId : Eq, 
           Elabel : Eq + Hash {
@@ -101,6 +125,31 @@ pub struct Medge<NodeId, Elabel>
 }  // end of Medge
 
 
+/// an alias to simplify notations
+
+
+impl <NodeId, Elabel> EdgeT<NodeId, Elabel> for  Medge<NodeId, Elabel> 
+        where NodeId : Eq,
+              Elabel : Eq + Hash + Default {
+    ///
+    fn get_nodes(&self) -> &(NodeId, NodeId) {
+        &self.nodes
+    }
+    /// get th (unique) lable of this edge
+    fn get_label(&self) -> &Elabel {
+        &self.label
+    }
+    ///
+    fn is_directed(&self) -> bool {
+        self.directed
+    }
+    ///
+    fn get_weight(&self) -> f32 {
+        self.weight
+    }
+}  // end of EdgeT implementation
+
+
 
 
 impl <NodeId, Elabel> Medge<NodeId, Elabel>
@@ -110,27 +159,15 @@ impl <NodeId, Elabel> Medge<NodeId, Elabel>
     pub fn new( nodes: (NodeId, NodeId), label : Elabel, directed : bool, weight : f32) -> Self  {
         Medge{nodes, label, directed, weight}
     }
-    ///
-    pub fn get_nodes(&self) -> &(NodeId, NodeId) {
-        &self.nodes
-    }
-    /// get th (unique) lable of this edge
-    pub fn get_label(&self) -> &Elabel {
-        &self.label
-    }
-    ///
-    pub fn get_weight(&self) -> f32 {
-        self.weight
-    }
-    ///
-    pub fn directed(&self) -> bool {
-        self.directed
-    }
+
+
 } // end of impl <NodeId, ELabel> Medge
 
 
 
 //==============================================================================
+
+pub type EdgeSet<Elabel, Medge> = HashMap<Elabel, Medge>;
 
 
 pub struct Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel> {
@@ -158,14 +195,33 @@ impl <NodeId, Mnode, Nlabel, Medge, Elabel> Default for Mgraph<NodeId, Nlabel, M
 impl <NodeId, Nlabel, Mnode, Medge, Elabel> Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel> 
     where   Mnode : NodeT<NodeId, Nlabel>, 
             NodeId : Eq + Hash + Copy + Display,
-            Elabel : Eq + Hash,
+            Elabel : Eq + Hash + Clone + Display,
             Medge : EdgeT<NodeId, Elabel> {
-    /// adding a node
+
+    /// get number of nodes
+    pub fn get_nb_nodes(&self) -> usize {
+        self.nodes.len()
+    } // end of get_nb_nodes
+
+
+    /// get an iterator over nodes
+    pub fn get_node_iter(&self) -> Iter<NodeId, Mnode> {
+        self.nodes.iter()
+    } // end of get_node_iter
+
+
+    /// get an iterator over edge set by couple of nodes
+    /// Recall that if an edge is oriented it goes from first node to second node
+    pub fn get_edgeset_iter(&self) -> Iter<(NodeId, NodeId), EdgeSet<Elabel, Medge>> {
+        self.edges.iter()
+    }
+
+    /// adding a node.
     pub fn add_node(&mut self, node : Mnode) {
         let nodeid = node.get_id();
         let already = self.nodes.insert(nodeid, node);
         if already.is_some() {
-            log::error!("could not insert node id {}", &nodeid);
+            log::error!("could not insert node id {}, already present", &nodeid);
             std::process::exit(1);
         }
     } // end of add_node
@@ -173,7 +229,7 @@ impl <NodeId, Nlabel, Mnode, Medge, Elabel> Mgraph<NodeId, Nlabel, Mnode, Medge,
 
 
     /// return an option on an edge given nodes and edge label, None if there is no such edge
-    pub fn get_edge(&self, nodes: &(NodeId, NodeId), label : &Elabel) -> Option<&Medge> {
+    pub fn get_edge_with_label(&self, nodes: &(NodeId, NodeId), label : &Elabel) -> Option<&Medge> {
         let hmap  = self.edges.get(nodes);
         match hmap {
             Some(hmap) => {
@@ -184,11 +240,37 @@ impl <NodeId, Nlabel, Mnode, Medge, Elabel> Mgraph<NodeId, Nlabel, Mnode, Medge,
     } // end of get_edge
 
 
+    #[allow(unused)]
+    pub(crate) fn get_edge_set(&self, nodes: &(NodeId, NodeId)) -> Option<&HashMap<Elabel, Medge> >  {
+        self.edges.get(nodes)
+    }
+
+
     /// adding an edge
     pub fn add_edge(&mut self, edge : Medge) {
         let nodes = edge.get_nodes();
-        // must check if we have this edge
+        let hmap  = self.edges.get_mut(&nodes);
+        match hmap {
+            Some(l_hmap) => {
+                let elabel = edge.get_label();
+                if let Some(_) = l_hmap.get(edge.get_label()) {
+                    log::error!("could not insert already present edge ({}, {}) with label {}", &nodes.0, &nodes.1, &elabel);
+                    std::process::exit(1);                      
+                }
+                else { // we insert in hmap
+                    l_hmap.insert(elabel.clone(), edge);
+                }
+            }
+            None => { // create edge hashmap for nodes couple and insert edge in  edge hashmap
+                let elabel = edge.get_label();
+                let mut ehashmap = HashMap::<Elabel, Medge>::new();
+                ehashmap.insert(elabel.clone(), edge);
+            }
+        }
     }  // end of add_edge
 
 
 } // end of Mgraph
+
+
+//==========================================================================
