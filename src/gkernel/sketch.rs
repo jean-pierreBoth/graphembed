@@ -4,14 +4,14 @@
 
 
 use anyhow::{anyhow};
-
 use log::log_enabled;
-use ndarray::{Array2, Array1, ArrayView1};
+
+use ndarray::{Array1};
 
 use ahash::{AHasher};
 use probminhash::probminhasher::*;
 //
-use rayon::iter::{ParallelIterator,IntoParallelIterator};
+// use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
 use indexmap::IndexSet;
@@ -20,8 +20,8 @@ use std::hash::Hash;
 use std::cmp::Eq;
 
 use std::fmt::Display;
-use std::time::{SystemTime};
-use cpu_time::ProcessTime;
+// use std::time::{SystemTime};
+// use cpu_time::ProcessTime;
 
 use super::mgraph::*;
 use super::params::*;
@@ -45,7 +45,7 @@ impl<'a, NodeId, Nlabel, Mnode, Medge, Elabel> MgraphSketch<'a, NodeId, Nlabel, 
     where   Mnode : NodeT<NodeId, Nlabel>, 
             NodeId : Eq + Hash + Copy + Display,
             Elabel : Eq + Hash + Clone + Display,
-            Medge : EdgeT<NodeId, Elabel> {
+            Medge : EdgeT<NodeId, Elabel> + Clone {
 
     /// allocation
     pub fn new(mgraph : &Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel>, params : SketchParams) -> Self {
