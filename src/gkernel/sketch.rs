@@ -3,23 +3,23 @@
 
 
 
-use anyhow::{anyhow};
-use log::log_enabled;
+// use anyhow::{anyhow};
+// use log::log_enabled;
 
 use ndarray::{Array1};
 
-use ahash::{AHasher};
-use probminhash::probminhasher::*;
+// use ahash::{AHasher};
+// use probminhash::probminhasher::*;
 //
 // use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
 use indexmap::IndexSet;
 
-use std::hash::Hash;
-use std::cmp::Eq;
+//use std::hash::Hash;
+// use std::cmp::Eq;
 
-use std::fmt::Display;
+// use std::fmt::Display;
 // use std::time::{SystemTime};
 // use cpu_time::ProcessTime;
 
@@ -29,9 +29,12 @@ use super::params::*;
 /// to store the sketching result
 pub type NodeSketch<Nlabel, Elabel> = Arc<RwLock<Array1<(Nlabel, Elabel)>>>;
 
-pub struct MgraphSketch<'a, NodeId, Nlabel, Mnode, Medge, Elabel> {
+pub struct MgraphSketch<'a, NodeId, Nlabel, Elabel> 
+    where NodeId : IdT,
+          Nlabel : LabelT,
+          Elabel : LabelT {
     /// 
-    mgraph : &'a  Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel>,
+    mgraph : &'a  Mgraph<'a, NodeId, Nlabel, Elabel>,
     ///
     nodeindex : IndexSet<NodeId>,
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
@@ -41,14 +44,14 @@ pub struct MgraphSketch<'a, NodeId, Nlabel, Mnode, Medge, Elabel> {
 }  // end of struct MgraphSketch
 
 
-impl<'a, NodeId, Nlabel, Mnode, Medge, Elabel> MgraphSketch<'a, NodeId, Nlabel, Mnode, Medge, Elabel> 
-    where   Mnode : NodeT<NodeId, Nlabel>, 
-            NodeId : Eq + Hash + Copy + Display,
-            Elabel : Eq + Hash + Clone + Display,
-            Medge : EdgeT<NodeId, Elabel> + Clone {
+
+impl<'a, NodeId, Nlabel, Elabel> MgraphSketch<'a, NodeId, Nlabel, Elabel> 
+    where   NodeId : IdT,
+            Elabel : LabelT,
+            Nlabel : LabelT  {
 
     /// allocation
-    pub fn new(mgraph : &Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel>, params : SketchParams) -> Self {
+    pub fn new(mgraph : &Mgraph<NodeId, Nlabel, Elabel>, params : SketchParams) -> Self {
         // allocation of nodeindex
         let nb_nodes = mgraph.get_nb_nodes();
         // first initialization of previous sketches
