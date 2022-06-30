@@ -38,19 +38,20 @@ pub trait NodeT<NodeId, Nlabel> {
 /// Each transition from a node to an edge will generate the 2-uples (label, edge_label) for each label of the node.
 /// We want Mnode to be Sync so NodeId, Nlabel and Medge should be Sync
 /// Nlabel and Elabel must satisfy to provide default initialization of sketched values
-pub struct Mnode<NodeId, Nlabel, Medge> {
+pub struct Mnode<'a, NodeId, Nlabel, Medge : Clone> {
     /// node unique identification
     id : NodeId, 
     ///
     labels : HashSet<Nlabel>,
     ///
-    edges : Vec<Medge>
+    edges : Vec<&'a Medge>
 }  // end of Mnode
 
 
 
-impl <NodeId, Nlabel, Medge> NodeT<NodeId, Nlabel> for Mnode<NodeId, Nlabel, Medge> 
-    where NodeId : Copy {
+impl <'a , NodeId, Nlabel, Medge> NodeT<NodeId, Nlabel> for Mnode<'a, NodeId, Nlabel, Medge> 
+    where NodeId : Copy ,
+          Medge  : Clone {
 
     ///
     fn get_id(&self) -> NodeId {
@@ -63,20 +64,21 @@ impl <NodeId, Nlabel, Medge> NodeT<NodeId, Nlabel> for Mnode<NodeId, Nlabel, Med
 
 }  // 
 
-impl <NodeId, Nlabel, Medge> Mnode<NodeId, Nlabel, Medge> where 
+impl <'a, NodeId, Nlabel, Medge> Mnode<'a, NodeId, Nlabel, Medge> where 
     Nlabel : Hash + Eq + Clone + Default,
-    NodeId : Eq + Copy {
+    NodeId : Eq + Copy,
+    Medge : Clone  {
 
     ///
-    pub fn get_edges(&self) -> &Vec<Medge> {
+    pub fn get_edges(&self) -> &Vec<&'a Medge> {
         &self.edges
     }
     /// 
-    pub fn new(id : NodeId, labels: HashSet<Nlabel>, edges: Vec<Medge>) -> Self {
+    pub fn new(id : NodeId, labels: HashSet<Nlabel>, edges: Vec<&'a Medge>) -> Self {
         Mnode{id , labels, edges}
     }
     /// add an edge
-    pub fn add_edge(&mut self, edge: Medge) {
+    pub fn add_edge(&mut self, edge: &'a Medge) {
         self.edges.push(edge)
     }
     ///
@@ -110,9 +112,10 @@ pub trait EdgeT<NodeId, Elabel> {
 /// An edge is characterized by a 2-uple of NodeId.
 /// If the edge has no specific label attached, its rank can be used.
 /// We want Medge to be Sync so NodeId, Elabel should be Sync
+#[derive(Clone)]
 pub struct Medge<NodeId, Elabel>
     where NodeId : Eq, 
-          Elabel : Eq + Hash {
+          Elabel : Eq + Hash + Clone {
     /// The 2 nodes extremities of node
     /// By default the orientation is from nodes.0 to nodes.1
     nodes : (NodeId, NodeId),
@@ -130,7 +133,7 @@ pub struct Medge<NodeId, Elabel>
 
 impl <NodeId, Elabel> EdgeT<NodeId, Elabel> for  Medge<NodeId, Elabel> 
         where NodeId : Eq,
-              Elabel : Eq + Hash + Default {
+              Elabel : Eq + Hash + Clone + Default {
     ///
     fn get_nodes(&self) -> &(NodeId, NodeId) {
         &self.nodes
@@ -154,7 +157,7 @@ impl <NodeId, Elabel> EdgeT<NodeId, Elabel> for  Medge<NodeId, Elabel>
 
 impl <NodeId, Elabel> Medge<NodeId, Elabel>
     where NodeId : Eq,
-          Elabel : Eq + Hash  {
+          Elabel : Eq + Hash + Clone  {
     ///
     pub fn new( nodes: (NodeId, NodeId), label : Elabel, directed : bool, weight : f32) -> Self  {
         Medge{nodes, label, directed, weight}
@@ -182,12 +185,17 @@ pub struct Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel> {
 } // end of Mgraph
 
 
-impl <NodeId, Mnode, Nlabel, Medge, Elabel> Default for Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel> {
+impl <NodeId, Mnode, Nlabel, Medge, Elabel> Default for Mgraph<NodeId, Nlabel, Mnode, Medge, Elabel> 
+        where   Mnode : NodeT<NodeId, Nlabel>, 
+                NodeId : Eq + Hash + Copy + Display,
+                Elabel : Eq + Hash + Clone + Display,
+                Medge : EdgeT<NodeId, Elabel> + Clone {
+
     fn default() -> Self {
         Mgraph{nodes : HashMap::<NodeId, Mnode>::new(), edges: HashMap::<(NodeId, NodeId), HashMap<Elabel, Medge>>::new(), 
             _phantom_n : PhantomData, _phantom_e :  PhantomData}
     }
-} // end of impl Deafault
+} // end of impl Default
 
 
 
@@ -196,7 +204,7 @@ impl <NodeId, Nlabel, Mnode, Medge, Elabel> Mgraph<NodeId, Nlabel, Mnode, Medge,
     where   Mnode : NodeT<NodeId, Nlabel>, 
             NodeId : Eq + Hash + Copy + Display,
             Elabel : Eq + Hash + Clone + Display,
-            Medge : EdgeT<NodeId, Elabel> {
+            Medge : EdgeT<NodeId, Elabel> + Clone {
 
     /// get number of nodes
     pub fn get_nb_nodes(&self) -> usize {
@@ -259,16 +267,21 @@ impl <NodeId, Nlabel, Mnode, Medge, Elabel> Mgraph<NodeId, Nlabel, Mnode, Medge,
                     std::process::exit(1);                      
                 }
                 else { // we insert in hmap
-                    l_hmap.insert(elabel.clone(), edge);
+                    l_hmap.insert(elabel.clone(), edge.clone());
                 }
             }
             None => { // create edge hashmap for nodes couple and insert edge in  edge hashmap
                 let elabel = edge.get_label();
                 let mut ehashmap = HashMap::<Elabel, Medge>::new();
-                ehashmap.insert(elabel.clone(), edge);
+                ehashmap.insert(elabel.clone(), edge.clone());
             }
         }
-        // Dispatch to concerned nodes
+        // Dispatch to concerned nodes. So Nodes must have been declared before edges referencing it.
+        let edge_ref = self.get_edge_with_label(nodes, edge.get_label()).unwrap();
+        let node_0 = self.nodes.get_mut(&nodes.0).unwrap();
+        node_0.add_edge(edge_ref);
+
+
     }  // end of add_edge
 
 
