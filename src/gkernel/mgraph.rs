@@ -246,7 +246,8 @@ impl <NodeId, Nlabel, Mnode, Medge, Elabel> Mgraph<NodeId, Nlabel, Mnode, Medge,
     }
 
 
-    /// adding an edge
+    /// adding an edge.
+    // TODO The dispatching to nodes is to be done WHEN?
     pub fn add_edge(&mut self, edge : Medge) {
         let nodes = edge.get_nodes();
         let hmap  = self.edges.get_mut(&nodes);
@@ -267,6 +268,7 @@ impl <NodeId, Nlabel, Mnode, Medge, Elabel> Mgraph<NodeId, Nlabel, Mnode, Medge,
                 ehashmap.insert(elabel.clone(), edge);
             }
         }
+        // Dispatch to concerned nodes
     }  // end of add_edge
 
 
