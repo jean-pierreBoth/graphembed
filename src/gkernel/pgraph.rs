@@ -1,0 +1,59 @@
+//! interface towards petgraph::graph.
+//! petgraph::graph permits multiple edge between 2 nodes and Directed or Undirected graph
+
+use std::hash::Hash;
+use std::cmp::Eq;
+
+use std::fmt::Display;
+
+
+/// Our labels must satisfy.
+pub trait LabelT : Eq + Hash + Clone + Default + Display {}
+
+
+/// defines associated data to a Node
+#[derive(Clone, Debug)]
+pub struct Nweight<Nlabel> {
+    /// memberships 
+    labels : Vec<Nlabel>,
+}
+
+
+impl <Nlabel>  Nweight<Nlabel> 
+    where Nlabel : LabelT {
+    /// has_label ?
+    pub fn has_label(&self, label : &Nlabel) -> bool {
+        self.labels.iter().any(|l| l== label)
+    }
+
+
+} // end of Nweight
+
+
+//=================================================================================== 
+
+
+pub struct Eweight<Elabel> {
+    /// edge type
+    label : Elabel,
+    ///
+    weight : f32
+}
+
+impl <Elabel> Eweight<Elabel> 
+    where Elabel : LabelT {
+
+    pub fn new(label : Elabel, weight : f32) -> Self {
+        Eweight{ label, weight}
+    }
+
+
+    pub fn get_label(&self) -> &Elabel {
+        &self.label
+    }
+
+    pub fn get_weight(&self) -> f32 {
+        self.weight
+    }
+
+}  // end of Eweight
