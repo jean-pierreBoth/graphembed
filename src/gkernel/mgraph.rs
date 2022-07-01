@@ -20,9 +20,13 @@ use std::cmp::Eq;
 
 use std::fmt::Display;
 
-
+/// all labels must satisfy this trait
 pub trait LabelT : Eq + Hash + Clone + Display {}
+
+/// all identificators lust satisfy this trait
 pub trait IdT : Eq + Hash + Copy + Display {}
+
+
 // a node must have an id and has possibly multiple labels
 pub trait NodeT<NodeId, Nlabel> {
     fn get_id(&self) -> NodeId;
@@ -44,7 +48,7 @@ pub struct Mnode<'a, NodeId, Nlabel, Elabel>
     id : NodeId, 
     ///
     labels : HashSet<Nlabel>,
-    ///
+    /// references to edges as stored in the Mgraph structure with a lifetime 'a (larger than )
     edges : Vec<&'a Medge<NodeId, Elabel> >
 }  // end of Mnode
 
@@ -144,8 +148,8 @@ pub struct Medge<NodeId, Elabel>
 
 
 impl <NodeId, Elabel> EdgeT<NodeId, Elabel> for  Medge<NodeId, Elabel> 
-        where NodeId : Eq + Hash + Copy,
-              Elabel : Eq + Hash + Clone + Default {
+        where NodeId : IdT,
+              Elabel : LabelT {
     ///
     fn get_nodes(&self) -> &(NodeId, NodeId) {
         &self.nodes
@@ -175,7 +179,7 @@ impl <NodeId, Elabel> Medge<NodeId, Elabel>
         Medge{nodes, label, directed, weight}
     }
 
-    fn get_nodes(&self) -> &(NodeId, NodeId) {
+    pub fn get_nodes(&self) -> &(NodeId, NodeId) {
         &self.nodes
     }
     /// get th (unique) lable of this edge
@@ -183,11 +187,11 @@ impl <NodeId, Elabel> Medge<NodeId, Elabel>
         &self.label
     }
     ///
-    fn is_directed(&self) -> bool {
+    pub fn is_directed(&self) -> bool {
         self.directed
     }
     ///
-    fn get_weight(&self) -> f32 {
+    pub fn get_weight(&self) -> f32 {
         self.weight
     }
 } // end of impl <NodeId, ELabel> Medge
@@ -221,7 +225,7 @@ impl <'a, NodeId, Nlabel, Elabel> Default for Mgraph<'a, NodeId, Nlabel, Elabel>
             {
     //
     fn default() -> Self {
-        Mgraph{nodes : HashMap::<NodeId, Mnode<'a, NodeId, Nlabel, Elabel> >::new(), edges: HashMap::<(NodeId, NodeId), EdgeSet<Elabel, NodeId> >::new()}
+        Mgraph{nodes : HashMap::<NodeId, Mnode<NodeId, Nlabel, Elabel> >::new(), edges: HashMap::<(NodeId, NodeId), EdgeSet<Elabel, NodeId> >::new()}
     }
 } // end of impl Default
 
@@ -284,35 +288,59 @@ impl <'a, NodeId, Nlabel, Elabel> Mgraph<'a, NodeId, Nlabel, Elabel>
     /// adding an edge.
     // TODO The dispatching to nodes is to be done WHEN?
     pub fn add_edge(&mut self, edge : Medge<NodeId, Elabel>) {
-        let nodes = edge.get_nodes();
-        let hmap  = self.edges.get_mut(&nodes);
-        match hmap {
-            Some(l_hmap) => {
-                let elabel = edge.get_label();
-                if let Some(_) = l_hmap.get(edge.get_label()) {
-                    log::error!("could not insert already present edge ({}, {}) with label {}", &nodes.0, &nodes.1, &elabel);
-                    std::process::exit(1);                      
-                }
-                else { // we insert in hmap
-                    l_hmap.insert(elabel.clone(), edge.clone());
-                }
+        let edge_nodes = edge.get_nodes();
+        let edges = &mut self.edges;
+        if let Some(hmap) = edges.get_mut(&edge_nodes) {
+            let elabel = edge.get_label();
+            if let Some(_) = hmap.get(edge.get_label()) {
+                log::error!("could not insert already present edge ({}, {}) with label {}", &edge_nodes.0, &edge_nodes.1, &elabel);
+                std::process::exit(1);                      
             }
-            None => { // create edge hashmap for nodes couple and insert edge in  edge hashmap
-                let elabel = edge.get_label();
-                let mut ehashmap = HashMap::<Elabel, Medge<NodeId, Elabel> >::new();
-                ehashmap.insert(elabel.clone(), edge.clone());
-            }
+            else { // we insert in hmap
+                hmap.insert(elabel.clone(), edge.clone());
+                return;
+//                let node_0 = self.nodes.get_mut(&edge_nodes.0).unwrap();
+ //               node_0.add_edge(edge_ref);
+            }            
         }
+        else {
+            let elabel = edge.get_label();
+            let mut ehashmap = HashMap::<Elabel, Medge<NodeId, Elabel> >::new();
+            ehashmap.insert(elabel.clone(), edge.clone());
+            edges.insert(*(edge_nodes), ehashmap);
+            return;
+        }
+
+        // retrieve a reference to the inserted edge
         // Dispatch to concerned nodes. So Nodes must have been declared before edges referencing it.
-        let edge_ref = self.get_edge_with_label(nodes, edge.get_label()).unwrap();
-        let node_0 = self.nodes.get_mut(&nodes.0).unwrap();
-        node_0.add_edge(edge_ref);
+//        let nodes = &mut self.nodes;
+//        let node_0 = nodes.get_mut(&edge_nodes.0).unwrap();
+//        node_0.add_edge(edge_ref);
 
 
     }  // end of add_edge
 
+    // loop on edges, and update nodes with related edges
+    // the &'a implies that edge lifetime transferred into nodes is same as graph lifetime
+    fn dispatch_edges(&'a mut self) {
+        for (nodes, edgeset) in self.edges.iter() {
+            for (_label, edge) in edgeset {
+                self.nodes.get_mut(&nodes.0).unwrap().add_edge(edge);
+                self.nodes.get_mut(&nodes.1).unwrap().add_edge(edge);
+
+                
+            }
+
+        }
+
+
+    } // end of dispatch_edges
 
 } // end of Mgraph
+
+
+
+
 
 
 //==========================================================================

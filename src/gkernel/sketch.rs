@@ -29,12 +29,12 @@ use super::params::*;
 /// to store the sketching result
 pub type NodeSketch<Nlabel, Elabel> = Arc<RwLock<Array1<(Nlabel, Elabel)>>>;
 
-pub struct MgraphSketch<'a, NodeId, Nlabel, Elabel> 
+pub struct MgraphSketch<'b, 'a, NodeId, Nlabel, Elabel> 
     where NodeId : IdT,
           Nlabel : LabelT,
           Elabel : LabelT {
     /// 
-    mgraph : &'a  Mgraph<'a, NodeId, Nlabel, Elabel>,
+    mgraph : &'b Mgraph<'a, NodeId, Nlabel, Elabel>,
     ///
     nodeindex : IndexSet<NodeId>,
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
@@ -45,13 +45,13 @@ pub struct MgraphSketch<'a, NodeId, Nlabel, Elabel>
 
 
 
-impl<'a, NodeId, Nlabel, Elabel> MgraphSketch<'a, NodeId, Nlabel, Elabel> 
+impl<'b, 'a, NodeId, Nlabel, Elabel> MgraphSketch<'b, 'a, NodeId, Nlabel, Elabel> 
     where   NodeId : IdT,
             Elabel : LabelT,
             Nlabel : LabelT  {
 
     /// allocation
-    pub fn new(mgraph : &Mgraph<NodeId, Nlabel, Elabel>, params : SketchParams) -> Self {
+    pub fn new(mgraph : &'b Mgraph<'a, NodeId, Nlabel, Elabel>, params : SketchParams) -> Self {
         // allocation of nodeindex
         let nb_nodes = mgraph.get_nb_nodes();
         // first initialization of previous sketches
