@@ -49,4 +49,10 @@
 
 pub mod mgraph;
 pub mod sketch;
+
+/// interface to petgraph
+pub mod pgraph;
+/// sketching on top of petgraph
+pub mod psketch;
+
 pub mod params;

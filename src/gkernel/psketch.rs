@@ -13,7 +13,8 @@
 // use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
-use indexmap::IndexSet;
+// use indexmap::IndexSet;
+//use std::ops::Index;
 
 //use std::hash::Hash;
 // use std::cmp::Eq;
@@ -22,7 +23,9 @@ use indexmap::IndexSet;
 // use std::time::{SystemTime};
 // use cpu_time::ProcessTime;
 
-use petgraph::graph::*;
+use petgraph::graph::{Graph, IndexType, Node};
+use petgraph::stable_graph::{NodeIndex, DefaultIx};
+use petgraph::visit::*;
 use petgraph::{EdgeType,Directed, Undirected};
 
 use super::pgraph::*;
@@ -67,7 +70,10 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx>
           Elabel : LabelT {
     /// 
     graph : &'a Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>,
-    /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
+    /// sketching parameters
+    sk_params : SketchParams,
+    /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vector of sketch_size
+    /// Its index in current_sketch being the index of the node in the graph indexing
     current_sketch : Vec<Sketch<Nlabel, Elabel>>,
     ///
     previous_sketch : Vec<Sketch<Nlabel, Elabel>>, 
@@ -90,10 +96,12 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         let sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch)).collect();
         let previous_sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch)).collect();
         //
-        MgraphSketch{ graph , current_sketch : sketch, previous_sketch:previous_sketch }
+        MgraphSketch{ graph , sk_params : params, current_sketch : sketch, previous_sketch:previous_sketch }
     } // end of new
 
 
+    /// returns sketch_size 
+    pub fn get_sketch_size(&self) -> usize { self.sk_params.get_sketch_size()}
 
     /// updte sketches from previous sketches
     fn self_loop_augmentation(&mut self) {
@@ -102,8 +110,24 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
 
     } // end of self_loop_augmentation
 
-    /// parallel iteration on nodes to update sketches
-    fn one_iteration(&self) {
+    /// serial symetric iteration on nodes to update sketches
+    fn one_iteration_symetric(&self) {
+        let nodes =  self.graph.raw_nodes();
+        let n_indices : Vec<NodeIndex<Ix>> = self.graph.node_indices().collect();
+        let nodes_ref = self.graph.node_references();
+        //
+        n_indices.iter().for_each( |ndix| self.treat_node_symetric(ndix, &nodes[ndix.index()]));
+
+    }
+
+    /// loop on neighbours and sketch
+    fn treat_node_symetric(&self, ndix : &NodeIndex<Ix> , node : &Node<Nweight<Nlabel>,Ix>) {
+        // ndix should correspond to rank in self.sketches (and so to rank in nodes array in petgraph:::grap
+        // self.neighbors_undirected give an iterator on all neighbours
+        // we must also get labels of edges
+        // Graph:edge_endpoints(e) -> 2 NodeIndex from to
+        // Edge.source() Edge.target() to get nodes extremities
+        // Graph.edges_directed(nidx) get an iterator over all edges connected to nidx
 
     }
 }  // end of impl MgraphSketch
