@@ -28,7 +28,7 @@ use petgraph::visit::*;
 use petgraph::{EdgeType,Directed, Direction, Undirected};
 
 use std::collections::HashMap;
-use probminhash::probminhasher::*;
+//use probminhash::probminhasher::*;
 
 
 use super::pgraph::*;
@@ -143,7 +143,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         self.is_sla = true;
     } // end of self_loop_augmentation
 
-
+    fn is_sla(&self) -> bool { self.is_sla}
 
     /// serial symetric iteration on nodes to update sketches
     fn one_iteration_symetric(&self) {
@@ -177,13 +177,15 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         while let Some(edge) = edges.next() {
             // get node and weight attribute, it is brought with the weight connection from row to neighbour
             let e_weight = edge.weight();
+            let edge_weight = e_weight.get_weight() as f64;   // This is our weight not petgraph's
+            let edge_label = e_weight.get_label();
             let neighbour_idx = edge.target();
             let n_labels = self.graph[neighbour_idx].get_labels();
             // treatment of h_label_n
             for label in n_labels {
                 match h_label_n.get_mut(&label) {
                     Some(val) => {
-                        *val = *val + e_weight.get_weight() as f64;
+                        *val = *val + edge_weight;
                         log::trace!("{:?} augmenting weight in v_k for neighbour {:?},  new weight {:.3e}", 
                                 *ndix, neighbour_idx, *val);  
                     }
@@ -195,36 +197,42 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
                 }  // end match
             }
             // get this edge label
-            let label = e_weight.get_label();
-            match h_label_e.get_mut(&label) {
+            match h_label_e.get_mut(&edge_label) {
                 Some(val) => {
-                    *val = *val + e_weight.get_weight() as f64;
+                    *val = *val + edge_weight;
                     log::trace!("{:?} augmenting weight in v_k for neighbour {:?},  new weight {:.3e}", *ndix, neighbour_idx, *val);  
                 }
                 None => {
                     // we add edge info in h_label_n
-                    log::trace!("adding node in v_k {:?} , label : {},  weight {:.3e}", neighbour_idx, label, e_weight.get_weight());
-                    h_label_e.insert(label.clone(),  e_weight.get_weight() as f64); 
+                    log::trace!("adding node in v_k {:?} , label : {},  weight {:.3e}", neighbour_idx, edge_label, e_weight.get_weight());
+                    h_label_e.insert(edge_label.clone(),  e_weight.get_weight() as f64); 
                 }
             }  // end match            
             // 
             // get component due to previous sketch of current neighbour
-            // we must get node label of neighbour and edge label
+            // we must get node label of neighbour and edge label, first we process nodes labels
             let hop_weight = self.sk_params.get_decay_weight()/self.get_sketch_size() as f64;
-            let e_label = e_weight.get_label();
-            let n_labels = self.graph[neighbour_idx].get_labels();
             // Problem weight of each label? do we renormalize by number of labels, or the weight of the node
             // will be proportional to the number of its labels??
-            let neighbour_sketch = &self.previous_sketch[ndix.index()];
-            let nb_sketch = neighbour_sketch.get_sketch_size();
+            let neighbour_sketch = &self.previous_sketch[neighbour_idx.index()];
             // we take previous sketches and we propagate them to our new Nlabel and Elabel hashmap applying hop_weight
-            let neighbour_sketch = neighbour_sketch.get_n_sketch().read();
-
-            for i in 0..nb_sketch {
-            
-
+            let neighbour_sketch = &*neighbour_sketch.get_n_sketch().read();
+            for sketch_n in neighbour_sketch {
+                // something (here sketch_n) in a neighbour sketch is brought with the weight connection from neighbour  ndix to ndix multiplied by the decay factor
+                match h_label_n.get_mut(sketch_n) {
+                    Some(val)  => {
+                        *val = *val + hop_weight * edge_weight;
+                        log::trace!("{} sketch augmenting node {} weight in hashmap with decayed edge weight {:.3e} new weight {:.3e}", 
+                            neighbour_idx.index(), ndix.index() , hop_weight * edge_weight ,*val);
+                    }
+                    _                    => {
+                        log::trace!("{} sketch adding n label {} with decayed weight {:.3e}", neighbour_idx.index(), sketch_n, hop_weight * edge_weight);
+                        h_label_n.insert(sketch_n.clone(), hop_weight * edge_weight);
+                    }
+                } // end match
             }
-
+            // now we must process edge labels
+            
 
 
         }  // end while 
