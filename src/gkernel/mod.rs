@@ -47,8 +47,8 @@
 //      GNN <= Weisfeiler-Lehman test
 
 
-pub mod mgraph;
-pub mod sketch;
+//pub mod mgraph;
+//pub mod sketch;
 
 /// interface to petgraph
 pub mod pgraph;

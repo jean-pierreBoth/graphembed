@@ -1,14 +1,22 @@
-//! interface towards petgraph::graph.
-//! petgraph::graph permits multiple weighted edges between 2 nodes and Directed or Undirected graph
-
+//! This module describes Edge and Node data we use in petgraph in an implementation of a nodesketch type algorithm.
+//! Nodes can have multiple discrete labels to modelize multi communities membership and various relations
+//! between nodes.     
+//! Edges can be directed or not and can have at most one discrete label, but there can be many edges between 2 given nodes
+//! as log as the labels of edge are unique.   
+//! Edge can also have a weight, by default set 1.
+//! 
 use std::hash::Hash;
 use std::cmp::Eq;
 
-use std::fmt::Display;
+// use std::fmt::Display;
 
 
-/// Our labels must satisfy.
-pub trait LabelT : Eq + Hash + Clone + Default + Display {}
+use probminhash::probminhasher::sig;
+/// Our labels must satisfy:
+/// For having String as possible labels we need Clone.
+/// To hash strings with sha2 crate we must get something equivalent to AsRef<[u8]>
+/// This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
+pub trait LabelT : Eq + Hash + Clone + Default + std::fmt::Debug +  sig::Sig {} 
 
 
 /// defines associated data to a Node.
