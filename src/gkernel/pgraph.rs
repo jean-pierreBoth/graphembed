@@ -16,7 +16,7 @@ use probminhash::probminhasher::sig;
 /// For having String as possible labels we need Clone.
 /// To hash strings with sha2 crate we must get something equivalent to AsRef<[u8]>
 /// This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
-pub trait LabelT : Eq + Hash + Clone + Default + std::fmt::Debug +  sig::Sig {} 
+pub trait LabelT : Send + Sync + Eq + Hash + Clone + Default + std::fmt::Debug + sig::Sig {} 
 
 
 /// defines associated data to a Node.
@@ -32,7 +32,7 @@ impl <Nlabel>  Nweight<Nlabel>
     where Nlabel : LabelT {
     /// has_label ?
     pub fn has_label(&self, label : &Nlabel) -> bool {
-        self.labels.iter().any(|l| l== label)
+        self.labels.iter().any(|l| l == label)
     }
 
     pub fn get_labels(&self) -> &[Nlabel] {

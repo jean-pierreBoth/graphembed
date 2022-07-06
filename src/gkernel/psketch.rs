@@ -13,9 +13,10 @@ use anyhow::{anyhow};
 use num_traits::cast::FromPrimitive;
 
 //
-// use rayon::iter::{ParallelIterator,IntoParallelIterator};
 use parking_lot::{RwLock};
 use std::sync::Arc;
+use rayon::iter::{ParallelIterator,IntoParallelIterator};
+
 // use indexmap::IndexSet;
 //use std::ops::Index;
 
@@ -94,7 +95,7 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx>
     where Nlabel : LabelT,
           Elabel : LabelT {
     /// 
-    graph : &'a Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>,
+    graph : &'a mut Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>,
     /// sketching parameters
     sk_params : SketchParams,
     ///
@@ -103,7 +104,9 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx>
     /// Its index in current_sketch being the index of the node in the graph indexing
     current_sketch : Vec<Sketch<Nlabel, Elabel>>,
     ///
-    previous_sketch : Vec<Sketch<Nlabel, Elabel>>, 
+    previous_sketch : Vec<Sketch<Nlabel, Elabel>>,
+    ///
+    parallel : bool, 
 }  // end of struct MgraphSketch
 
 
@@ -111,11 +114,11 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx>
 impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix> 
     where   Elabel : LabelT,
             Nlabel : LabelT,
-            Ty : EdgeType,
-            Ix : IndexType   {
+            Ty : EdgeType + Send + Sync,
+            Ix : IndexType + Send + Sync  {
 
     /// allocation
-    pub fn new(graph : &'a Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>, params : SketchParams) -> Self {
+    pub fn new(graph : &'a mut Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>, params : SketchParams) -> Self {
         // allocation of nodeindex
         let nb_nodes = graph.node_count();
         let nb_sketch = params.get_sketch_size();
@@ -123,7 +126,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         let sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch)).collect();
         let previous_sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch)).collect();
         //
-        MgraphSketch{ graph , sk_params : params, is_sla : false, current_sketch : sketch, previous_sketch:previous_sketch }
+        MgraphSketch{ graph : graph , sk_params : params, is_sla : false, current_sketch : sketch, previous_sketch:previous_sketch , parallel : false}
     } // end of new
 
 
@@ -151,22 +154,28 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
     /// updte sketches from previous sketches
     fn self_loop_augmentation(&mut self) {
         // WE MUST NOT FORGET Self Loop Augmentation
-        // loop on all nodeindex, take care Directed Graph case with 2 loops
-        let nodes_ref = self.graph.node_references();  // TODO avoid the collect, useful only for // case
-
+        // loop on all nodeindex
+        let node_indices = &mut self.graph.node_indices();
+        while let Some(idx) = node_indices.next() {
+            self.graph.add_edge(idx, idx, Eweight::<Elabel>::new(Elabel::default(), 1.));
+        }
         self.is_sla = true;
     } // end of self_loop_augmentation
 
-
+    /// returns true if graph is self loop augmented.
     pub fn is_sla(&self) -> bool { self.is_sla}
 
 
     /// serial symetric iteration on nodes to update sketches
     fn one_iteration_symetric(&self) {
-        let nodes =  self.graph.raw_nodes();
-        let n_indices : Vec<NodeIndex<Ix>> = self.graph.node_indices().collect();
         //
-        n_indices.iter().for_each( |ndix| self.treat_node_symetric(ndix, &nodes[ndix.index()]));
+        if self.parallel {
+            let n_indices : Vec<NodeIndex<Ix>>  = self.graph.node_indices().collect();
+            n_indices.into_par_iter().for_each( |ndix| self.treat_node_symetric(&ndix));            
+        }
+        else {
+            self.graph.node_indices().for_each( |ndix| self.treat_node_symetric(&ndix));
+        }
     } // end one_iteration_symetric
 
 
@@ -260,7 +269,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
     // In the symetric (undirected) case we must treat both edge target and edge source
     // We will need two probminhasher : one for Nlabels and one for Elabels
 
-    fn treat_node_symetric(&self, ndix : &NodeIndex<Ix> , node : &Node<Nweight<Nlabel>,Ix>) {
+    fn treat_node_symetric(&self, ndix : &NodeIndex<Ix>) {
         // ndix should correspond to rank in self.sketches (and so to rank in nodes array in petgraph:::grap
         // self.neighbors_undirected give an iterator on all neighbours
         // we must also get labels of edges
@@ -280,9 +289,6 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         let mut probminhash3a_e = ProbMinHash3aSha::<Elabel>::new(self.get_sketch_size(), Elabel::default());
         probminhash3a_n.hash_weigthed_hashmap(&h_label_n);
         probminhash3a_e.hash_weigthed_hashmap(&h_label_e);
-   
-
-
     } // end of treat_node_symetric
 
 
