@@ -1,16 +1,17 @@
 //! mini implementation of a multigraph.
 //! 
 //! This multigraph is devoted to an implementation of a nodesketch type algorithm
-//! with hashing based on couple (origin node label, edge label) during edge traversal toward a node.   
+//! with hashing based on node label and edge label during edge traversal toward a node.   
 //! Nodes can have multiple discrete labels to modelize multi communities membership and various relations
 //! between nodes.     
 //! Edges can be directed or not and can have at most one discrete label, but there can be many edges between 2 given nodes
-//! as log as the labels of edge are unique.   
+//! as long as the labels of edge are unique.   
 //! Edge can also have a weight, by default set 1.
 //! 
-//! We should get both an embedding of each node in terms of (Nlabel, Elabel) and a global graph summary vector  
+//! We should get both an embedding of each node in terms of Nlabel, Elabel and a global graph summary vector  
 //! 
 
+#![allow(unused)]
 
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Iter;
@@ -21,6 +22,8 @@ use std::cmp::Eq;
 use std::fmt::Display;
 
 /// all labels must satisfy this trait
+/// A label can be a community tag (u8, u16...) or a couple (node type, attribute)
+/// Eq can be implemented depending on requirements and governs node similarity
 pub trait LabelT : Eq + Hash + Clone + Display {}
 
 /// all identificators lust satisfy this trait

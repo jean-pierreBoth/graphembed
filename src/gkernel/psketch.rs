@@ -17,6 +17,7 @@ use parking_lot::{RwLock};
 use std::sync::Arc;
 use rayon::iter::{ParallelIterator,IntoParallelIterator};
 
+use ndarray::{Array1};
 // use indexmap::IndexSet;
 //use std::ops::Index;
 
@@ -268,13 +269,11 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
     // We will need two probminhasher : one for Nlabels and one for Elabels
     // In the symetric (undirected) case we must treat both edge target and edge source
     // We will need two probminhasher : one for Nlabels and one for Elabels
-
     fn treat_node_symetric(&self, ndix : &NodeIndex<Ix>) {
         // ndix should correspond to rank in self.sketches (and so to rank in nodes array in petgraph:::grap
         // self.neighbors_undirected give an iterator on all neighbours
         // we must also get labels of edges
         // Graph:edge_endpoints(e) -> 2 NodeIndex from to
-        // Edge.source() Edge.target() to get nodes extremities
         // Graph.edges_directed(nidx) get an iterator over all edges connected to nidx
         //
         assert!(self.graph.is_directed() == false);
@@ -285,12 +284,28 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n, &mut h_label_e);
         self.process_node_edges_labels(ndix, Direction::Incoming, &mut h_label_n, &mut h_label_e);
         // We do probminhash stuff
-        let mut probminhash3a_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
-        let mut probminhash3a_e = ProbMinHash3aSha::<Elabel>::new(self.get_sketch_size(), Elabel::default());
-        probminhash3a_n.hash_weigthed_hashmap(&h_label_n);
-        probminhash3a_e.hash_weigthed_hashmap(&h_label_e);
+        let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
+        let mut probminhash3asha_e = ProbMinHash3aSha::<Elabel>::new(self.get_sketch_size(), Elabel::default());
+        probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
+        probminhash3asha_e.hash_weigthed_hashmap(&h_label_e);
+        // save sketches into self sketch
+        let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
+        let mut row_write = self.current_sketch[ndix.index()].n_sketch.write();
+        for j in 0..self.get_sketch_size() {
+            row_write[j] = sketch_n[j].clone();
+        }         
+        let sketch_e = Array1::from_vec(probminhash3asha_e.get_signature().clone());
+        let mut row_write = self.current_sketch[ndix.index()].e_sketch.write();
+        for j in 0..self.get_sketch_size() {
+            row_write[j] = sketch_e[j].clone();
+        }   
     } // end of treat_node_symetric
 
 
+
+    // fpr asymetric embedding
+    fn treat_node_asymetric(&self, ndix : &NodeIndex<Ix>) {
+        assert!(self.graph.is_directed() == true);
+    } // end of treat_node_asymetric
 
 }  // end of impl MgraphSketch
