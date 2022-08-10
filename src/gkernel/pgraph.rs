@@ -11,12 +11,29 @@ use std::cmp::Eq;
 // use std::fmt::Display;
 
 
-use probminhash::probminhasher::sig;
+use probminhash::probminhasher::*;
 /// Our labels must satisfy:
 /// For having String as possible labels we need Clone.
 /// To hash strings with sha2 crate we must get something equivalent to AsRef<[u8]>
 /// This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
 pub trait LabelT : Send + Sync + Eq + Hash + Clone + Default + std::fmt::Debug + sig::Sig {} 
+
+
+/// A label type encoding a couple of Node label and edge label representing a transiiton from/to a node via a labelled edge
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Default)]
+pub struct NElabel<Nlabel,Elabel>(pub(crate) Nlabel, pub(crate) Elabel);
+
+
+impl<Nlabel, Elabel>  sig::Sig for NElabel<Nlabel, Elabel> where 
+    Nlabel : LabelT, Elabel : LabelT  {
+    fn get_sig(&self) -> Vec<u8> {
+        let mut s = self.0.get_sig().clone();
+        s.append(&mut self.1.get_sig().clone());
+        return s;
+    }
+} // end of impl Sig for NElabel
+
 
 
 /// defines associated data to a Node.
