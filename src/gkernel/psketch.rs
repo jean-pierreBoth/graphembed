@@ -25,17 +25,19 @@ use ndarray::{Array1};
 // use std::cmp::Eq;
 
 // use std::fmt::Display;
-// use std::time::{SystemTime};
-// use cpu_time::ProcessTime;
+
+use std::time::{SystemTime};
+use cpu_time::ProcessTime;
 
 use petgraph::graph::{Graph, IndexType};
 use petgraph::stable_graph::{NodeIndex, DefaultIx};
 use petgraph::visit::*;
-use petgraph::{EdgeType,Directed, Direction, Undirected};
+use petgraph::{EdgeType,Directed, Direction};
 
 use std::collections::HashMap;
 use probminhash::probminhasher::*;
 
+use crate::tools::edge::{EdgeDir};
 
 use super::pgraph::*;
 use super::params::*;
@@ -131,11 +133,13 @@ impl <Nlabel, Elabel> SketchTransition<Nlabel, Elabel>
     }
 
     /// 
+    #[allow(unused)]
     pub(crate) fn get_mut_current(&mut self) -> &mut Vec<Sketch<Nlabel, Elabel>> {
         return &mut self.current_sketch;
     }
 
     ///
+    #[allow(unused)]
     pub(crate) fn get_mut_previous(&mut self) ->  &mut Vec<Sketch<Nlabel, Elabel>> {
         return &mut self.previous_sketch;
     }
@@ -178,9 +182,8 @@ impl <Nlabel, Elabel> SketchTransition<Nlabel, Elabel>
         self.transfer_ne();
     } // end of iteration_transition
 
-
-
 } // end of impl SketchTransition
+
 
 // When using graph asymtry we have distinct transitions for IN and OUT edge
 struct AsymetricTransition<Nlabel, Elabel>  {
@@ -201,6 +204,27 @@ impl <Nlabel, Elabel> AsymetricTransition<Nlabel, Elabel>
         let t_out = SketchTransition::new(nb_nodes, nb_sketch);
         AsymetricTransition{t_in, t_out}
     }
+
+    /// 
+    #[allow(unused)]
+    pub(crate) fn get_mut_current(&mut self, dir : EdgeDir) -> &mut Vec<Sketch<Nlabel, Elabel>> {
+        match dir  {
+            EdgeDir::IN => { return &mut self.t_in.current_sketch; },
+            EdgeDir::OUT => { return &mut self.t_out.current_sketch; },
+            EdgeDir::INOUT => { std::panic!("should not happen")},
+        }
+    } // end of get_mut_current
+
+
+    /// return previous sketch in direction dir
+    #[allow(unused)]
+    pub(crate) fn get_mut_previous(&mut self, dir : EdgeDir) -> &mut Vec<Sketch<Nlabel, Elabel>> {
+        match dir  {
+            EdgeDir::IN => { return &mut self.t_in.previous_sketch; },
+            EdgeDir::OUT => { return &mut self.t_out.previous_sketch; },
+            EdgeDir::INOUT => { std::panic!("should not happen")},
+        }
+    } // end of get_mut_previous
 
 
     /// does the transition between iterations, for all nodes, for sketch based on couple (node label, edge label) : transfer current to previous
@@ -239,8 +263,8 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx>
     /// has single loop augmentation been done ?
     is_sla : bool,
     ///
-    symetric_transition : SketchTransition<Nlabel, Elabel>,
-    // TODO symetrization of symetric and asymetric case ? pb Option ?
+    symetric_transition : Option<SketchTransition<Nlabel, Elabel>>,
+    ///
     asymetric_transition : Option<AsymetricTransition<Nlabel, Elabel>>,
     ///
     parallel : bool, 
@@ -261,13 +285,15 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         let nb_sketch = params.get_sketch_size();
         // first initialization of previous sketches
         // TODO put it under an option
-        let symetric_sketch = SketchTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch);
-        //
+        let symetric_sketch : Option<SketchTransition::<Nlabel, Elabel>>;
         let asymetric_transition : Option<AsymetricTransition<Nlabel, Elabel>>;
-        if !params.is_symetric() {
-            asymetric_transition = Some(AsymetricTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch));
-        } else {
+        if params.is_symetric() {
+            symetric_sketch = Some(SketchTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch));       
             asymetric_transition = None;
+        }
+        else {
+            symetric_sketch = None;
+            asymetric_transition = Some(AsymetricTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch));
         }
         //
         MgraphSketch{ graph : graph , sk_params : params, is_sla : false, symetric_transition : symetric_sketch, 
@@ -276,20 +302,79 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
 
 
     /// get current sketch of node
-    pub fn get_current_sketch_node(&self, node : usize) -> &Sketch<Nlabel, Elabel> {
-        &self.symetric_transition.get_current()[node]
-    }
+    pub fn get_current_sketch_node(&self, node : usize, dir : EdgeDir) -> Option<&Sketch<Nlabel, Elabel>> {
+        match dir {
+            EdgeDir::INOUT => {
+                if self.symetric_transition.is_some() {
+                    return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
+                }
+                else {
+                    return None;
+                }
+            },
+            EdgeDir::OUT => {
+                if self.asymetric_transition.is_some() {
+                    return Some(&self.asymetric_transition.as_ref().unwrap().t_out.get_current()[node]);
+                }
+                else {
+                    return None;
+                }
+            },
+            EdgeDir::IN => {
+                if self.asymetric_transition.is_some() {
+                    return Some(&self.asymetric_transition.as_ref().unwrap().t_in.get_current()[node]);
+                }
+                else {
+                    return None;
+                }
+            },
+        } // end match
+    }  // end of get_current_sketch_node
+
+
 
     /// get current sketch of node
-    fn get_previous_sketch_node(&self, node : usize) -> &Sketch<Nlabel, Elabel> {
-        &self.symetric_transition.get_previous()[node]
-    }
+    fn get_previous_sketch_node(&self, node : usize,  dir : EdgeDir) -> Option<&Sketch<Nlabel, Elabel>> {
+        match dir {
+            EdgeDir::INOUT => {
+                if self.symetric_transition.is_some() {
+                    return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
+                }
+                else {
+                    return None;
+                }
+            },
+            EdgeDir::OUT => {
+                if self.asymetric_transition.is_some() {
+                    return Some(&self.asymetric_transition.as_ref().unwrap().t_out.get_previous()[node]);
+                }
+                else {
+                    return None;
+                }
+            },
+            EdgeDir::IN => {
+                if self.asymetric_transition.is_some() {
+                    return Some(&self.asymetric_transition.as_ref().unwrap().t_in.get_previous()[node]);
+                }
+                else {
+                    return None;
+                }
+            },
+        } // end match
+    } // end of get_previous_sketch_node
+
 
     /// returns sketch_size 
     pub fn get_sketch_size(&self) -> usize { self.sk_params.get_sketch_size()}
 
+
     /// drives the whole computation
     pub fn compute_embedded(&mut self) -> Result<usize,anyhow::Error> {
+        log::debug!("in MgraphSketch::compute_Embedded");
+        //
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
+        //
         self.self_loop_augmentation();
         // symetric or asymetric embedding
         let nb_iter = self.sk_params.get_nb_iter();
@@ -298,12 +383,19 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
             for _ in 0..nb_iter {
                 self.one_iteration_symetric();
             }
-
         } // end symetric case 
         else {
-            return Err(anyhow!("not yet"));
+            for _ in 0..nb_iter {
+                self.one_iteration_asymetric();
+            }           
         }
-
+        //
+        let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
+        println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
+        log::info!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
+        // allocate the (symetric) Embedded
+        // TODO must allocate embbedded data. Pb sym/asym type for results. 
+        //
         Err(anyhow!("not yet"))
     } // end of compute_embedded
 
@@ -322,6 +414,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         self.is_sla = true;
     } // end of self_loop_augmentation
 
+
     /// returns true if graph is self loop augmented.
     pub fn is_sla(&self) -> bool { self.is_sla}
 
@@ -337,7 +430,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
             self.graph.node_indices().for_each( |ndix| self.treat_node_symetric(&ndix));
         }
         // one all nodes have been treated we must do the current to previous iteration
-        self.symetric_transition.iteration_transition();
+        self.symetric_transition.as_ref().unwrap().iteration_transition();
     } // end one_iteration_symetric
 
 
@@ -345,7 +438,6 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
     // This function takes a node given by its nodeindex and a direction (Incoming or Outgoing) and process edges in the given direction
     // h_label_n stores hashed values of nodes labels, h_label_e stores labels of edge labels
     fn process_node_edges_labels(&self, ndix : &NodeIndex<Ix>,  dir : Direction, h_label_n : &mut HashMap::<Nlabel, f64, ahash::RandomState>, 
-                    h_label_e : &mut HashMap::<Elabel, f64, ahash::RandomState>,
                     h_label_ne : &mut HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>) {
         //
         let mut edges = self.graph.edges_directed(*ndix, dir);
@@ -387,19 +479,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
                         h_label_ne.insert(ne_label,  e_weight.get_weight() as f64); 
                     }
                 }
-            } // end of for on nodes labels
-            // TODO this should be useless once we have couples (node label, edge label) get this edge label
-            match h_label_e.get_mut(&edge_label) {
-                Some(val) => {
-                    *val = *val + edge_weight;
-                    log::trace!("{:?} augmenting weight in hashed edge labels for neighbour {:?},  new weight {:.3e}", *ndix, neighbour_idx, *val);  
-                }
-                None => {
-                    // we add edge info in h_label_n
-                    log::trace!("adding node in  {:?} , label : {:?},  weight {:.3e}", neighbour_idx, edge_label, e_weight.get_weight());
-                    h_label_e.insert(edge_label.clone(),  e_weight.get_weight() as f64); 
-                }
-            }  // end match            
+            } // end of for on nodes labels          
             // 
             // get component due to previous sketch of current neighbour
             // 
@@ -407,9 +487,9 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
             let hop_weight = self.sk_params.get_decay_weight()/self.get_sketch_size() as f64;
             // Problem weight of each label? do we renormalize by number of labels, or the weight of the node
             // will be proportional to the number of its labels??
-            let neighbour_sketch = &self.get_previous_sketch_node(neighbour_idx.index());
+            let neighbour_sketch = &self.get_previous_sketch_node(neighbour_idx.index(), EdgeDir::INOUT);
             // we take previous sketches and we propagate them to our new Nlabel and Elabel hashmap applying hop_weight
-            let neighbour_sketch_n = &*neighbour_sketch.get_n_sketch().read();
+            let neighbour_sketch_n = &*neighbour_sketch.unwrap().get_n_sketch().read();
             for sketch_n in neighbour_sketch_n {
                 // something (here sketch_n) in a neighbour sketch is brought with the weight connection from neighbour  ndix to ndix multiplied by the decay factor
                 match h_label_n.get_mut(sketch_n) {
@@ -425,7 +505,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
                 } // end match
             }
             // now we treat transition via couples (node label, edge label)
-            let  neighbour_sketch_ne = &*neighbour_sketch.get_ne_sketch().read();
+            let  neighbour_sketch_ne = &*neighbour_sketch.unwrap().get_ne_sketch().read();
             for sketch_ne in neighbour_sketch_ne {
                 match h_label_ne.get_mut(&sketch_ne) {
                     Some(val) => {
@@ -440,7 +520,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
                     }
                 }  // end match
             }  // end loop on sketch_ne
-        }
+        }   // end of while
     } // end of process_node_edges_labels
 
 
@@ -458,44 +538,34 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         assert!(self.graph.is_directed() == false);
         // TODO we initialize by first label ??
         let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
-        let mut h_label_e = HashMap::<Elabel, f64, ahash::RandomState>::default();
         let mut h_label_ne = HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>::default();
         //
-        self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n, &mut h_label_e, &mut h_label_ne);
-        self.process_node_edges_labels(ndix, Direction::Incoming, &mut h_label_n, &mut h_label_e, &mut h_label_ne);
+        self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n, &mut h_label_ne);
+        self.process_node_edges_labels(ndix, Direction::Incoming, &mut h_label_n, &mut h_label_ne);
         // We do probminhash stuff
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
-        let mut probminhash3asha_e = ProbMinHash3aSha::<Elabel>::new(self.get_sketch_size(), Elabel::default());
         let mut probminhash3asha_ne = ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default());
         probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
-        probminhash3asha_e.hash_weigthed_hashmap(&h_label_e);
         probminhash3asha_ne.hash_weigthed_hashmap(&h_label_ne);
         // save sketches into self sketch
         // first sketch based on nodes labels, we construct new sketch
         let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
         // we set new sketch
-        let mut row_write = self.get_current_sketch_node(ndix.index()).n_sketch.write();
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::INOUT).unwrap().n_sketch.write();
         for j in 0..self.get_sketch_size() {
             row_write[j] = sketch_n[j].clone();
         }  
-        // TODO to get rid of this one ...replaced by couples (node label, edge label)
-        let sketch_e = Array1::from_vec(probminhash3asha_e.get_signature().clone());
-        let mut row_write = self.get_current_sketch_node(ndix.index()).e_sketch.write();
-        for j in 0..self.get_sketch_size() {
-            row_write[j] = sketch_e[j].clone();
-        }   
         // then we process sketching based on couple (node label, edge label)
         let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
-        let mut row_write = self.get_current_sketch_node(ndix.index()).ne_sketch.write();
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::INOUT).unwrap().ne_sketch.write();
         for j in 0..self.get_sketch_size() {
             row_write[j] = sketch_ne[j].clone();
         }          
-
     } // end of treat_node_symetric
 
 
 
-    // fpr asymetric embedding
+    // for asymetric embedding
     fn treat_node_asymetric(&self, ndix : &NodeIndex<Ix>) {
         //
         assert!(self.graph.is_directed() == true);
@@ -503,23 +573,72 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         // first we treat outgoing edges
         //
         let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
-        let mut h_label_e = HashMap::<Elabel, f64, ahash::RandomState>::default();
         let mut h_label_ne = HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>::default();
         //
-        self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n, &mut h_label_e, &mut h_label_ne);
+        self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n,&mut h_label_ne);
         //
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
-        let mut probminhash3asha_e = ProbMinHash3aSha::<Elabel>::new(self.get_sketch_size(), Elabel::default());
         let mut probminhash3asha_ne = ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default());
         probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
-        // TODO to get rid of this one, replaced by couples ne_*
-        probminhash3asha_e.hash_weigthed_hashmap(&h_label_e);
         probminhash3asha_ne.hash_weigthed_hashmap(&h_label_ne);
-
+        // save sketches into self sketch
+        // first sketch based on nodes labels, we construct new sketch
+        let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
+        // we set new sketch
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().n_sketch.write();
+        for j in 0..self.get_sketch_size() {
+            row_write[j] = sketch_n[j].clone();
+        } 
+        // (node label, edge label) case
+        let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
+        // we set new sketch
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.write();
+        for j in 0..self.get_sketch_size() {
+            row_write[j] = sketch_ne[j].clone();
+        }              
         //
         // now we treat incoming edges
         //
-
+        let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
+        let mut h_label_ne = HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>::default();
+        //
+        self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n, &mut h_label_ne);
+        //
+        let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
+        let mut probminhash3asha_ne = ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default());
+        probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
+        probminhash3asha_ne.hash_weigthed_hashmap(&h_label_ne);
+        // save sketches into self sketch
+        // first sketch based on nodes labels, we construct new sketch
+        let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
+        // we set new sketch
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().n_sketch.write();
+        for j in 0..self.get_sketch_size() {
+            row_write[j] = sketch_n[j].clone();
+        } 
+        // (node label, edge label) case
+        let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
+        // we set new sketch
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.write();
+        for j in 0..self.get_sketch_size() {
+            row_write[j] = sketch_ne[j].clone();
+        }    
     } // end of treat_node_asymetric
+
+
+
+    /// serial/parallel symetric iteration on nodes to update sketches
+    fn one_iteration_asymetric(&self) {
+        //
+        if self.parallel {
+            let n_indices : Vec<NodeIndex<Ix>>  = self.graph.node_indices().collect();
+            n_indices.into_par_iter().for_each( |ndix| self.treat_node_asymetric(&ndix));            
+        }
+        else {
+            self.graph.node_indices().for_each( |ndix| self.treat_node_asymetric(&ndix));
+        }
+        // one all nodes have been treated we must do the current to previous iteration
+        self.asymetric_transition.as_ref().unwrap().iteration_transition();
+    } // end one_iteration_asymetric
 
 }  // end of impl MgraphSketch

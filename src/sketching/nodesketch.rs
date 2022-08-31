@@ -292,7 +292,7 @@ impl EmbedderT<usize> for NodeSketch {
             Err(err) => { return Err(err);}
         }
     } // end of embed
-} // end of impl<f64> EmbedderT<f64>
+} // end of impl<usize> EmbedderT<usize>
 
 
 
