@@ -56,3 +56,6 @@ pub mod pgraph;
 pub mod psketch;
 
 pub mod params;
+
+// some utilities to load data examples
+mod exio;

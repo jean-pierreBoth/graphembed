@@ -18,6 +18,14 @@ use probminhash::probminhasher::*;
 /// This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
 pub trait LabelT : Send + Sync + Eq + Hash + Clone + Default + std::fmt::Debug + sig::Sig {} 
 
+impl LabelT for u8 {}
+impl LabelT for u16 {}
+impl LabelT for u32 {}
+impl LabelT for u64 {}
+impl LabelT for i32 {}
+impl LabelT for i16 {}
+impl LabelT for String {}
+
 
 /// A label type encoding a couple of Node label and edge label representing a transiiton from/to a node via a labelled edge
 
@@ -47,6 +55,10 @@ pub struct Nweight<Nlabel> {
 
 impl <Nlabel>  Nweight<Nlabel> 
     where Nlabel : LabelT {
+    ///
+    pub fn new(labels : Vec<Nlabel>) -> Self {
+        Nweight{labels : labels}
+    }
     /// has_label ?
     pub fn has_label(&self, label : &Nlabel) -> bool {
         self.labels.iter().any(|l| l == label)
@@ -85,3 +97,15 @@ impl <Elabel> Eweight<Elabel>
     }
 
 }  // end of Eweight
+
+
+//=============================================================================
+
+
+pub trait HasNweight<Nlabel:LabelT> {
+    fn get_nweight(&self) -> &Nweight<Nlabel>;
+}
+
+pub trait HasEweight<Elabel:LabelT> {
+    fn get_eweight(&self) -> &Eweight<Elabel>;
+}

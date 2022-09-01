@@ -26,7 +26,7 @@ use sprs::{TriMatI, CsMatI};
 use rayon::prelude::*;
 
 use crate::embedding::{EmbeddedT};
-use crate::tools::{degrees::*, edge::*};
+use crate::tools::{degrees::*, edge::Edge, edge::IN, edge::OUT};
 
 pub enum ValidationMode {
     NODELABEL,
