@@ -253,6 +253,8 @@ impl <Nlabel, Elabel> AsymetricTransition<Nlabel, Elabel>
 
 //==========================================================================
 
+/// This structure provides sketching for symetric and asymetric labeled graph
+/// Labels can be attributed to node and edges
 pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx> 
     where Nlabel : LabelT,
           Elabel : LabelT {
@@ -279,12 +281,11 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
             Ix : IndexType + Send + Sync  {
 
     /// allocation
-    pub fn new(graph : &'a mut Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>, params : SketchParams) -> Self {
+    pub fn new(graph : &'a mut  Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>, params : SketchParams) -> Self {
         // allocation of nodeindex
         let nb_nodes = graph.node_count();
         let nb_sketch = params.get_sketch_size();
         // first initialization of previous sketches
-        // TODO put it under an option
         let symetric_sketch : Option<SketchTransition::<Nlabel, Elabel>>;
         let asymetric_transition : Option<AsymetricTransition<Nlabel, Elabel>>;
         if params.is_symetric() {
@@ -400,7 +401,7 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
     } // end of compute_embedded
 
 
-
+    // TODO This function is the only reason why we need &mut graph in struct!! 
     /// updte sketches from previous sketches
     fn self_loop_augmentation(&mut self) {
         // WE MUST NOT FORGET Self Loop Augmentation
@@ -642,3 +643,40 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
     } // end one_iteration_asymetric
 
 }  // end of impl MgraphSketch
+
+//==============================================================================================
+
+
+#[cfg(test)]
+mod tests {
+
+
+
+use super::*; 
+
+use crate::gkernel::exio::maileu::*;
+
+const MAILEU_DIR:&str = "/home/jpboth/Data/Graphs/Mail-EU";
+
+fn log_init_test() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
+
+// a test for data file maileu  Mail-Eu labeled graph <https://snap.stanford.edu/data/email-Eu-core.html>
+
+use super::*;
+
+#[test]
+fn test_pgraph_maileu() {
+    log_init_test();
+    let res_graph = read_maileu_data(String::from(MAILEU_DIR));
+    assert!(res_graph.is_ok());
+    let mut graph = res_graph.unwrap();
+    //
+    let skparams = SketchParams::new(100, 0.1, 10, false, false);
+//    let skgraph = MgraphSketch::new(&mut graph, skparams);
+}  // end of test_pgraph_maileu
+
+
+}  // end of mod tests

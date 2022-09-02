@@ -47,8 +47,8 @@ pub trait EmbeddedT<F> {
     fn is_symetric(&self) -> bool;
     /// get dimension of vectors of the Embedded
     fn get_dimension(&self) -> usize;
-    /// get distance in embedded space from node1 to node2 (same as distance from node2 to node1 if graph is symetric)
-    /// Nodes are identified by their their rak in embedded space
+    /// get distance in embedded space from node1 to node2 (same as distance from node2 to node1 if graph is symetric). 
+    /// Nodes are identified by their their rank in embedded space
     fn get_noderank_distance(&self, node_rank1: usize, node_rank2 : usize) -> f64;
     /// the trait provides a function distance between embedded items
     fn get_vec_distance(&self, v1 : &ArrayView1<F>, v2: &ArrayView1<F>) -> f64;

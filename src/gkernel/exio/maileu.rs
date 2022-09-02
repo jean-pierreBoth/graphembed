@@ -16,7 +16,7 @@ use crate::gkernel::pgraph::*;
 
 use indexmap::IndexMap;
 
-/// A node is a num a swe want to keep track of origin id and a label consisting in a one dimensional vector
+/// A node is a num as we want to keep track of origin id and a label consisting in a vector of length 1 as we have only one label
 pub struct EuNode {
     /// num of node as given in original data file.
     num : u32,
@@ -30,10 +30,8 @@ impl EuNode {
     }
 
     /// retrieve original node num (given in datafile)
-    pub fn getnum(&self) -> u32 { self.num}
+    pub fn get_num(&self) -> u32 { self.num}
 
-    /// retrieve associated labels
-    pub fn getlabels(&self) -> &Nweight<u8> { &self.labels}
 
 } // end of impl EuNode
 
@@ -51,12 +49,11 @@ pub struct EuEdge {}
 
 //==================================================================================================
 
-/// argumnt is directory where the 2 files from this example are stored
+/// argument is directory where the 2 files from this example are stored
 /// read 2 files : email-Eu-core.txt for network. it is a csv with blank as separator
 /// email-Eu-core-department-labels.txt for labels. a list of lines : rank node , label
-// The graph is symetric. 
-#[allow(unused)]
-fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge, petgraph::Undirected, DefaultIx> , anyhow::Error> {
+// The graph is directed. 
+pub fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge , petgraph::Directed, DefaultIx> , anyhow::Error> {
     //
     let delim = b' ';
     let nb_fields = 2;
@@ -117,12 +114,14 @@ fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge, petgraph::Un
     let file = fileres?;
     let bufreader = BufReader::new(file);
     nb_record = 0;
+    let mut nb_self_loops = 0;
+    let mut nb_double_dir = 0; // to count how many are given twice (data file give non diag edge twice)
     let mut node1 : u32;
     let mut node2 : u32;
     let mut gnode1 : Option<NodeIndex> = None;
     let mut gnode2 : Option<NodeIndex> = None;
     //
-    let mut graph = Graph::<EuNode, EuEdge, petgraph::Undirected>::new_undirected();
+    let mut graph = Graph::<EuNode, EuEdge, petgraph::Directed>::new();
     // This is to retrieve NodeIndex given original num of node as given in data file
     let mut nodeset = IndexMap::<u32, NodeIndex>::new();
     //
@@ -144,10 +143,14 @@ fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge, petgraph::Un
                 gnode1 = Some(graph.add_node(EuNode::new(node1, labels)));
                 nodeset.insert(node1, gnode1.unwrap());
             }
+            else { // node already in graph, we must retrieve its index
+                gnode1 = Some(*nodeset.get(&node1).unwrap());
+            }
         }
         else {
             return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
         }
+        // read second field
         let field = record.get(1).unwrap();
         if let Ok(idx) = field.parse::<u32>() {
             node2 = idx;
@@ -159,13 +162,75 @@ fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge, petgraph::Un
                 gnode2 = Some(graph.add_node(EuNode::new(node2, labels)));
                 nodeset.insert(node2, gnode2.unwrap());
             }
+            else { // node already in graph, we must retrieve its index
+                gnode2 = Some(*nodeset.get(&node2).unwrap());
+            }            
         }
         else {
             return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
         }
-        // we can add the  edge once! and only once, so we must check if it is already stored
+        // graph is directed. count number of double dir edges
+        if graph.contains_edge(gnode2.unwrap(), gnode1.unwrap()) {
+            nb_double_dir += 1;
+        }
         graph.update_edge(gnode1.unwrap(), gnode2.unwrap(), EuEdge{});
-    }
+        if gnode1.unwrap() == gnode2.unwrap() {
+            nb_self_loops += 1;
+        }
+        log::debug!(" index1 {} , index2 {}, gnode1 {:?} gnode2 {:?} edge count {}", node1, node2, gnode1.unwrap(), gnode2.unwrap(), graph.edge_count());
+        nb_record += 1;
+    } // end of nb records
+    //
+    log::info!("nb self loops : {}, nb bidirectional edges {}", nb_self_loops, nb_double_dir);
+    log::info!("nb nodes = {}", graph.raw_nodes().len());
+    log::info!("nb edges = {}", graph.raw_edges().len());
+
     //
     Ok(graph)
 } // end of read_maileu_data
+
+
+//=====================================================================================
+
+
+#[cfg(test)]
+mod tests {
+
+
+const MAILEU_DIR:&str = "/home/jpboth/Data/Graphs/Mail-EU";
+
+use super::*; 
+
+
+fn log_init_test() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
+
+#[test]
+fn test_load_maileu() {
+    log_init_test();
+    //
+    let res_graph = read_maileu_data(String::from(MAILEU_DIR));
+    assert!(res_graph.is_ok());
+    //
+    let graph = res_graph.unwrap();
+    // check number of nodes and edges.
+    assert_eq!(graph.raw_nodes().len(), 1005);
+    assert_eq!(graph.raw_edges().len(), 25571);
+    // access via NodeIndex
+    let first_node_weight = graph.node_weight(NodeIndex::new(0)).unwrap();
+    let first_node_nweight = first_node_weight.get_nweight();
+    let first_node_labels = first_node_nweight.get_labels();
+    assert_eq!(first_node_labels.len(), 1);
+    assert_eq!(first_node_labels[0], 1);
+    // access via raw_nodes
+    let first_node_weight = &graph.raw_nodes()[0].weight;
+    let first_node_nweight = first_node_weight.get_nweight();
+    let first_node_labels = first_node_nweight.get_labels();
+    assert_eq!(first_node_labels.len(), 1);
+    assert_eq!(first_node_labels[0], 1);
+} // end of test_load_maileu
+
+
+}  // end of mod tests
