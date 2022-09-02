@@ -45,7 +45,18 @@ impl HasNweight<u8> for EuNode {
 } // end of impl HasNweight
 
 
-pub struct EuEdge {}
+/// Edge satisfy default 
+#[derive(Default)]
+pub struct EuEdge {
+    labels : Eweight<u8>    
+}
+
+
+impl HasEweight<u8> for EuEdge {
+    fn get_eweight(&self) -> &Eweight<u8> {
+        &self.labels
+    }
+} // end of impl HasEweight
 
 //==================================================================================================
 
@@ -118,8 +129,8 @@ pub fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge , petgrap
     let mut nb_double_dir = 0; // to count how many are given twice (data file give non diag edge twice)
     let mut node1 : u32;
     let mut node2 : u32;
-    let mut gnode1 : Option<NodeIndex> = None;
-    let mut gnode2 : Option<NodeIndex> = None;
+    let mut gnode1 : Option<NodeIndex>;
+    let mut gnode2 : Option<NodeIndex>;
     //
     let mut graph = Graph::<EuNode, EuEdge, petgraph::Directed>::new();
     // This is to retrieve NodeIndex given original num of node as given in data file
@@ -173,7 +184,7 @@ pub fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge , petgrap
         if graph.contains_edge(gnode2.unwrap(), gnode1.unwrap()) {
             nb_double_dir += 1;
         }
-        graph.update_edge(gnode1.unwrap(), gnode2.unwrap(), EuEdge{});
+        graph.update_edge(gnode1.unwrap(), gnode2.unwrap(), EuEdge::default());
         if gnode1.unwrap() == gnode2.unwrap() {
             nb_self_loops += 1;
         }

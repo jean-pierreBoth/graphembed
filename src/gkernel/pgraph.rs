@@ -73,6 +73,7 @@ impl <Nlabel>  Nweight<Nlabel>
 //=================================================================================== 
 
 /// Our edge label. Called Eweight as petgraph items attached to an entity is called a weight
+/// The edge has a label attached and a f32 weight.
 pub struct Eweight<Elabel> {
     /// edge type/data
     label : Elabel,
@@ -87,17 +88,25 @@ impl <Elabel> Eweight<Elabel>
         Eweight{ label, weight}
     }
 
-
+    // retrieve the label of the edge
     pub fn get_label(&self) -> &Elabel {
         &self.label
     }
 
+    /// retrieves edge weight
     pub fn get_weight(&self) -> f32 {
         self.weight
     }
 
 }  // end of Eweight
 
+/// Data associated to an edge should satisfy Default and so Label should satisfy default.
+impl <Elabel> Default for Eweight<Elabel> 
+    where Elabel : LabelT {
+    fn default() -> Self {
+        Eweight{ label : Elabel::default(), weight: 1.}
+    }
+}
 
 //=============================================================================
 

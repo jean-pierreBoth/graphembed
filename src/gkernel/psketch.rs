@@ -255,11 +255,13 @@ impl <Nlabel, Elabel> AsymetricTransition<Nlabel, Elabel>
 
 /// This structure provides sketching for symetric and asymetric labeled graph
 /// Labels can be attributed to node and edges
-pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx> 
+pub struct MgraphSketch<'a, Nlabel, Elabel, Node, Edge, Ty = Directed, Ix = DefaultIx> 
     where Nlabel : LabelT,
-          Elabel : LabelT {
+          Elabel : LabelT, 
+          Node   : HasNweight<Nlabel> + Send + Sync,
+          Edge   : HasEweight<Elabel> + Send + Sync {
     /// 
-    graph : &'a mut Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>,
+    graph : &'a mut Graph< Node , Edge, Ty, Ix>,
     /// sketching parameters
     sk_params : SketchParams,
     /// has single loop augmentation been done ?
@@ -274,14 +276,16 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, Ty = Directed, Ix = DefaultIx>
 
 
 
-impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix> 
+impl<'a, Nlabel, Elabel, Node, Edge, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Node, Edge, Ty, Ix> 
     where   Elabel : LabelT,
             Nlabel : LabelT,
+            Node   : HasNweight<Nlabel> + Send + Sync,
+            Edge   : Default + HasEweight<Elabel> + Send + Sync,
             Ty : EdgeType + Send + Sync,
             Ix : IndexType + Send + Sync  {
 
     /// allocation
-    pub fn new(graph : &'a mut  Graph<Nweight<Nlabel> , Eweight<Elabel>, Ty, Ix>, params : SketchParams) -> Self {
+    pub fn new(graph : &'a mut  Graph<Node, Edge, Ty, Ix>, params : SketchParams) -> Self {
         // allocation of nodeindex
         let nb_nodes = graph.node_count();
         let nb_sketch = params.get_sketch_size();
@@ -409,7 +413,8 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         if !self.is_sla {
         let node_indices = &mut self.graph.node_indices();
             while let Some(idx) = node_indices.next() {
-                self.graph.add_edge(idx, idx, Eweight::<Elabel>::new(Elabel::default(), 1.));
+                // TODO must document self loop as default!!!
+                self.graph.add_edge(idx, idx, Edge::default());
             }
         }
         self.is_sla = true;
@@ -444,40 +449,40 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
         let mut edges = self.graph.edges_directed(*ndix, dir);
         while let Some(edge) = edges.next() {
             // get node and weight attribute, it is brought with the weight connection from row to neighbour
-            let e_weight = edge.weight();
-            let edge_weight = e_weight.get_weight() as f64;   // This is our weight not petgraph's
-            let edge_label = e_weight.get_label();
+            let e_weight = edge.weight();                           // This is petgraph's weight
+            let edge_weight = e_weight.get_eweight();    // This is our Eweight gathering label and f32 weight
+            let edge_label = edge_weight.get_label();
             let neighbour_idx = match dir {
                 Direction::Outgoing => {edge.target() },
                 Direction::Incoming => {edge.source() },
             };
-            let n_labels = self.graph[neighbour_idx].get_labels();
+            let n_labels = self.graph[neighbour_idx].get_nweight().get_labels();
             // treatment of h_label_n
             for label in n_labels {
                 match h_label_n.get_mut(&label) {
                     Some(val) => {
-                        *val = *val + edge_weight;
+                        *val = *val + edge_weight.get_weight() as f64;
                         log::trace!("{:?} augmenting weight hashed node labels for neighbour {:?},  new weight {:.3e}", 
                                 *ndix, neighbour_idx, *val);  
                     }
                     None => {
                         // we add edge info in h_label_n
-                        log::trace!("adding node in hashed node labels {:?}  label : {:?}, weight {:.3e}", neighbour_idx, label, e_weight.get_weight());
-                        h_label_n.insert(label.clone(),  e_weight.get_weight() as f64); 
+                        log::trace!("adding node in hashed node labels {:?}  label : {:?}, weight {:.3e}", neighbour_idx, label, e_weight.get_eweight().get_weight());
+                        h_label_n.insert(label.clone(),  edge_weight.get_weight() as f64); 
                     }
                 }  // end match
                 // treat transition via of couples of labels (node_label , edge_label)
                 let ne_label = NElabel(label.clone(), edge_label.clone());
                 match h_label_ne.get_mut(&ne_label) {
                     Some(val) => {
-                        *val = *val + edge_weight;
+                        *val = *val + edge_weight.get_weight() as f64;
                         log::trace!("{:?} augmenting weight hashed node labels for neighbour {:?}, via edge label {:?} ,  new weight {:.3e}", 
                                 *ndix, neighbour_idx, *edge_label, *val);  
                     }
                     None => {
                         // we add edge info in h_label_n
-                        log::trace!("adding node hashed (node,edge) labels {:?}  n_label : {:?}, e_label : {:?} weight {:.3e}", neighbour_idx, label, *edge_label, e_weight.get_weight());
-                        h_label_ne.insert(ne_label,  e_weight.get_weight() as f64); 
+                        log::trace!("adding node hashed (node,edge) labels {:?}  n_label : {:?}, e_label : {:?} weight {:.3e}", neighbour_idx, label, *edge_label, edge_weight.get_weight());
+                        h_label_ne.insert(ne_label,  edge_weight.get_weight() as f64); 
                     }
                 }
             } // end of for on nodes labels          
@@ -495,13 +500,14 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
                 // something (here sketch_n) in a neighbour sketch is brought with the weight connection from neighbour  ndix to ndix multiplied by the decay factor
                 match h_label_n.get_mut(sketch_n) {
                     Some(val)  => {
-                        *val = *val + hop_weight * edge_weight;
+                        *val = *val + hop_weight * edge_weight.get_weight() as f64;
                         log::trace!("{} sketch augmenting node {} weight in hashmap with decayed edge weight {:.3e} new weight {:.3e}", 
-                            neighbour_idx.index(), ndix.index() , hop_weight * edge_weight ,*val);
+                            neighbour_idx.index(), ndix.index() , hop_weight * edge_weight.get_weight() as f64 ,*val);
                     }
                     _                    => {
-                        log::trace!("{} sketch adding n label {:?} with decayed weight {:.3e}", neighbour_idx.index(), sketch_n, hop_weight * edge_weight);
-                        h_label_n.insert(sketch_n.clone(), hop_weight * edge_weight);
+                        log::trace!("{} sketch adding n label {:?} with decayed weight {:.3e}", neighbour_idx.index(), sketch_n, 
+                                hop_weight * edge_weight.get_weight() as f64);
+                                h_label_n.insert(sketch_n.clone(), hop_weight * edge_weight.get_weight() as f64);
                     }
                 } // end match
             }
@@ -510,14 +516,14 @@ impl<'a, Nlabel, Elabel, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Ty, Ix>
             for sketch_ne in neighbour_sketch_ne {
                 match h_label_ne.get_mut(&sketch_ne) {
                     Some(val) => {
-                        *val = *val + hop_weight * edge_weight;
+                        *val = *val + hop_weight * edge_weight.get_weight() as f64;
                         log::trace!("{:?} augmenting weight in edge hash for neighbour {:?},  new weight {:.3e}", 
                                 *ndix, neighbour_idx, *val);  
                     }
                     None => {
                         // we add edge info in h_label_e
-                        log::trace!("adding node in hashed edge labels {:?}  label : {:?}, weight {:.3e}", neighbour_idx, edge_label, e_weight.get_weight());
-                        h_label_ne.insert(sketch_ne.clone(),  hop_weight * edge_weight); 
+                        log::trace!("adding node in hashed edge labels {:?}  label : {:?}, weight {:.3e}", neighbour_idx, edge_label, edge_weight.get_weight());
+                        h_label_ne.insert(sketch_ne.clone(),  hop_weight * edge_weight.get_weight() as f64); 
                     }
                 }  // end match
             }  // end loop on sketch_ne
@@ -675,7 +681,7 @@ fn test_pgraph_maileu() {
     let mut graph = res_graph.unwrap();
     //
     let skparams = SketchParams::new(100, 0.1, 10, false, false);
-//    let skgraph = MgraphSketch::new(&mut graph, skparams);
+    let skgraph = MgraphSketch::new(&mut graph, skparams);
 }  // end of test_pgraph_maileu
 
 
