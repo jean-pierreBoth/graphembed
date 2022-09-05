@@ -65,9 +65,7 @@ pub struct Sketch<Nlabel, Elabel> {
     ///
     n_sketch : NSketch<Nlabel>,
     ///
-    e_sketch :  ESketch<Elabel>, 
-    ///
-    ne_sketch : NESketch<Nlabel, Elabel>,
+    ne_sketch : Option<NESketch<Nlabel, Elabel>>,
 } // end of struct Sketch
 
 
@@ -75,14 +73,17 @@ impl<Nlabel,Elabel> Sketch<Nlabel, Elabel>
     where Nlabel : LabelT,
           Elabel : LabelT {
     ///
-    pub fn new(sketch_size : usize) -> Self {
+    pub fn new(sketch_size : usize, edge_labels : bool) -> Self {
         let nsketch = (0..sketch_size).into_iter().map(|_| Nlabel::default()).collect();
-        let esketch = (0..sketch_size).into_iter().map(|_| Elabel::default()).collect();
-        let nesketch : Vec<NElabel<Nlabel, Elabel>> = (0..sketch_size).into_iter().map(|_| NElabel::default()).collect();
-
-        Sketch{sketch_size : u32::from_usize(sketch_size).unwrap(), n_sketch : Arc::new(RwLock::new(nsketch)), 
-                                        e_sketch: Arc::new(RwLock::new(esketch)),
-                                        ne_sketch: Arc::new(RwLock::new(nesketch))}
+        let ne_sketch : Vec<NElabel<Nlabel, Elabel>>;
+        if edge_labels {
+            ne_sketch = (0..sketch_size).into_iter().map(|_| NElabel::default()).collect();
+            return Sketch{sketch_size : u32::from_usize(sketch_size).unwrap(), n_sketch : Arc::new(RwLock::new(nsketch)), 
+                ne_sketch: Some(Arc::new(RwLock::new(ne_sketch)))};
+        }
+        else {
+            return Sketch{sketch_size : u32::from_usize(sketch_size).unwrap(), n_sketch : Arc::new(RwLock::new(nsketch)), ne_sketch : None};
+        }
     }
 
     /// get a reference on node sketch by Nlabel
@@ -90,14 +91,9 @@ impl<Nlabel,Elabel> Sketch<Nlabel, Elabel>
         &self.n_sketch
     } 
 
-    /// get a reference on node sketch by Elabel
-    pub fn get_e_sketch(&self) -> &ESketch<Elabel> {
-        &self.e_sketch
-    }
-
     /// get a reference on node sketch by (Nlabel, Elabel)
-    pub fn get_ne_sketch(&self) -> &NESketch<Nlabel,Elabel> {
-        &self.ne_sketch
+    pub fn get_ne_sketch(&self) -> Option<&NESketch<Nlabel,Elabel> > {
+        self.ne_sketch.as_ref()
     } 
 
 
@@ -116,6 +112,8 @@ struct SketchTransition<Nlabel, Elabel> {
     nb_nodes : usize,
     //
     nb_sketch : usize,
+    /// do we have edge labels?
+    has_edge_labels : bool,
     /// At a given index we have the sketch of the node of the corresponding index in the graph indexing
     current_sketch : Vec<Sketch<Nlabel, Elabel>>,
     ///
@@ -126,10 +124,10 @@ struct SketchTransition<Nlabel, Elabel> {
 impl <Nlabel, Elabel> SketchTransition<Nlabel, Elabel> 
     where Nlabel : LabelT , Elabel : LabelT {
 
-    pub fn new(nb_nodes : usize, nb_sketch : usize) -> Self {
-        let current_sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch)).collect();
-        let previous_sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch)).collect();
-        SketchTransition{nb_nodes, nb_sketch, current_sketch, previous_sketch}
+    pub fn new(nb_nodes : usize, nb_sketch : usize, has_edge_labels : bool) -> Self {
+        let current_sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch, has_edge_labels)).collect();
+        let previous_sketch : Vec<Sketch<Nlabel, Elabel>> = (0..nb_nodes).into_iter().map(|_|  Sketch::<Nlabel, Elabel>::new(nb_sketch, has_edge_labels)).collect();
+        SketchTransition{nb_nodes, nb_sketch, has_edge_labels, current_sketch, previous_sketch}
     }
 
     /// 
@@ -169,13 +167,17 @@ impl <Nlabel, Elabel> SketchTransition<Nlabel, Elabel>
 
     /// does the transition between iterations, for all nodes, for sketch based on couple (node label, edge label) : transfer current to previous
     pub fn transfer_ne(&self) {
-        for i in 0..self.nb_nodes { 
-            let mut row_write = self.previous_sketch[i].ne_sketch.write();
-            for j in 0..self.nb_sketch {
-                row_write[j] = self.current_sketch[i].ne_sketch.read()[j].clone();
-            }
-        }  
+        if self.has_edge_labels {
+            for i in 0..self.nb_nodes { 
+                let mut row_write = self.previous_sketch[i].ne_sketch.as_ref().unwrap().write();
+                for j in 0..self.nb_sketch {
+                    row_write[j] = self.current_sketch[i].ne_sketch.as_ref().unwrap().read()[j].clone();
+                }
+            }  
+        }
     } // end of tranfer_ne 
+
+
 
     pub(crate) fn iteration_transition(&self) {
         self.transfer_n();
@@ -198,10 +200,10 @@ struct AsymetricTransition<Nlabel, Elabel>  {
 impl <Nlabel, Elabel> AsymetricTransition<Nlabel, Elabel> 
     where Nlabel : LabelT , Elabel : LabelT {
 
-    pub fn new(nb_nodes : usize, nb_sketch : usize) -> Self {
+    pub fn new(nb_nodes : usize, nb_sketch : usize, has_edge_labels : bool) -> Self {
         // in initialization
-        let t_in = SketchTransition::new(nb_nodes, nb_sketch);
-        let t_out = SketchTransition::new(nb_nodes, nb_sketch);
+        let t_in = SketchTransition::new(nb_nodes, nb_sketch, has_edge_labels);
+        let t_out = SketchTransition::new(nb_nodes, nb_sketch, has_edge_labels);
         AsymetricTransition{t_in, t_out}
     }
 
@@ -266,6 +268,8 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, I
     graph : &'a mut Graph< NodeData , EdgeData, Ty, Ix>,
     /// sketching parameters
     sk_params : SketchParams,
+    /// true if graph has labelled edges
+    has_edge_labels : bool,
     /// has single loop augmentation been done ?
     is_sla : bool,
     ///
@@ -287,7 +291,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
             Ix : IndexType + Send + Sync  {
 
     /// allocation
-    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams) -> Self {
+    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
         // allocation of nodeindex
         let nb_nodes = graph.node_count();
         let nb_sketch = params.get_sketch_size();
@@ -295,21 +299,21 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         let symetric_sketch : Option<SketchTransition::<Nlabel, Elabel>>;
         let asymetric_transition : Option<AsymetricTransition<Nlabel, Elabel>>;
         if params.is_symetric() {
-            symetric_sketch = Some(SketchTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch));       
+            symetric_sketch = Some(SketchTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch, has_edge_labels));       
             asymetric_transition = None;
         }
         else {
             symetric_sketch = None;
-            asymetric_transition = Some(AsymetricTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch));
+            asymetric_transition = Some(AsymetricTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch, has_edge_labels));
         }
         //
-        MgraphSketch{ graph : graph , sk_params : params, is_sla : false, symetric_transition : symetric_sketch, 
+        MgraphSketch{ graph : graph , sk_params : params, has_edge_labels, is_sla : false, symetric_transition : symetric_sketch, 
             asymetric_transition, parallel : false}
     } // end of new
 
     /// check if graph has edge labels to avoid useless computations
-    fn graph_has_elabels(&self) -> bool {
-        true
+    pub fn graph_has_elabels(&self) -> bool {
+        self.has_edge_labels
     }  // end of graph_has_elabels
 
 
@@ -480,17 +484,20 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
                     }
                 }  // end match
                 // treat transition via of couples of labels (node_label , edge_label)
-                let ne_label = NElabel(label.clone(), edge_label.clone());
-                match h_label_ne.get_mut(&ne_label) {
-                    Some(val) => {
-                        *val = *val + edge_weight.get_weight() as f64;
-                        log::trace!("{:?} augmenting weight hashed node labels for neighbour {:?}, via edge label {:?} ,  new weight {:.3e}", 
-                                *ndix, neighbour_idx, *edge_label, *val);  
-                    }
-                    None => {
-                        // we add edge info in h_label_n
-                        log::trace!("adding node hashed (node,edge) labels {:?}  n_label : {:?}, e_label : {:?} weight {:.3e}", neighbour_idx, label, *edge_label, edge_weight.get_weight());
-                        h_label_ne.insert(ne_label,  edge_weight.get_weight() as f64); 
+                if edge_label.is_some() {
+                    let ne_label = NElabel(label.clone(), edge_label.unwrap().clone());
+                    match h_label_ne.get_mut(&ne_label) {
+                        Some(val) => {
+                            *val = *val + edge_weight.get_weight() as f64;
+                            log::trace!("{:?} augmenting weight hashed node labels for neighbour {:?}, via edge label {:?} ,  new weight {:.3e}", 
+                                *ndix, neighbour_idx, *edge_label.unwrap(), *val);  
+                        }
+                        None => {
+                            // we add edge info in h_label_n
+                            log::trace!("adding node hashed (node,edge) labels {:?}  n_label : {:?}, e_label : {:?} weight {:.3e}", neighbour_idx, label, 
+                                *edge_label.unwrap(), edge_weight.get_weight());
+                            h_label_ne.insert(ne_label,  edge_weight.get_weight() as f64); 
+                        }
                     }
                 }
             } // end of for on nodes labels          
@@ -520,21 +527,23 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
                 } // end match
             }
             // now we treat transition via couples (node label, edge label)
-            let  neighbour_sketch_ne = &*neighbour_sketch.unwrap().get_ne_sketch().read();
-            for sketch_ne in neighbour_sketch_ne {
-                match h_label_ne.get_mut(&sketch_ne) {
-                    Some(val) => {
-                        *val = *val + hop_weight * edge_weight.get_weight() as f64;
-                        log::trace!("{:?} augmenting weight in edge hash for neighbour {:?},  new weight {:.3e}", 
-                                *ndix, neighbour_idx, *val);  
-                    }
-                    None => {
-                        // we add edge info in h_label_e
-                        log::trace!("adding node in hashed edge labels {:?}  label : {:?}, weight {:.3e}", neighbour_idx, edge_label, edge_weight.get_weight());
-                        h_label_ne.insert(sketch_ne.clone(),  hop_weight * edge_weight.get_weight() as f64); 
-                    }
-                }  // end match
-            }  // end loop on sketch_ne
+            if edge_label.is_some() {
+                let  neighbour_sketch_ne = &*neighbour_sketch.unwrap().get_ne_sketch().unwrap().read();
+                for sketch_ne in neighbour_sketch_ne {
+                    match h_label_ne.get_mut(&sketch_ne) {
+                        Some(val) => {
+                            *val = *val + hop_weight * edge_weight.get_weight() as f64;
+                            log::trace!("{:?} augmenting weight in edge hash for neighbour {:?},  new weight {:.3e}", 
+                                    *ndix, neighbour_idx, *val);  
+                        }
+                        None => {
+                            // we add edge info in h_label_e
+                            log::trace!("adding node in hashed edge labels {:?}  label : {:?}, weight {:.3e}", neighbour_idx, edge_label, edge_weight.get_weight());
+                            h_label_ne.insert(sketch_ne.clone(),  hop_weight * edge_weight.get_weight() as f64); 
+                        }
+                    }  // end match
+                }  // end loop on sketch_ne
+            } 
         }   // end of while
     } // end of process_node_edges_labels
 
@@ -572,7 +581,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         }  
         // then we process sketching based on couple (node label, edge label)
         let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
-        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::INOUT).unwrap().ne_sketch.write();
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::INOUT).unwrap().ne_sketch.as_ref().unwrap().write();
         for j in 0..self.get_sketch_size() {
             row_write[j] = sketch_ne[j].clone();
         }    
@@ -605,12 +614,14 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
             row_write[j] = sketch_n[j].clone();
         } 
         // (node label, edge label) case
-        let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
-        // we set new sketch
-        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.write();
-        for j in 0..self.get_sketch_size() {
-            row_write[j] = sketch_ne[j].clone();
-        }              
+        if self.has_edge_labels {
+            let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
+            // we set new sketch
+            let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.as_ref().unwrap().write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = sketch_ne[j].clone();
+            }     
+        }         
         //
         // now we treat incoming edges
         //
@@ -634,7 +645,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         // (node label, edge label) case
         let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
         // we set new sketch
-        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.write();
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.as_ref().unwrap().write();
         for j in 0..self.get_sketch_size() {
             row_write[j] = sketch_ne[j].clone();
         }    
@@ -689,7 +700,8 @@ fn test_pgraph_maileu() {
     let mut graph = res_graph.unwrap();
     //
     let skparams = SketchParams::new(100, 0.1, 10, false, false);
-    let skgraph = MgraphSketch::new(&mut graph, skparams);
+    let has_edge_labels = false;
+    let skgraph = MgraphSketch::new(&mut graph, skparams, has_edge_labels);
 }  // end of test_pgraph_maileu
 
 
