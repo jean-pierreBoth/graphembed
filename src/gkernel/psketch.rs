@@ -1,5 +1,5 @@
-//! sketching work on pgraph
-//! The module is inspired from the paper Global Weisfeiler Lehman Kernel Morris-Kersting 2017 [https://arxiv.org/abs/1703.02379]
+//! Sketching work on pgraph.  
+//! The module is inspired from the paper Global Weisfeiler Lehman Kernel Morris-Kersting 2017 <https://arxiv.org/abs/1703.02379>
 //! 
 //! The colouring scheme is replaced by hashing Node Labels and Edge Labels encountered in multihop exploration
 //! around a node.
@@ -253,15 +253,17 @@ impl <Nlabel, Elabel> AsymetricTransition<Nlabel, Elabel>
 
 //==========================================================================
 
-/// This structure provides sketching for symetric and asymetric labeled graph
+/// This structure provides sketching for symetric and asymetric labeled graph.  
+/// NodeData and EdgeData are Weights attached to Node and Edge in the petgraph terminology.  
+/// For our sketching these attached data must satisfy traits (HasNweight)[HasNweight] and (HasEweight)[HasEweight].  
 /// Labels can be attributed to node and edges
-pub struct MgraphSketch<'a, Nlabel, Elabel, Node, Edge, Ty = Directed, Ix = DefaultIx> 
+pub struct MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, Ix = DefaultIx> 
     where Nlabel : LabelT,
           Elabel : LabelT, 
-          Node   : HasNweight<Nlabel> + Send + Sync,
-          Edge   : HasEweight<Elabel> + Send + Sync {
+          NodeData : HasNweight<Nlabel> + Send + Sync,
+          EdgeData : HasEweight<Elabel> + Send + Sync {
     /// 
-    graph : &'a mut Graph< Node , Edge, Ty, Ix>,
+    graph : &'a mut Graph< NodeData , EdgeData, Ty, Ix>,
     /// sketching parameters
     sk_params : SketchParams,
     /// has single loop augmentation been done ?
@@ -276,16 +278,16 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, Node, Edge, Ty = Directed, Ix = Defa
 
 
 
-impl<'a, Nlabel, Elabel, Node, Edge, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, Node, Edge, Ty, Ix> 
+impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> 
     where   Elabel : LabelT,
             Nlabel : LabelT,
-            Node   : HasNweight<Nlabel> + Send + Sync,
-            Edge   : Default + HasEweight<Elabel> + Send + Sync,
+            NodeData : HasNweight<Nlabel> + Send + Sync,
+            EdgeData : Default + HasEweight<Elabel> + Send + Sync,
             Ty : EdgeType + Send + Sync,
             Ix : IndexType + Send + Sync  {
 
     /// allocation
-    pub fn new(graph : &'a mut  Graph<Node, Edge, Ty, Ix>, params : SketchParams) -> Self {
+    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams) -> Self {
         // allocation of nodeindex
         let nb_nodes = graph.node_count();
         let nb_sketch = params.get_sketch_size();
@@ -304,6 +306,12 @@ impl<'a, Nlabel, Elabel, Node, Edge, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, No
         MgraphSketch{ graph : graph , sk_params : params, is_sla : false, symetric_transition : symetric_sketch, 
             asymetric_transition, parallel : false}
     } // end of new
+
+    /// check if graph has edge labels to avoid useless computations
+    fn graph_has_elabels(&self) -> bool {
+        true
+    }  // end of graph_has_elabels
+
 
 
     /// get current sketch of node
@@ -414,7 +422,7 @@ impl<'a, Nlabel, Elabel, Node, Edge, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, No
         let node_indices = &mut self.graph.node_indices();
             while let Some(idx) = node_indices.next() {
                 // TODO must document self loop as default!!!
-                self.graph.add_edge(idx, idx, Edge::default());
+                self.graph.add_edge(idx, idx, EdgeData::default());
             }
         }
         self.is_sla = true;
@@ -567,7 +575,7 @@ impl<'a, Nlabel, Elabel, Node, Edge, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, No
         let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::INOUT).unwrap().ne_sketch.write();
         for j in 0..self.get_sketch_size() {
             row_write[j] = sketch_ne[j].clone();
-        }          
+        }    
     } // end of treat_node_symetric
 
 
