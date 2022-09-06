@@ -17,7 +17,8 @@ use parking_lot::{RwLock};
 use std::sync::Arc;
 use rayon::iter::{ParallelIterator,IntoParallelIterator};
 
-use ndarray::{Array1};
+use ndarray::{Array2, Array1};
+
 // use indexmap::IndexSet;
 //use std::ops::Index;
 
@@ -41,7 +42,7 @@ use crate::tools::edge::{EdgeDir};
 
 use super::pgraph::*;
 use super::params::*;
-
+use crate::embedding::*;
 
 /// To sketch/store the node sketching result
 /// Exploring nodes around a node we skecth the Node labels encountered 
@@ -259,7 +260,7 @@ impl <Nlabel, Elabel> AsymetricTransition<Nlabel, Elabel>
 /// NodeData and EdgeData are Weights attached to Node and Edge in the petgraph terminology.  
 /// For our sketching these attached data must satisfy traits (HasNweight)[HasNweight] and (HasEweight)[HasEweight].  
 /// Labels can be attributed to node and edges
-pub struct MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, Ix = DefaultIx> 
+pub(crate) struct MgraphSketcher<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, Ix = DefaultIx> 
     where Nlabel : LabelT,
           Elabel : LabelT, 
           NodeData : HasNweight<Nlabel> + Send + Sync,
@@ -278,11 +279,11 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, I
     asymetric_transition : Option<AsymetricTransition<Nlabel, Elabel>>,
     ///
     parallel : bool, 
-}  // end of struct MgraphSketch
+}  // end of struct MgraphSketcher
 
 
 
-impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> 
+impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> 
     where   Elabel : LabelT,
             Nlabel : LabelT,
             NodeData : HasNweight<Nlabel> + Send + Sync,
@@ -291,28 +292,28 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
             Ix : IndexType + Send + Sync  {
 
     /// allocation
-    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
+    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool)  -> Self {
         // allocation of nodeindex
         let nb_nodes = graph.node_count();
         let nb_sketch = params.get_sketch_size();
         // first initialization of previous sketches
-        let symetric_sketch : Option<SketchTransition::<Nlabel, Elabel>>;
+        let symetric_transition : Option<SketchTransition::<Nlabel, Elabel>>;
         let asymetric_transition : Option<AsymetricTransition<Nlabel, Elabel>>;
         if params.is_symetric() {
-            symetric_sketch = Some(SketchTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch, has_edge_labels));       
+            symetric_transition = Some(SketchTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch, has_edge_labels));       
             asymetric_transition = None;
         }
         else {
-            symetric_sketch = None;
+            symetric_transition = None;
             asymetric_transition = Some(AsymetricTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch, has_edge_labels));
         }
+
         //
-        MgraphSketch{ graph : graph , sk_params : params, has_edge_labels, is_sla : false, symetric_transition : symetric_sketch, 
-            asymetric_transition, parallel : false}
+        MgraphSketcher{ graph : graph , sk_params : params, has_edge_labels, is_sla : false, symetric_transition, asymetric_transition, parallel : false}
     } // end of new
 
     /// check if graph has edge labels to avoid useless computations
-    pub fn graph_has_elabels(&self) -> bool {
+    pub(crate) fn graph_has_elabels(&self) -> bool {
         self.has_edge_labels
     }  // end of graph_has_elabels
 
@@ -386,7 +387,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
 
 
     /// drives the whole computation
-    pub fn compute_embedded(&mut self) -> Result<usize,anyhow::Error> {
+    pub fn do_iterations(&mut self) -> Result<usize,anyhow::Error> {
         log::debug!("in MgraphSketch::compute_Embedded");
         //
         let cpu_start = ProcessTime::now();
@@ -666,6 +667,131 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         // one all nodes have been treated we must do the current to previous iteration
         self.asymetric_transition.as_ref().unwrap().iteration_transition();
     } // end one_iteration_asymetric
+
+
+    /// return symetric embedding for node sketching
+    pub(crate) fn get_symetric_n_embedding(&self) -> Option<Array2<Nlabel>> {
+        if self.symetric_transition.is_none() {
+            std::panic!("call to get_symetric_n_embedding for asymetric case");
+        }
+        //
+        // construct Array2<Nlabel> from last sketch
+        //
+        //        std::panic!("unimplemented");
+        return None;
+    } // end of get_symetric_n_embedding
+
+
+    /// return symetric embedding for node sketching
+    pub(crate) fn get_symetric_ne_embedding(&self) -> Option<Array2<(Nlabel,Elabel)>> {
+        if self.symetric_transition.is_none() {
+            std::panic!("call to get_symetric_n_embedding for asymetric case");
+        }
+        //
+        // construct Array2<(Nlabel,Elabel)> from last sketch
+        //
+        std::panic!("unimplemented");
+        return None;
+    } // end of get_symetric_n_embedding
+
+
+
+    /// return asymetric embedding for node sketching
+    pub(crate) fn get_asymetric_n_embedding(&self, dir: EdgeDir) -> Option<Array2<Nlabel>> {
+        if self.asymetric_transition.is_none() {
+            std::panic!("call to get_asymetric_n_embedding for symetric case");
+        }
+        std::panic!("unimplemented");
+        return None;
+    } // end of get_symetric_n_embedding
+
+
+    /// return asymetric embedding for node sketching
+    pub(crate) fn get_asymetric_ne_embedding(&self, dir: EdgeDir) -> Option<Array2<(Nlabel,Elabel)>> {
+        if self.asymetric_transition.is_none() {
+            std::panic!("call to get_asymetric_n_embedding for symetric case");
+        }
+        std::panic!("unimplemented");
+        return None;
+    } // end of get_symetric_n_embedding
+
+}  // end of impl MgraphSketcher
+
+
+//==============================================================================================
+
+/// This structure computes a an embedding from a symetric  graph
+pub struct MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, Ix = DefaultIx> 
+    where Nlabel : LabelT,
+          Elabel : LabelT, 
+          NodeData : HasNweight<Nlabel> + Send + Sync,
+          EdgeData : HasEweight<Elabel> + Send + Sync {
+    /// 
+    graph : &'a mut Graph< NodeData , EdgeData, Ty, Ix>,
+    /// sketching parameters
+    sk_params : SketchParams,
+    /// true if graph has labelled edges
+    has_edge_labels : bool,
+    ///
+    n_embbeded : Option<Array2<Nlabel>>,
+    ///
+    ne_embedded : Option<Array2<(Nlabel,Elabel)>>,
+    ///
+    parallel : bool,
+}  // end of struct MgraphSketcher
+
+
+impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> 
+    where   Elabel : LabelT,
+            Nlabel : LabelT,
+            NodeData : HasNweight<Nlabel> + Send + Sync,
+            EdgeData : Default + HasEweight<Elabel> + Send + Sync,
+            Ty : EdgeType + Send + Sync,
+            Ix : IndexType + Send + Sync  {
+
+    /// allocation
+    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
+        // allocation of nodeindex
+        let nb_nodes = graph.node_count();
+        let nb_sketch = params.get_sketch_size();
+        // first initialization of previous sketches
+        assert!(params.is_symetric());
+        let parallel = false;
+        //
+        MgraphSketch{ graph : graph , sk_params : params, has_edge_labels, n_embbeded : None, ne_embedded : None, parallel}
+    }
+
+    /// 
+    /// Must collect at the end of computation the embedding built on NLabel, and if Graph has Edge labels, the embedding built on couples
+    /// (NLabel, ELabel). So we get 2 structures Embedded<F>
+    pub fn compute_embedded(&mut self) -> Result<usize,anyhow::Error> {
+        log::debug!("in MgraphSketch::compute_Embedded");
+        //
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
+        //
+        let mut graphsketcher = MgraphSketcher::new(self.graph, self.sk_params, self.has_edge_labels);
+        let res_iter = graphsketcher.do_iterations();
+        //
+        let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
+        println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
+        log::info!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
+        //
+        // We know we must return a symetric embedding 
+        //
+        Err(anyhow!("not yet"))
+    } // end of compute_embedded
+
+    /// return Embedded data based on Node labels. Each node is represented by a vector of Node labels
+    pub fn get_n_embedded(&self) -> Option<Embedded<Nlabel>> {
+        return None
+    }   // end of get_n_embedded
+
+
+    /// each node is represented by a vector of (Node Label, Edge Label) representing transition around a node
+    pub fn get_ne_embedded(&self) -> Option<Embedded<(Nlabel, Elabel)>> {
+        return None
+    }   // end of get_ne_embedded
 
 }  // end of impl MgraphSketch
 
