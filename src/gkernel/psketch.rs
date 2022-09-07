@@ -43,6 +43,7 @@ use crate::tools::edge::{EdgeDir};
 use super::pgraph::*;
 use super::params::*;
 use crate::embedding::*;
+use crate::tools::jaccard;
 
 /// To sketch/store the node sketching result
 /// Exploring nodes around a node we skecth the Node labels encountered 
@@ -165,6 +166,14 @@ impl <Nlabel, Elabel> SketchTransition<Nlabel, Elabel>
         }  
     } // end of tranfer_n
 
+
+    pub fn get_nb_sketch(&self) -> usize {
+        self.nb_sketch
+    }
+
+    pub fn get_nb_nodes(&self) -> usize {
+        self.nb_nodes
+    }
 
     /// does the transition between iterations, for all nodes, for sketch based on couple (node label, edge label) : transfer current to previous
     pub fn transfer_ne(&self) {
@@ -426,7 +435,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         if !self.is_sla {
         let node_indices = &mut self.graph.node_indices();
             while let Some(idx) = node_indices.next() {
-                // TODO must document self loop as default!!!
+                // TODO recall that default label for edge is None!
                 self.graph.add_edge(idx, idx, EdgeData::default());
             }
         }
@@ -435,7 +444,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
 
 
     /// returns true if graph is self loop augmented.
-    pub fn is_sla(&self) -> bool { self.is_sla}
+    pub(crate) fn is_sla(&self) -> bool { self.is_sla}
 
 
     /// serial/parallel symetric iteration on nodes to update sketches
@@ -569,9 +578,12 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         self.process_node_edges_labels(ndix, Direction::Incoming, &mut h_label_n, &mut h_label_ne);
         // We do probminhash stuff
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
-        let mut probminhash3asha_ne = ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default());
         probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
-        probminhash3asha_ne.hash_weigthed_hashmap(&h_label_ne);
+        let mut probminhash3asha_ne : Option<ProbMinHash3aSha<NElabel<Nlabel, Elabel>> > = None;
+        if self.has_edge_labels {
+            probminhash3asha_ne = Some(ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default()));
+            probminhash3asha_ne.as_mut().unwrap().hash_weigthed_hashmap(&h_label_ne);
+        }
         // save sketches into self sketch
         // first sketch based on nodes labels, we construct new sketch
         let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
@@ -581,11 +593,13 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
             row_write[j] = sketch_n[j].clone();
         }  
         // then we process sketching based on couple (node label, edge label)
-        let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
-        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::INOUT).unwrap().ne_sketch.as_ref().unwrap().write();
-        for j in 0..self.get_sketch_size() {
-            row_write[j] = sketch_ne[j].clone();
-        }    
+        if self.has_edge_labels {
+            let sketch_ne = Array1::from_vec(probminhash3asha_ne.as_ref().unwrap().get_signature().clone());
+            let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::INOUT).unwrap().ne_sketch.as_ref().unwrap().write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = sketch_ne[j].clone();
+            }
+        }
     } // end of treat_node_symetric
 
 
@@ -670,28 +684,51 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
 
 
     /// return symetric embedding for node sketching
-    pub(crate) fn get_symetric_n_embedding(&self) -> Option<Array2<Nlabel>> {
+    pub(crate) fn get_symetric_n_embedding(&self) -> Option<Embedded<Nlabel>> {
         if self.symetric_transition.is_none() {
             std::panic!("call to get_symetric_n_embedding for asymetric case");
         }
         //
-        // construct Array2<Nlabel> from last sketch
+        // construct Embedded<Nlabel> from last sketch
         //
-        //        std::panic!("unimplemented");
-        return None;
+        let sketch_t = self.symetric_transition.as_ref().unwrap();
+        let nbnodes = sketch_t.get_nb_nodes();
+        let dim = sketch_t.get_nb_sketch();
+        let mut embedded = Array2::<Nlabel>::from_elem((nbnodes,dim), Nlabel::default());
+        let sketch = sketch_t.get_current();
+        for i in 0..nbnodes {
+            let sketch_i_n = sketch[i].get_n_sketch();
+            for j in 0..self.get_sketch_size() {
+                embedded.row_mut(i)[j] = sketch_i_n.read()[j].clone();
+            }
+        }
+        let embedded = Embedded::<Nlabel>::new(embedded, jaccard::jaccard_distance);
+        return Some(embedded);
     } // end of get_symetric_n_embedding
 
 
     /// return symetric embedding for node sketching
-    pub(crate) fn get_symetric_ne_embedding(&self) -> Option<Array2<(Nlabel,Elabel)>> {
+    pub(crate) fn get_symetric_ne_embedding(&self) -> Option<Embedded<NElabel<Nlabel, Elabel>>> {
         if self.symetric_transition.is_none() {
             std::panic!("call to get_symetric_n_embedding for asymetric case");
         }
         //
-        // construct Array2<(Nlabel,Elabel)> from last sketch
+        // construct Embedded<(Nlabel,Elabel)> from last sketch
         //
-        std::panic!("unimplemented");
-        return None;
+        let sketch_t = self.symetric_transition.as_ref().unwrap();
+        let nbnodes = sketch_t.get_nb_nodes();
+        let dim = sketch_t.get_nb_sketch();
+        let init_elem = NElabel::default();
+        let mut embedded = Array2::<NElabel<Nlabel,Elabel>>::from_elem((nbnodes,dim), init_elem);
+        let sketch = sketch_t.get_current();
+        for i in 0..nbnodes {
+            let sketch_i_ne = sketch[i].get_ne_sketch().unwrap();
+            for j in 0..self.get_sketch_size() {
+                embedded.row_mut(i)[j] = sketch_i_ne.read()[j].clone();
+            }
+        }
+        let embedded = Embedded::<NElabel<Nlabel, Elabel>>::new(embedded, jaccard::jaccard_distance);
+        return Some(embedded);
     } // end of get_symetric_n_embedding
 
 
@@ -733,9 +770,9 @@ pub struct MgraphSketch<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, I
     /// true if graph has labelled edges
     has_edge_labels : bool,
     ///
-    n_embbeded : Option<Array2<Nlabel>>,
+    n_embbeded : Option<Embedded<Nlabel>>,
     ///
-    ne_embedded : Option<Array2<(Nlabel,Elabel)>>,
+    ne_embedded : Option<Embedded<NElabel<Nlabel,Elabel>>>,
     ///
     parallel : bool,
 }  // end of struct MgraphSketcher
@@ -752,8 +789,6 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
     /// allocation
     pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
         // allocation of nodeindex
-        let nb_nodes = graph.node_count();
-        let nb_sketch = params.get_sketch_size();
         // first initialization of previous sketches
         assert!(params.is_symetric());
         let parallel = false;
@@ -771,7 +806,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         let sys_start = SystemTime::now();
         //
         let mut graphsketcher = MgraphSketcher::new(self.graph, self.sk_params, self.has_edge_labels);
-        let res_iter = graphsketcher.do_iterations();
+        let _res_iter = graphsketcher.do_iterations();
         //
         let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
         println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
@@ -779,18 +814,26 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         //
         // We know we must return a symetric embedding 
         //
+        self.n_embbeded = graphsketcher.get_symetric_n_embedding();
+        if self.has_edge_labels {
+            self.ne_embedded = graphsketcher.get_symetric_ne_embedding();
+        }
         Err(anyhow!("not yet"))
     } // end of compute_embedded
 
-    /// return Embedded data based on Node labels. Each node is represented by a vector of Node labels
-    pub fn get_n_embedded(&self) -> Option<Embedded<Nlabel>> {
-        return None
+
+    /// return  data based on Node labels. Each node is represented by a vector of Node labels
+    pub fn get_n_embedded_ref(&self) -> Option<&Embedded<Nlabel>> {
+        return self.n_embbeded.as_ref();
     }   // end of get_n_embedded
 
 
-    /// each node is represented by a vector of (Node Label, Edge Label) representing transition around a node
-    pub fn get_ne_embedded(&self) -> Option<Embedded<(Nlabel, Elabel)>> {
-        return None
+    /// Returns a reference on an array with each node is represented by a vector of (Node Label, Edge Label) representing transition around a node
+    pub fn get_ne_embedded_ref(&self) -> Option<&Embedded<NElabel<Nlabel, Elabel>>> {
+        match &self.ne_embedded {
+            Some(_)  => { return self.ne_embedded.as_ref();}
+            None     =>  { return None; }
+        }
     }   // end of get_ne_embedded
 
 }  // end of impl MgraphSketch

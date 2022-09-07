@@ -1,4 +1,4 @@
-//! This file implements interface to lapack gsvd
+//! This file implements interface to Lapack gsvd.
 //! 
 //! 
 

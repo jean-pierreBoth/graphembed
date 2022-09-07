@@ -384,7 +384,7 @@ impl NodeSketchAsym {
             }
         }
         let embedded = EmbeddedAsym::<usize>::new(embedded_source, embedded_target, Some(self.degrees.clone()), 
-                super::nodesketch::jaccard_distance);
+                crate::tools::jaccard::jaccard_distance);
         //
         Ok(embedded)
     } // end of compute_Embedded

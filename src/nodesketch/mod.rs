@@ -7,7 +7,7 @@
 
 pub mod params;
 
-pub mod nodesketch;
+pub mod nodesketchsym;
 pub mod nodesketchasym;
 
 pub mod sla;
