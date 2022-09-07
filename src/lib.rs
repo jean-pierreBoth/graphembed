@@ -28,7 +28,7 @@ pub mod io;
 
 pub mod atp;
 
-pub mod sketching;
+pub mod nodesketch;
 
 pub mod embedding;
 

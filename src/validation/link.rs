@@ -416,7 +416,7 @@ mod tests {
 
     use sprs::{TriMatI};
 
-    use crate::sketching::{nodesketch::*};
+    use crate::nodesketch::{nodesketchsym::*};
 
     
     fn log_init_test() {
