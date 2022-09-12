@@ -191,9 +191,9 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     }
 
     /// In this interface nodes are identified by their rank in the embedding, not their original identity
-    /// So ranks must be less than number of nodes.
-    /// To get an interface with original nodes id,  use the Embedding structure wwhich has a mapping from node_id to node_rank
-    /// get distance FROM source node_rank1 TO target node_rank2 if Embedded is asymetric, in symetric case there is no order) 
+    /// get distance FROM source node_rank1 TO target node_rank2 if Embedded is asymetric, in symetric case there is no order).  
+    ///  
+    /// To get an interface with original nodes id, use the Embedding::get_node_distance function which has a mapping from node_id to node_rank
     fn get_noderank_distance(&self, node_rank1 : usize, node_rank2 : usize) -> f64 {
         let mut distances = Vec::<f64>::with_capacity(3);
         //

@@ -218,25 +218,14 @@ impl <Nlabel, Elabel> AsymetricTransition<Nlabel, Elabel>
     }
 
     /// 
-    #[allow(unused)]
-    pub(crate) fn get_mut_current(&mut self, dir : EdgeDir) -> &mut Vec<Sketch<Nlabel, Elabel>> {
+    pub(crate) fn get_sketch_by_dir(&self, dir : EdgeDir) -> &SketchTransition<Nlabel, Elabel> {
         match dir  {
-            EdgeDir::IN => { return &mut self.t_in.current_sketch; },
-            EdgeDir::OUT => { return &mut self.t_out.current_sketch; },
+            EdgeDir::IN => { return &self.t_in },
+            EdgeDir::OUT => { return &self.t_out},
             EdgeDir::INOUT => { std::panic!("should not happen")},
         }
     } // end of get_mut_current
 
-
-    /// return previous sketch in direction dir
-    #[allow(unused)]
-    pub(crate) fn get_mut_previous(&mut self, dir : EdgeDir) -> &mut Vec<Sketch<Nlabel, Elabel>> {
-        match dir  {
-            EdgeDir::IN => { return &mut self.t_in.previous_sketch; },
-            EdgeDir::OUT => { return &mut self.t_out.previous_sketch; },
-            EdgeDir::INOUT => { std::panic!("should not happen")},
-        }
-    } // end of get_mut_previous
 
 
     /// does the transition between iterations, for all nodes, for sketch based on couple (node label, edge label) : transfer current to previous
@@ -322,6 +311,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     } // end of new
 
     /// check if graph has edge labels to avoid useless computations
+#[allow(unused)]
     pub(crate) fn graph_has_elabels(&self) -> bool {
         self.has_edge_labels
     }  // end of graph_has_elabels
@@ -444,6 +434,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
 
 
     /// returns true if graph is self loop augmented.
+#[allow(unused)]
     pub(crate) fn is_sla(&self) -> bool { self.is_sla}
 
 
@@ -734,22 +725,80 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
 
 
     /// return asymetric embedding for node sketching
-    pub(crate) fn get_asymetric_n_embedding(&self, dir: EdgeDir) -> Option<Array2<Nlabel>> {
+    pub(crate) fn get_asymetric_n_embedding(&self) -> Option<EmbeddedAsym<Nlabel>> {
         if self.asymetric_transition.is_none() {
             std::panic!("call to get_asymetric_n_embedding for symetric case");
         }
-        std::panic!("unimplemented");
-        return None;
+        let sketch_t = self.asymetric_transition.as_ref().unwrap();
+        let dir = EdgeDir::IN;
+        let sketch_by_dir = sketch_t.get_sketch_by_dir(dir);
+        let nbnodes = sketch_by_dir.get_nb_nodes();
+        let dim = sketch_by_dir.get_nb_sketch();
+        let mut embedded_target = Array2::<Nlabel>::from_elem((nbnodes,dim), Nlabel::default());
+        let sketch = sketch_by_dir.get_current();
+        for i in 0..nbnodes {
+            let sketch_i_n = sketch[i].get_n_sketch();
+            for j in 0..self.get_sketch_size() {
+                embedded_target.row_mut(i)[j] = sketch_i_n.read()[j].clone();
+            }
+        }
+        // outgoing edges , corresponds to node as source
+        let dir = EdgeDir::OUT;
+        let sketch_by_dir = sketch_t.get_sketch_by_dir(dir);
+        let nbnodes = sketch_by_dir.get_nb_nodes();
+        let dim = sketch_by_dir.get_nb_sketch();
+        let mut embedded_source = Array2::<Nlabel>::from_elem((nbnodes,dim), Nlabel::default());
+        let sketch = sketch_by_dir.get_current();
+        for i in 0..nbnodes {
+            let sketch_i_n = sketch[i].get_n_sketch();
+            for j in 0..self.get_sketch_size() {
+                embedded_source.row_mut(i)[j] = sketch_i_n.read()[j].clone();
+            }
+        }
+        // TODO must clean the degree stuff!!
+        let embedded = EmbeddedAsym::<Nlabel>::new(embedded_source, embedded_target, None, 
+                    crate::tools::jaccard::jaccard_distance);
+        return Some(embedded);
     } // end of get_symetric_n_embedding
 
 
-    /// return asymetric embedding for node sketching
-    pub(crate) fn get_asymetric_ne_embedding(&self, dir: EdgeDir) -> Option<Array2<(Nlabel,Elabel)>> {
+    /// return asymetric embedding for (node label, edge label) sketching
+    pub(crate) fn get_asymetric_ne_embedding(&self) -> Option<EmbeddedAsym<NElabel<Nlabel, Elabel>>> {
         if self.asymetric_transition.is_none() {
             std::panic!("call to get_asymetric_n_embedding for symetric case");
         }
-        std::panic!("unimplemented");
-        return None;
+        let init_elem = NElabel::default();
+        let sketch_t = self.asymetric_transition.as_ref().unwrap();
+        //
+        let dir = EdgeDir::IN;
+        let sketch_by_dir = sketch_t.get_sketch_by_dir(dir);
+        let nbnodes = sketch_by_dir.get_nb_nodes();
+        let dim = sketch_by_dir.get_nb_sketch();
+        let mut embedded_target = Array2::<NElabel<Nlabel, Elabel>>::from_elem((nbnodes,dim), init_elem.clone());
+        let sketch = sketch_by_dir.get_current();
+        for i in 0..nbnodes {
+            let sketch_i_ne = sketch[i].get_ne_sketch().unwrap();
+            for j in 0..self.get_sketch_size() {
+                embedded_target.row_mut(i)[j] = sketch_i_ne.read()[j].clone();
+            }
+        }
+        // outgoing edges , corresponds to node as source
+        let dir = EdgeDir::OUT;
+        let sketch_by_dir = sketch_t.get_sketch_by_dir(dir);
+        let nbnodes = sketch_by_dir.get_nb_nodes();
+        let dim = sketch_by_dir.get_nb_sketch();
+        let mut embedded_source = Array2::<NElabel<Nlabel,Elabel>>::from_elem((nbnodes,dim), init_elem.clone());
+        let sketch = sketch_by_dir.get_current();
+        for i in 0..nbnodes {
+            let sketch_i_ne = sketch[i].get_ne_sketch().unwrap();
+            for j in 0..self.get_sketch_size() {
+                embedded_source.row_mut(i)[j] = sketch_i_ne.read()[j].clone();
+            }
+        }
+       // TODO must clean the degree stuff!!
+       let embedded = EmbeddedAsym::<NElabel<Nlabel,Elabel>>::new(embedded_source, embedded_target, None, 
+                crate::tools::jaccard::jaccard_distance);
+        return Some(embedded);
     } // end of get_symetric_n_embedding
 
 }  // end of impl MgraphSketcher
@@ -796,9 +845,9 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         MgraphSketch{ graph : graph , sk_params : params, has_edge_labels, n_embbeded : None, ne_embedded : None, parallel}
     }
 
-    /// 
-    /// Must collect at the end of computation the embedding built on NLabel, and if Graph has Edge labels, the embedding built on couples
-    /// (NLabel, ELabel). So we get 2 structures Embedded<F>
+    // TODO &mut is required only beccause of loop augmentation on graph!
+    /// Must collect at the end of computation the embedding built on NLabel.  
+    /// If Graph has Edge labels, an embedding is built on couples (NLabel, ELabel), We get 2 structures Embedded<F>
     pub fn compute_embedded(&mut self) -> Result<usize,anyhow::Error> {
         log::debug!("in MgraphSketch::compute_Embedded");
         //
@@ -870,7 +919,9 @@ fn test_pgraph_maileu() {
     //
     let skparams = SketchParams::new(100, 0.1, 10, false, false);
     let has_edge_labels = false;
-    let skgraph = MgraphSketch::new(&mut graph, skparams, has_edge_labels);
+    let mut skgraph = MgraphSketch::new(&mut graph, skparams, has_edge_labels);
+    //
+    let _embedded = skgraph.compute_embedded();
 }  // end of test_pgraph_maileu
 
 
