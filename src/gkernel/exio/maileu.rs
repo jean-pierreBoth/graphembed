@@ -1,4 +1,4 @@
-/// just to load Mail-Eu labeled graph <https://snap.stanford.edu/data/email-Eu-core.html>
+/// Provides a function to load Mail-Eu labeled graph <https://snap.stanford.edu/data/email-Eu-core.html>
 /// 1005 nodes , 25571 edges , labels between 0 and 41 
 
 use anyhow::{anyhow};
@@ -17,6 +17,7 @@ use crate::gkernel::pgraph::*;
 use indexmap::IndexMap;
 
 /// A node is a num as we want to keep track of origin id and a label consisting in a vector of length 1 as we have only one label
+#[allow(unused)]
 pub struct EuNode {
     /// num of node as given in original data file.
     num : u32,
@@ -30,6 +31,7 @@ impl EuNode {
     }
 
     /// retrieve original node num (given in datafile)
+#[allow(unused)]
     pub fn get_num(&self) -> u32 { self.num}
 
 
@@ -64,6 +66,7 @@ impl HasEweight<u8> for EuEdge {
 /// read 2 files : email-Eu-core.txt for network. it is a csv with blank as separator
 /// email-Eu-core-department-labels.txt for labels. a list of lines : rank node , label
 // The graph is directed. 
+#[allow(unused)]
 pub fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge , petgraph::Directed, DefaultIx> , anyhow::Error> {
     //
     let delim = b' ';

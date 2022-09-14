@@ -290,7 +290,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
             Ix : IndexType + Send + Sync  {
 
     /// allocation
-    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool)  -> Self {
+    fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool, parallel : bool)  -> Self {
         // allocation of nodeindex
         let nb_nodes = graph.node_count();
         let nb_sketch = params.get_sketch_size();
@@ -305,9 +305,10 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
             symetric_transition = None;
             asymetric_transition = Some(AsymetricTransition::<Nlabel, Elabel>::new(nb_nodes, nb_sketch, has_edge_labels));
         }
-
         //
-        MgraphSketcher{ graph : graph , sk_params : params, has_edge_labels, is_sla : false, symetric_transition, asymetric_transition, parallel : false}
+        log::debug!("allocation a MgraphSketcher structure");
+        //
+        MgraphSketcher{ graph : graph , sk_params : params, has_edge_labels, is_sla : false, symetric_transition, asymetric_transition, parallel}
     } // end of new
 
     /// check if graph has edge labels to avoid useless computations
@@ -387,7 +388,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
 
     /// drives the whole computation
     pub fn do_iterations(&mut self) -> Result<usize,anyhow::Error> {
-        log::debug!("in MgraphSketch::compute_Embedded");
+        log::debug!("in MgraphSketcher::do_iterations, nbiter : {}", self.sk_params.get_nb_iter());
         //
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
@@ -410,10 +411,8 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
         println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
         log::info!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
-        // allocate the (symetric) Embedded
-        // TODO must allocate embbedded data. Pb sym/asym type for results. 
         //
-        Err(anyhow!("not yet"))
+        Ok(1)
     } // end of compute_embedded
 
 
@@ -421,6 +420,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     /// updte sketches from previous sketches
     fn self_loop_augmentation(&mut self) {
         // WE MUST NOT FORGET Self Loop Augmentation
+        log::debug!("in MgraphSketcher::self_loop_augmentation");
         // loop on all nodeindex
         if !self.is_sla {
         let node_indices = &mut self.graph.node_indices();
@@ -509,7 +509,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
             let hop_weight = self.sk_params.get_decay_weight()/self.get_sketch_size() as f64;
             // Problem weight of each label? do we renormalize by number of labels, or the weight of the node
             // will be proportional to the number of its labels??
-            let neighbour_sketch = &self.get_previous_sketch_node(neighbour_idx.index(), EdgeDir::INOUT);
+            let neighbour_sketch = &self.get_previous_sketch_node(neighbour_idx.index(), edgedir_from_petgraph_dir(dir));
             // we take previous sketches and we propagate them to our new Nlabel and Elabel hashmap applying hop_weight
             let neighbour_sketch_n = &*neighbour_sketch.unwrap().get_n_sketch().read();
             for sketch_n in neighbour_sketch_n {
@@ -602,6 +602,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         //
         // first we treat outgoing edges
         //
+        log::trace!("node out treatment");
         let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
         let mut h_label_ne = HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>::default();
         //
@@ -631,6 +632,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         //
         // now we treat incoming edges
         //
+        log::trace!("node in treatment");
         let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
         let mut h_label_ne = HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>::default();
         //
@@ -644,17 +646,19 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         // first sketch based on nodes labels, we construct new sketch
         let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
         // we set new sketch
-        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().n_sketch.write();
+        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::IN).unwrap().n_sketch.write();
         for j in 0..self.get_sketch_size() {
             row_write[j] = sketch_n[j].clone();
         } 
         // (node label, edge label) case
-        let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
-        // we set new sketch
-        let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.as_ref().unwrap().write();
-        for j in 0..self.get_sketch_size() {
-            row_write[j] = sketch_ne[j].clone();
-        }    
+        if self.has_edge_labels {
+            let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
+            // we set new sketch
+            let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::IN).unwrap().ne_sketch.as_ref().unwrap().write();
+            for j in 0..self.get_sketch_size() {
+                row_write[j] = sketch_ne[j].clone();
+            }     
+        }
     } // end of treat_node_asymetric
 
 
@@ -663,10 +667,12 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     fn one_iteration_asymetric(&self) {
         //
         if self.parallel {
+            log::debug!("parallel asymetric iteration");
             let n_indices : Vec<NodeIndex<Ix>>  = self.graph.node_indices().collect();
             n_indices.into_par_iter().for_each( |ndix| self.treat_node_asymetric(&ndix));            
         }
         else {
+            log::debug!("serial asymetric iteration");
             self.graph.node_indices().for_each( |ndix| self.treat_node_asymetric(&ndix));
         }
         // one all nodes have been treated we must do the current to previous iteration
@@ -725,7 +731,8 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
 
 
     /// return asymetric embedding for node sketching
-    pub(crate) fn get_asymetric_n_embedding(&self) -> Option<EmbeddedAsym<Nlabel>> {
+    #[allow(unused)]
+    fn get_asymetric_n_embedding(&self) -> Option<EmbeddedAsym<Nlabel>> {
         if self.asymetric_transition.is_none() {
             std::panic!("call to get_asymetric_n_embedding for symetric case");
         }
@@ -763,7 +770,8 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
 
 
     /// return asymetric embedding for (node label, edge label) sketching
-    pub(crate) fn get_asymetric_ne_embedding(&self) -> Option<EmbeddedAsym<NElabel<Nlabel, Elabel>>> {
+#[allow(unused)]
+    fn get_asymetric_ne_embedding(&self) -> Option<EmbeddedAsym<NElabel<Nlabel, Elabel>>> {
         if self.asymetric_transition.is_none() {
             std::panic!("call to get_asymetric_n_embedding for symetric case");
         }
@@ -839,7 +847,6 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
     pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
         // allocation of nodeindex
         // first initialization of previous sketches
-        assert!(params.is_symetric());
         let parallel = false;
         //
         MgraphSketch{ graph : graph , sk_params : params, has_edge_labels, n_embbeded : None, ne_embedded : None, parallel}
@@ -854,7 +861,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         let cpu_start = ProcessTime::now();
         let sys_start = SystemTime::now();
         //
-        let mut graphsketcher = MgraphSketcher::new(self.graph, self.sk_params, self.has_edge_labels);
+        let mut graphsketcher = MgraphSketcher::new(self.graph, self.sk_params, self.has_edge_labels, self.parallel);
         let _res_iter = graphsketcher.do_iterations();
         //
         let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
@@ -864,10 +871,16 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         // We know we must return a symetric embedding 
         //
         self.n_embbeded = graphsketcher.get_symetric_n_embedding();
+        if self.n_embbeded.is_none() {
+            return Err(anyhow!("could not get symetric_n_embedding"));
+        }
         if self.has_edge_labels {
             self.ne_embedded = graphsketcher.get_symetric_ne_embedding();
+            if self.ne_embedded.is_none() {
+                return Err(anyhow!("could not get symetric_ne_embedding"));
+            }
         }
-        Err(anyhow!("not yet"))
+        Ok(1)
     } // end of compute_embedded
 
 
@@ -890,6 +903,109 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
 //==============================================================================================
 
 
+/// This structure computes a an embedding from an saymetric  graph
+pub struct MgraphSketchAsym<'a, Nlabel, Elabel, NodeData, EdgeData, Ty = Directed, Ix = DefaultIx> 
+    where Nlabel : LabelT,
+          Elabel : LabelT, 
+          NodeData : HasNweight<Nlabel> + Send + Sync,
+          EdgeData : HasEweight<Elabel> + Send + Sync {
+    /// 
+    graph : &'a mut Graph< NodeData , EdgeData, Ty, Ix>,
+    /// sketching parameters
+    sk_params : SketchParams,
+    /// true if graph has labelled edges
+    has_edge_labels : bool,
+    ///
+    n_embbeded : Option<EmbeddedAsym<Nlabel>>,
+    ///
+    ne_embedded : Option<EmbeddedAsym<NElabel<Nlabel,Elabel>>>,
+    ///
+    parallel : bool,
+}  // end of struct MgraphSketcherAsym
+
+
+impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketchAsym<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> 
+    where   Elabel : LabelT,
+            Nlabel : LabelT,
+            NodeData : HasNweight<Nlabel> + Send + Sync,
+            EdgeData : Default + HasEweight<Elabel> + Send + Sync,
+            Ty : EdgeType + Send + Sync,
+            Ix : IndexType + Send + Sync  {
+
+    /// allocation
+    pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
+        // allocation of nodeindex
+        // first initialization of previous sketches
+        let parallel = false;
+        //
+        MgraphSketchAsym{ graph : graph , sk_params : params, has_edge_labels, n_embbeded : None, ne_embedded : None, parallel}
+    }
+
+    // TODO &mut is required only beccause of loop augmentation on graph!
+    /// Must collect at the end of computation the embedding built on NLabel.  
+    /// If Graph has Edge labels, an embedding is built on couples (NLabel, ELabel), We get 2 structures Embedded<F>
+    pub fn compute_embedded(&mut self) -> Result<usize,anyhow::Error> {
+        log::debug!("in MgraphSketchAsym::compute_Embedded");
+        //
+        let cpu_start = ProcessTime::now();
+        let sys_start = SystemTime::now();
+        //
+        let mut graphsketcher = MgraphSketcher::new(self.graph, self.sk_params, self.has_edge_labels, self.parallel);
+        let _res_iter = graphsketcher.do_iterations();
+        //
+        let sys_t : f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
+        println!(" embedding sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
+        log::info!(" Embedded sys time(s) {:.2e} cpu time(s) {:.2e}", sys_t, cpu_start.elapsed().as_secs());
+        //
+        // We know we must return an asymetric embedding 
+        //
+        self.n_embbeded = graphsketcher.get_asymetric_n_embedding();
+        if self.n_embbeded.is_none() {
+            return Err(anyhow!("could not get symetric_n_embedding"));
+        }
+        if self.has_edge_labels {
+            self.ne_embedded = graphsketcher.get_asymetric_ne_embedding();
+            if self.ne_embedded.is_none() {
+                return Err(anyhow!("could not get symetric_ne_embedding"));
+            }
+        }
+        Ok(1)
+    } // end of compute_embedded
+
+
+    /// return  data based on Node labels. Each node is represented by a vector of Node labels
+    pub fn get_n_embedded_ref(&self) -> Option<&EmbeddedAsym<Nlabel>> {
+        return self.n_embbeded.as_ref();
+    }   // end of get_n_embedded
+
+
+    /// Returns a reference on an array with each node is represented by a vector of (Node Label, Edge Label) representing transition around a node
+    pub fn get_ne_embedded_ref(&self) -> Option<&EmbeddedAsym<NElabel<Nlabel, Elabel>>> {
+        match &self.ne_embedded {
+            Some(_)  => { return self.ne_embedded.as_ref();}
+            None     =>  { return None; }
+        }
+    }   // end of get_ne_embedded
+
+} // end of impl block
+
+
+
+//===============================================================================================
+
+
+
+// convert from petgraph direction coding to our EdgeDir 
+fn edgedir_from_petgraph_dir(pdir : petgraph::Direction) -> EdgeDir {
+    match pdir {
+        petgraph::Direction::Incoming => {return EdgeDir::IN; }
+        petgraph::Direction::Outgoing => { return EdgeDir::OUT }
+    }
+} // end of edgedir_from_petgraph_dir
+
+
+
+//================================================================================================
 #[cfg(test)]
 mod tests {
 
@@ -908,7 +1024,6 @@ fn log_init_test() {
 
 // a test for data file maileu  Mail-Eu labeled graph <https://snap.stanford.edu/data/email-Eu-core.html>
 
-use super::*;
 
 #[test]
 fn test_pgraph_maileu() {
@@ -919,7 +1034,7 @@ fn test_pgraph_maileu() {
     //
     let skparams = SketchParams::new(100, 0.1, 10, false, false);
     let has_edge_labels = false;
-    let mut skgraph = MgraphSketch::new(&mut graph, skparams, has_edge_labels);
+    let mut skgraph = MgraphSketchAsym::new(&mut graph, skparams, has_edge_labels);
     //
     let _embedded = skgraph.compute_embedded();
 }  // end of test_pgraph_maileu
