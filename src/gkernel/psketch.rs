@@ -311,6 +311,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         MgraphSketcher{ graph : graph , sk_params : params, has_edge_labels, is_sla : false, symetric_transition, asymetric_transition, parallel}
     } // end of new
 
+    
     /// check if graph has edge labels to avoid useless computations
 #[allow(unused)]
     pub(crate) fn graph_has_elabels(&self) -> bool {
@@ -766,7 +767,63 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         let embedded = EmbeddedAsym::<Nlabel>::new(embedded_source, embedded_target, None, 
                     crate::tools::jaccard::jaccard_distance);
         return Some(embedded);
-    } // end of get_symetric_n_embedding
+    } // end of get_asymetric_n_embedding
+
+
+    // get a global vector for the whole (asymetric) graph by merging info on all nodes.
+    // We merge IN and OUT dir
+    fn get_global_embedded_n_from_asymetric(&self, size: usize) ->  Option<Array1<Nlabel>> {
+        // loop on all nodes in both directions IN and OUT, send labels on a probminhash and get summary.
+        // we need a Hasher. size used should really larger than dim.
+        let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
+        let sketch_asym = self.asymetric_transition.as_ref().unwrap();
+        // we begin by OUT direction
+        let sketch_t = sketch_asym.get_sketch_by_dir(EdgeDir::OUT);
+        globalize_sketch_transition_n(sketch_t, &mut h_label_n);
+        // we begin by IN direction
+        let sketch_t = sketch_asym.get_sketch_by_dir(EdgeDir::IN);
+        globalize_sketch_transition_n(sketch_t, &mut h_label_n);
+        //   
+        // we need a probminhash to mix all nodes. size used should really larger than dim.
+        let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(size, Nlabel::default());
+        probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
+        let global_sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
+        //
+        return Some(global_sketch_n);
+    } // end of get_global_embedded_from_asymetric
+
+
+    // get a global vector for the whole (symetric) graph by merging info on all nodes.
+    fn get_global_embedded_n_from_symetric(&self, size: usize) ->  Option<Array1<Nlabel>> {
+        // loop on all nodes , send  each node's labels in a hash structure and then on a probminhash and get summary.
+        // This function is somewhat similar to process_node_edges_labels
+        // we need a Hasher. size used should really larger than dim.
+        let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
+        let sketch_t = self.symetric_transition.as_ref().unwrap();
+        globalize_sketch_transition_n(sketch_t, &mut h_label_n);
+        // we need a probminhash to mix all nodes. size used should really larger than dim.
+        let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(size, Nlabel::default());
+        probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
+        let global_sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
+        //
+        return Some(global_sketch_n);
+    } // end of get_global_embedded_from_asymetric
+
+
+
+    /// get a global vector for the whole graph by merging info on all nodes
+    /// size is the size of the vector asked for
+    fn get_global_n_embedding(&self, size: usize) -> Option<Array1<Nlabel>> {
+        // we must distinguish if we are in a symetric/asymetric mode
+        if self.asymetric_transition.is_some() {
+            return self.get_global_embedded_n_from_asymetric(size);
+        }
+        else {
+            return self.get_global_embedded_n_from_symetric(size);
+        }
+    } // end of get_global_n_embedding
+
+
 
 
     /// return asymetric embedding for (node label, edge label) sketching
@@ -810,6 +867,67 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     } // end of get_symetric_n_embedding
 
 }  // end of impl MgraphSketcher
+
+
+
+
+// This function merges the current state of sketch transition vector of Nlabel into a HashMap::<Nlabel, f64> by counting labels value
+#[allow(unused)]
+fn globalize_sketch_transition_n<Nlabel, Elabel>(sketch_t : &SketchTransition<Nlabel, Elabel>, hash_label : &mut HashMap::<Nlabel, f64, ahash::RandomState>) 
+    where   Nlabel : LabelT ,
+            Elabel : LabelT, {
+    //
+    let nbnodes = sketch_t.get_nb_nodes();
+    let dim = sketch_t.get_nb_sketch();
+    let sketch = sketch_t.get_current();
+    for i in 0..nbnodes {
+        let sketch_i_n = sketch[i].get_n_sketch();
+        let labels_i_n = sketch_i_n.read().clone();
+        let nb_sketch = sketch_i_n.read().len();
+        assert_eq!(nb_sketch, dim);
+        for j in 0..nb_sketch {
+            match hash_label.get_mut(&labels_i_n[j]) {
+                Some(val) => {
+                    *val = *val + 1.;
+                }
+                None => {
+                    // we add edge info in h_label_n
+                    hash_label.insert(labels_i_n[j].clone(),1.); 
+                }
+            }  // end match                
+        }
+    } // end of for i
+}  // end of globalize_sketch_transition_n
+
+
+
+// This function merges a vector of Nlabel into a HashMap::<Nlabel, f64> by counting labels value
+#[allow(unused)]
+fn globalize_sketch_transition_ne<Nlabel, Elabel>(sketch_t : &SketchTransition<Nlabel, Elabel>, hash_label : &mut HashMap::<NElabel<Nlabel,Elabel>, f64, ahash::RandomState>) 
+    where   Nlabel : LabelT ,
+            Elabel : LabelT, {
+    //
+    let nbnodes = sketch_t.get_nb_nodes();
+    let dim = sketch_t.get_nb_sketch();
+    let sketch = sketch_t.get_current();
+    for i in 0..nbnodes {
+        let sketch_i_ne = sketch[i].get_ne_sketch().unwrap();
+        let labels_i_ne = sketch_i_ne.read().clone();
+        let nb_sketch = sketch_i_ne.read().len();
+        assert_eq!(nb_sketch, dim);
+        for j in 0..nb_sketch {
+            match hash_label.get_mut(&labels_i_ne[j]) {
+                Some(val) => {
+                    *val = *val + 1.;
+                }
+                None => {
+                    // we add edge info in h_label_n
+                    hash_label.insert(labels_i_ne[j].clone(),1.); 
+                }
+            }  // end match                
+        }
+    } // end of for i
+}  // end of globalize_sketch_transition_ne
 
 
 //==============================================================================================
@@ -898,6 +1016,10 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         }
     }   // end of get_ne_embedded
 
+    /// return a global embedding vector for the whole graph
+    pub fn get_global_embedded_n(&self, dim : usize) -> Option<Array1<Nlabel>> {
+        return self.get_global_embedded_n(dim);
+    } // end of get get_global_embedded_n
 }  // end of impl MgraphSketch
 
 //==============================================================================================
@@ -1037,6 +1159,15 @@ fn test_pgraph_maileu() {
     let mut skgraph = MgraphSketchAsym::new(&mut graph, skparams, has_edge_labels);
     //
     let _embedded = skgraph.compute_embedded();
+    let n_embedded = skgraph.get_n_embedded_ref();
+    if n_embedded.is_none() {
+        log::info!("test_pgraph_maileu failed : get_n_embedded_ref failed");
+        std::process::exit(1);
+    }
+    let n_embedded = n_embedded.unwrap();
+    let source = n_embedded.get_embedded_source();
+    let target = n_embedded.get_embedded_target();
+
 }  // end of test_pgraph_maileu
 
 
