@@ -77,7 +77,7 @@ use sprs::{TriMatI};
 
 use graphembed::io;
 
-use graphembed::io::bson::*;
+use graphembed::io::embeddedbson::*;
 
 /// variable to be used to run tests
 const _DATADIR : &str = &"/home/jpboth/Data/Graphs";

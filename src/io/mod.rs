@@ -2,6 +2,6 @@
 
 pub mod csv;
 
-pub mod bson;
+pub mod embeddedbson;
 
 pub mod output;

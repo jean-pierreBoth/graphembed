@@ -3,7 +3,7 @@
 //!  Data are formatted in a bson Document, each value has a key.
 //!
 //!  The encoding is done in 3 parts:
-//! 1. A header structure with key "header". The structure is described below see struct [Header](BsonHeader)
+//! 1. A header structure with key "header". The structure is described below see struct [Header](EmbeddedBsonHeader)
 //! - a version index
 //! - base type name essentially f32,f64 or usize encoded as a String. key is type_name.  
 //!     **Beware that as bson requires usize to be encoded as i64, an independant implementation of a reload
@@ -54,7 +54,7 @@ use crate::io;
 
 /// This structure defines the header of the bson document
 #[derive(Debug,Serialize, Deserialize)]
-pub struct BsonHeader {
+pub struct EmbeddedBsonHeader {
     /// version of dump format
     pub version : i64,
     /// true if embedding is symetric
@@ -65,14 +65,14 @@ pub struct BsonHeader {
     pub dimension : i64,
     /// number of vectors.
     pub nbdata : i64,
-} // end of BsonHeader
+} // end of EmbeddedBsonHeader
 
 
-impl BsonHeader {
+impl EmbeddedBsonHeader {
     pub fn new(symetric : bool , type_name : String, dimension : i64, nbdata : i64) -> Self {
-        BsonHeader{version : 1, symetric, type_name, dimension, nbdata}
+        EmbeddedBsonHeader{version : 1, symetric, type_name, dimension, nbdata}
     }
-} // end of impl BsonHeader
+} // end of impl EmbeddedBsonHeader
 
 
 /// dump an embedding in bson format in filename fname.  
@@ -102,7 +102,7 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
     // dump header part
     let dim : i64 = FromPrimitive::from_usize(embedded.get_dimension()).unwrap();
     let nbdata : i64 =  FromPrimitive::from_usize(embedded.get_nb_nodes()).unwrap();
-    // we could allocate a BsonHeader and call bson::to_bson(&bson_header).unwrap() but for C decoder ...
+    // we could allocate a EmbeddedBsonHeader and call bson::to_bson(&bson_header).unwrap() but for C decoder ...
     let bson_header = bson!({
         "version": 1 as i64,
         "symetric":embedded.is_symetric(),
@@ -164,7 +164,7 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
 /// returns the bson header of an embedding.  
 /// This can be useful to retrieve the type of the embedding (dumped via a call to std::any::type_name::<F>()).
 /// The type will be "f64", "f32" or "i64" as Bson imposes the conversion of usize to i64
-pub fn get_bson_header(fname : &String) -> Result<BsonHeader, anyhow::Error> {
+pub fn get_bson_header(fname : &String) -> Result<EmbeddedBsonHeader, anyhow::Error> {
     let path = Path::new(fname);
     let fileres = OpenOptions::new().read(true).open(&path);
     let file;
@@ -188,27 +188,27 @@ pub fn get_bson_header(fname : &String) -> Result<BsonHeader, anyhow::Error> {
         return Err(anyhow!("could not find header in document"));
     }
     let bson_header = res.unwrap().clone();  // TODO avoid clone ?
-    let header: BsonHeader = bson::from_bson(bson_header).unwrap();
+    let header: EmbeddedBsonHeader = bson::from_bson(bson_header).unwrap();
     return Ok(header);
 } // end of get_bson_header
 
 
 /// The structure returned by bson_load.
-pub struct BsonReload<F, NodeId> {
+pub struct EmbeddedBsonReload<F, NodeId> {
     /// The minimal embedded data when graph is symetric
     out_embedded: Array2<F>,
     /// If grap is asymetric we get embedding of nodes as targets (or destinations) in_embedded
     in_embedded : Option<Array2<F>>,
     /// If nodeindexation was dumped in bson
     node_indexation : Option< IndexSet<NodeId>>
-}  // end of BsonReload
+}  // end of EmbeddedBsonReload
 
 
 
-impl <F, NodeId> BsonReload<F, NodeId> {
+impl <F, NodeId> EmbeddedBsonReload<F, NodeId> {
     pub fn new(out_embedded : Array2<F>, in_embedded : Option<Array2<F>>, 
                                 node_indexation : Option< IndexSet<NodeId>>) -> Self {
-        BsonReload{out_embedded, in_embedded, node_indexation}
+        EmbeddedBsonReload{out_embedded, in_embedded, node_indexation}
     }
     /// returns embedded data. If asymetric embedding it is embedded as a source. 
     /// If embedding is symetric it is the whole embedding.
@@ -217,13 +217,13 @@ impl <F, NodeId> BsonReload<F, NodeId> {
     pub fn get_node_indexation(&self) -> Option<&IndexSet<NodeId>> { self.node_indexation.as_ref() }
     /// If the embedding dumped is asymetric this returns an array giving the embedding as a target (or destination) node.
     pub fn get_in_embedded(&self) -> Option<&Array2<F>> { self.in_embedded.as_ref()}
-}  // enf of impl BsonReload
+}  // enf of impl EmbeddedBsonReload
 
 
-/// reloads embedded data from a previous bson dump and returns a BsonReload structure.  
+/// reloads embedded data from a previous bson dump and returns a EmbeddedBsonReload structure.  
 /// The structure  Embedded or EmbeddedAsym can be reconstituted from it (or with a graph reload to get nodeindexation)
 ///
-pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonReload<F, NodeId>, anyhow::Error>
+pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<EmbeddedBsonReload<F, NodeId>, anyhow::Error>
     where   NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> ,
             F : num_traits::Zero + Clone + serde::de::DeserializeOwned,
             NodeId : ToString + FromStr {
@@ -254,7 +254,7 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonRel
     }
     let bson_header = res.unwrap().clone();  // TODO avoid clone ?
     // now decode our fields
-    let header: BsonHeader = bson::from_bson(bson_header).unwrap();
+    let header: EmbeddedBsonHeader = bson::from_bson(bson_header).unwrap();
     log::debug!("header : {:?}", header);
     if header.version != 1 {
         log::error!("header format version : {}", header.version);
@@ -321,7 +321,7 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonRel
             }
             bson::document::ValueAccessError::NotPresent => {
                 log::info!("No indexation in bson file : {}", path.display());
-                return Ok(BsonReload::new(out_array, in_array_opt, None));
+                return Ok(EmbeddedBsonReload::new(out_array, in_array_opt, None));
             }
             _ => {
                panic!("not exhaustive pattern encountered in bson error"); 
@@ -349,14 +349,14 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<BsonRel
             node_indexation.insert(node_id);
         }
         assert_eq!(node_indexation.len(), nb_data);
-        return Ok(BsonReload::new(out_array, in_array_opt, Some(node_indexation)));
+        return Ok(EmbeddedBsonReload::new(out_array, in_array_opt, Some(node_indexation)));
     }   // end case we have indexation in bson file
 } // end of bson_load
 
 
 // This function checks equality of embedded and reloaded
 #[allow(unused)]
-fn check_equality<F,NodeId, EmbeddedData> (embedding : &Embedding<F, NodeId, EmbeddedData>, reloaded : &BsonReload<F, NodeId>) -> Result<bool, anyhow::Error> 
+fn check_equality<F,NodeId, EmbeddedData> (embedding : &Embedding<F, NodeId, EmbeddedData>, reloaded : &EmbeddedBsonReload<F, NodeId>) -> Result<bool, anyhow::Error> 
     where   NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> ,
             F : num_traits::Zero + Clone + serde::de::DeserializeOwned + PartialEq + std::fmt::Display,
             NodeId : ToString + FromStr {

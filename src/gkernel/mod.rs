@@ -50,12 +50,13 @@
 //pub mod mgraph;
 //pub mod sketch;
 
-/// interface to petgraph
+/// Defines nterface to petgraph.  
 pub mod pgraph;
-/// sketching on top of petgraph
+/// Sketching on top of petgraph.  
 pub mod psketch;
 
+/// Defines sketching parameters.
 pub mod params;
 
-// some utilities to load data examples
+/// some utilities to load data examples.  
 mod exio;

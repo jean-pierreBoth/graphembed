@@ -197,32 +197,34 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     fn get_noderank_distance(&self, node_rank1 : usize, node_rank2 : usize) -> f64 {
         let mut distances = Vec::<f64>::with_capacity(3);
         //
-        if let Some(degrees) = &self.degrees {
-            let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
-            distances.push(dist_s);
+        let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
+        distances.push(dist_s);
 
-            let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
-            distances.push(dist_t);
-            //
-            let dist_t = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
-            distances.push(dist_t);
-            if distances.len() > 0 {
-                let dist = distances.iter().sum::<f64>() / distances.len() as f64;
-                return dist;
-            }
-            else {
-                log::error!("degrees node rank1 : {} degree = {:?}, node rank2 : {}, degree = {:?}", node_rank1, degrees[node_rank1], 
-                                        node_rank2, degrees[node_rank2]);
-                log::error!("get_noderank_distance asymetric no distance computed");
-                return 1.;
-            }
-        }
-        else {
-            let dist = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
+        let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
+        distances.push(dist_t);
+        //
+        let dist_t = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
+        distances.push(dist_t);
+        if distances.len() > 0 {
+            let dist = distances.iter().sum::<f64>() / distances.len() as f64;
             return dist;
         }
-
+        else {
+            match &self.degrees {
+            // if we have degrees we dump info 
+            Some(degrees) => {
+                        log::error!("cannot get distance between node rank1 : {} degree = {:?}, node rank2 : {}, degree = {:?}", node_rank1, degrees[node_rank1], 
+                                        node_rank2, degrees[node_rank2]);
+                }
+                None => {
+                        log::error!("cannot get distance between node rank1 : {} , node rank2 : {}", node_rank1, node_rank2);
+                }
+            }
+            log::error!("get_noderank_distance asymetric no distance computed");
+            return 1.;
+        }
     } // end of get_noderank_distance
+
 
     /// get number of nodes embedded.
     fn get_nb_nodes(&self) -> usize {
