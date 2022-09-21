@@ -67,7 +67,7 @@ impl HasEweight<u8> for EuEdge {
 /// email-Eu-core-department-labels.txt for labels. a list of lines : rank node , label
 // The graph is directed. 
 #[allow(unused)]
-pub fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge , petgraph::Directed, DefaultIx> , anyhow::Error> {
+pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge , petgraph::Directed, DefaultIx>, IndexMap::<u32, NodeIndex>)> {
     //
     let delim = b' ';
     let nb_fields = 2;
@@ -200,7 +200,7 @@ pub fn read_maileu_data(dir : String) -> Result< Graph<EuNode , EuEdge , petgrap
     log::info!("nb edges = {}", graph.raw_edges().len());
 
     //
-    Ok(graph)
+    Ok((graph,nodeset))
 } // end of read_maileu_data
 
 
@@ -228,7 +228,7 @@ fn test_load_maileu() {
     let res_graph = read_maileu_data(String::from(MAILEU_DIR));
     assert!(res_graph.is_ok());
     //
-    let graph = res_graph.unwrap();
+    let (graph, _nodeset) = res_graph.unwrap();
     // check number of nodes and edges.
     assert_eq!(graph.raw_nodes().len(), 1005);
     assert_eq!(graph.raw_edges().len(), 25571);

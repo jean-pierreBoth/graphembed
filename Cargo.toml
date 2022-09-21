@@ -34,8 +34,7 @@ num-traits = {version = "0.2"}
 
 # linear algebra stuff
 ndarray = {version = "0.15", features=["rayon", "serde"]}
-ndarray-linalg = {version = "0.14", default-features = false}
-#lax = {version = "0.2"}
+ndarray-linalg = {version = "0.15", default-features = false}
 lapacke = {version = "0.5"}
 openblas-src = {version = "0.10", optional = true, default=false}
 lapack-src = {version = "0.8", optional = true}
@@ -48,7 +47,7 @@ bson = {version = "2.2"}
 
 
 # for //
-parking_lot = {version="0.11"}
+parking_lot = {version="0.12"}
 rayon = {version = "1.5"}
 num_cpus = {version = "1.13"}
 
@@ -58,15 +57,16 @@ clap = { version = "3.1", features = ["derive"] }
 ##
 indexmap = {version = "1.8"}
 ahash = {version = "0.7"}
-probminhash = {version = "0.1.5"}
+#probminhash = {version = "0.1.5"}
+probminhash = {path = "../probminhash"}
 
 ## rand utils
 rand = {version = "0.8"}
 rand_xoshiro = {version = "0.6"}
 rand_distr = {version = "0.4"}
 
-annembed = {version = "0.0.4", default = false}
-#annembed ={ path = "../annembed", default = false}
+#annembed = {version = "0.0.7", default = false}
+annembed ={ path = "../annembed", default = false}
 
 #  
 lazy_static = { version = "1.4"}
@@ -78,7 +78,7 @@ log = { version = "0.4"}
 env_logger = { version = "0.9"}
 
 # hack to avoid interaction bug with intel-mkl
-anyhow = { version = "<=1.0.48" }
+anyhow = { version = "1.0.58" }
 # for documentation
 katexit = {version = "0.1.0"}
 
@@ -93,3 +93,5 @@ default = []
 intel-mkl-static = ["ndarray/blas", "ndarray-linalg/intel-mkl-static", "annembed/intel-mkl-static"]
 
 openblas-static = ["ndarray/blas", "ndarray-linalg/openblas-static", "annembed/openblas-static"]
+
+openblas-system = ["ndarray/blas", "ndarray-linalg/openblas-system", "annembed/openblas-system"]

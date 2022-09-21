@@ -631,7 +631,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         let mut h_label_n = HashMap::<Nlabel, f64, ahash::RandomState>::default();
         let mut h_label_ne = HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>::default();
         //
-        self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n, &mut h_label_ne);
+        self.process_node_edges_labels(ndix, Direction::Incoming, &mut h_label_n, &mut h_label_ne);
         //
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
         let mut probminhash3asha_ne = ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default());
@@ -1175,7 +1175,7 @@ fn test_pgraph_maileu() {
     log_init_test();
     let res_graph = read_maileu_data(String::from(MAILEU_DIR));
     assert!(res_graph.is_ok());
-    let mut graph = res_graph.unwrap();
+    let (mut graph, nodeset) = res_graph.unwrap();
     //
     let sketch_size = 100;
     let skparams = SketchParams::new(sketch_size, 0.1, 10, false, false);
@@ -1191,8 +1191,28 @@ fn test_pgraph_maileu() {
     let n_embedded = n_embedded.unwrap();
     let source = n_embedded.get_embedded_source();
     let target = n_embedded.get_embedded_target();
-    // dump source / target for some nodes
+    // dump source / target for some nodes, identified by their id in maileu
+    let node_id: u32  = 0;
+    // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
+    let node_index = nodeset.get(&node_id).unwrap().index();
+    log::info!("node id : {} , nodeindex : {}", node_id, node_index);
+    log::info!("node rank : {}, source vector : {:?}", node_index, source.row(node_index));
+    log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index));
     //
+    let node_id: u32  = 4;
+    // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
+    let node_index = nodeset.get(&node_id).unwrap().index();
+    log::info!("node id : {} , nodeindex : {}", node_id, node_index);
+    log::info!("node rank : {}, source vector : {:?}", node_index, source.row(node_index));
+    log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index));
+    // node 857 has degree out : 0 and degree in 4
+    let node_id: u32  = 857;
+    // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
+    let node_index = nodeset.get(&node_id).unwrap().index();
+    log::info!("node id : {} , nodeindex : {}", node_id, node_index);
+    log::info!("node rank : {}, source vector : {:?}", node_index, source.row(node_index));
+    log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index));
+    
     let global_embedding = skgraph.get_global_embedded_n(10* sketch_size);
 
 }  // end of test_pgraph_maileu
