@@ -604,9 +604,13 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         self.process_node_edges_labels(ndix, Direction::Outgoing, &mut h_label_n,&mut h_label_ne);
         //
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
-        let mut probminhash3asha_ne = ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default());
         probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
-        probminhash3asha_ne.hash_weigthed_hashmap(&h_label_ne);
+        let mut probminhash3asha_ne : Option<ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>> = None;
+        if self.has_edge_labels {
+            // in this case we really do the allocation
+            probminhash3asha_ne = Some(ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default()));
+            probminhash3asha_ne.as_mut().unwrap().hash_weigthed_hashmap(&h_label_ne);
+        }
         // save sketches into self sketch
         // first sketch based on nodes labels, we construct new sketch
         let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
@@ -617,7 +621,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         } 
         // (node label, edge label) case
         if self.has_edge_labels {
-            let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
+            let sketch_ne = Array1::from_vec(probminhash3asha_ne.as_ref().unwrap().get_signature().clone());
             // we set new sketch
             let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::OUT).unwrap().ne_sketch.as_ref().unwrap().write();
             for j in 0..self.get_sketch_size() {
@@ -634,9 +638,12 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         self.process_node_edges_labels(ndix, Direction::Incoming, &mut h_label_n, &mut h_label_ne);
         //
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(self.get_sketch_size(), Nlabel::default());
-        let mut probminhash3asha_ne = ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default());
         probminhash3asha_n.hash_weigthed_hashmap(&h_label_n);
-        probminhash3asha_ne.hash_weigthed_hashmap(&h_label_ne);
+        if self.has_edge_labels {        
+            // in this case we really do the allocation
+            probminhash3asha_ne = Some(ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(self.get_sketch_size(), NElabel::default()));
+            probminhash3asha_ne.as_mut().unwrap().hash_weigthed_hashmap(&h_label_ne);
+        }
         // save sketches into self sketch
         // first sketch based on nodes labels, we construct new sketch
         let sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
@@ -647,7 +654,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         } 
         // (node label, edge label) case
         if self.has_edge_labels {
-            let sketch_ne = Array1::from_vec(probminhash3asha_ne.get_signature().clone());
+            let sketch_ne = Array1::from_vec(probminhash3asha_ne.as_ref().unwrap().get_signature().clone());
             // we set new sketch
             let mut row_write = self.get_current_sketch_node(ndix.index(), EdgeDir::IN).unwrap().ne_sketch.as_ref().unwrap().write();
             for j in 0..self.get_sketch_size() {
@@ -675,6 +682,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     } // end one_iteration_asymetric
 
 
+    
     /// return symetric embedding for node sketching
     pub(crate) fn get_symetric_n_embedding(&self) -> Option<Embedded<Nlabel>> {
         if self.symetric_transition.is_none() {
@@ -1213,7 +1221,8 @@ fn test_pgraph_maileu() {
     log::info!("node rank : {}, source vector : {:?}", node_index, source.row(node_index));
     log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index));
     
-    let global_embedding = skgraph.get_global_embedded_n(10* sketch_size);
+    let global_embedding = skgraph.get_global_embedded_n(10* sketch_size).unwrap();
+    log::info!("global embedding vector : {:?}", global_embedding);
 
 }  // end of test_pgraph_maileu
 

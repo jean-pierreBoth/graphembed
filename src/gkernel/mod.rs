@@ -58,5 +58,7 @@ pub mod psketch;
 /// Defines sketching parameters.
 pub mod params;
 
+/// Defines translations of labels and ranks between raw data from io and our structures in MgraphSketcher
+pub mod idmap;
 /// some utilities to load data examples.  
 mod exio;
