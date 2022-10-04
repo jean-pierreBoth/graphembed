@@ -454,8 +454,10 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     fn process_node_edges_labels(&self, ndix : &NodeIndex<Ix>,  dir : Direction, h_label_n : &mut HashMap::<Nlabel, f64, ahash::RandomState>, 
                     h_label_ne : &mut HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>) {
         //
+        let mut degree = 0usize; 
         let mut edges = self.graph.edges_directed(*ndix, dir);
         while let Some(edge) = edges.next() {
+            degree += 1;
             // get node and weight attribute, it is brought with the weight connection from row to neighbour
             let e_weight = edge.weight();                           // This is petgraph's weight
             let edge_weight = e_weight.get_eweight();    // This is our Eweight gathering label and f32 weight
@@ -464,6 +466,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
                 Direction::Outgoing => {edge.target() },
                 Direction::Incoming => {edge.source() },
             };
+
             let n_labels = self.graph[neighbour_idx].get_nweight().get_labels();
             // treatment of h_label_n
             for label in n_labels {
@@ -541,6 +544,11 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
                 }  // end loop on sketch_ne
             } 
         }   // end of while
+        // We if we have sla and degree is one, it means in fact this node must have null embedding
+        // so we reset labels to Label::default
+        if degree == 1 && self.is_sla() {
+            h_label_n.clear();
+        }
     } // end of process_node_edges_labels
 
 
@@ -1164,7 +1172,9 @@ mod tests {
 
 
 
-use super::*; 
+use super::*;
+
+use crate::gkernel::idmap::*;
 
 use crate::gkernel::exio::maileu::*;
 
@@ -1183,10 +1193,10 @@ fn test_pgraph_maileu() {
     log_init_test();
     let res_graph = read_maileu_data(String::from(MAILEU_DIR));
     assert!(res_graph.is_ok());
-    let (mut graph, nodeset) = res_graph.unwrap();
+    let (mut graph, idmap) = res_graph.unwrap();
     //
-    let sketch_size = 100;
-    let skparams = SketchParams::new(sketch_size, 0.1, 10, false, false);
+    const SKETCH_SIZE : usize = 100;
+    let skparams = SketchParams::new(SKETCH_SIZE, 0.1, 10, false, false);
     let has_edge_labels = false;
     let mut skgraph = MgraphSketchAsym::new(&mut graph, skparams, has_edge_labels);
     //
@@ -1202,26 +1212,35 @@ fn test_pgraph_maileu() {
     // dump source / target for some nodes, identified by their id in maileu
     let node_id: u32  = 0;
     // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
-    let node_index = nodeset.get(&node_id).unwrap().index();
-    log::info!("node id : {} , nodeindex : {}", node_id, node_index);
-    log::info!("node rank : {}, source vector : {:?}", node_index, source.row(node_index));
-    log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index));
+    let node_index = idmap.get_nodeindex(node_id).unwrap().index();
+    log::info!("node id : {} , nodeindex : {:?}", node_id, node_index);
+    log::info!("node rank : {:?}, source vector : {:?}", node_index, source.row(node_index as usize));
+    log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index as usize));
     //
     let node_id: u32  = 4;
     // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
-    let node_index = nodeset.get(&node_id).unwrap().index();
+    let node_index = idmap.get_nodeindex(node_id).unwrap().index();
     log::info!("node id : {} , nodeindex : {}", node_id, node_index);
     log::info!("node rank : {}, source vector : {:?}", node_index, source.row(node_index));
     log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index));
     // node 857 has degree out : 0 and degree in 4
     let node_id: u32  = 857;
     // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
-    let node_index = nodeset.get(&node_id).unwrap().index();
+    let node_index = idmap.get_nodeindex(node_id).unwrap().index();
+    // 857 has as input the following (node, label) : (301, 26) (191, 0 replaced by 42!), (166, 36) and (160, 36).
+    // then we have edge 820 -> 301, 820 -> 166 , 820 -> 160 and 820 has label 5.
+    // and edges 128 -> 166  and 128 has label 5
+    // [2022-10-04T08:57:20Z INFO  graphembed::gkernel::psketch::tests] node rank : 857, target vector : [42, 42, 36, 36, 36, 42, 42, 42, 26, 42, 36, 36, 
+    //   42, 42, 42, 36, 42, 36, 26, 36, 42, 36, 36, 42, 26, 36, 36, 42, 26, 26, 42, 26, 42, 42, 13, 42, 27, 42, 36, 36, 42, 42, 36, 36, 26, 36, 
+    //   42, 42, 36, 42, 42, 36, 36, 36, 36, 42, 36, 36, 42, 26, 42, 42, 36, 26, 26, 36, 36, 36, 14, 42, 26, 42, 42, 42, 36, 36, 36, 36, 42, 42, 
+    //   26, 36, 26, 36, 42, 36, 36, 36, 26, 26, 42, 42, 36, 36, 36, 5, 42, 26, 42, 26]
     log::info!("node id : {} , nodeindex : {}", node_id, node_index);
     log::info!("node rank : {}, source vector : {:?}", node_index, source.row(node_index));
+    // node 857 has no out so its embedded vector should be filled of default label
+    assert_eq!(source.row(node_index).to_slice().unwrap(), [0u8;SKETCH_SIZE]);
     log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index));
     
-    let global_embedding = skgraph.get_global_embedded_n(10* sketch_size).unwrap();
+    let global_embedding = skgraph.get_global_embedded_n(10* SKETCH_SIZE).unwrap();
     log::info!("global embedding vector : {:?}", global_embedding);
 
 }  // end of test_pgraph_maileu

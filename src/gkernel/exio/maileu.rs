@@ -7,17 +7,17 @@ use std::io::{BufReader};
 use std::fs::{OpenOptions};
 
 use csv::ReaderBuilder;
+use indexmap::IndexMap;
 
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::stable_graph::{DefaultIx};
 
 
 use crate::gkernel::pgraph::*;
+use crate::gkernel::idmap::*;
 
-use indexmap::IndexMap;
 
 /// A node is a num as we want to keep track of origin id and a label consisting in a vector of length 1 as we have only one label
-#[allow(unused)]
 pub struct EuNode {
     /// num of node as given in original data file.
     num : u32,
@@ -67,7 +67,7 @@ impl HasEweight<u8> for EuEdge {
 /// email-Eu-core-department-labels.txt for labels. a list of lines : rank node , label
 // The graph is directed. 
 #[allow(unused)]
-pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge , petgraph::Directed, DefaultIx>, IndexMap::<u32, NodeIndex>)> {
+pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge , petgraph::Directed, DefaultIx>, IdMap<u8,u8>)> {
     //
     let delim = b' ';
     let nb_fields = 2;
@@ -77,7 +77,7 @@ pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge 
     let filepath = std::path::Path::new(&dir).join("email-Eu-core-department-labels.txt");
     let fileres = OpenOptions::new().read(true).open(&filepath);
     if fileres.is_err() {
-        log::error!("ProcessingState reload_json : reload could not open file {:?}", filepath.as_os_str());
+        log::error!("read_maileu_data : reload could not open file {:?}", filepath.as_os_str());
         println!("directed_from_csv could not open file {:?}", filepath.as_os_str());
         return Err(anyhow!("directed_from_csv could not open file {}", filepath.display()));            
     }
@@ -115,7 +115,18 @@ pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge 
         nb_record += 1;
         //
     } // end of reading records
+    //
+    // now we run relabelling scheme. We know max label is 41, we just remap label 0 to 42 and leave others unchanged
     // 
+    let mut relabel =  IndexMap::<u8, u8>::new();
+    for i in &nodelabels {
+        if *i == 0 {
+            relabel.insert(*i, 42u8);
+        }
+        else {
+            relabel.insert(*i, *i);
+        }
+    }
     // now we read graph as a csv file
     //
     let filepath = std::path::Path::new(&dir).join("email-Eu-core.txt");
@@ -152,7 +163,14 @@ pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge 
             if !nodeset.contains_key(&node1) {
                 // we construct node for Graph
                 let label = nodelabels[node1 as usize];
-                let labels = Nweight::<u8>::new(Vec::from([label]));
+                let relabelled = relabel.get(&label).unwrap();
+                if log::log_enabled!(log::Level::Debug) {
+                    if label == 0 {
+                        log::info!("found label 0 at node {}", node1);
+                        assert_eq!(*relabelled, 42u8);
+                    }
+                }
+                let labels = Nweight::<u8>::new(Vec::from([*relabelled]));
                 // graph.add_node
                 gnode1 = Some(graph.add_node(EuNode::new(node1, labels)));
                 nodeset.insert(node1, gnode1.unwrap());
@@ -171,7 +189,8 @@ pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge 
             if !nodeset.contains_key(&node2) {
                 // we construct node for Graph
                 let label = nodelabels[node2 as usize];
-                let labels = Nweight::<u8>::new(Vec::from([label]));
+                let relabelled = relabel.get(&label).unwrap();
+                let labels = Nweight::<u8>::new(Vec::from([*relabelled]));
                 // graph.add_node
                 gnode2 = Some(graph.add_node(EuNode::new(node2, labels)));
                 nodeset.insert(node2, gnode2.unwrap());
@@ -198,9 +217,10 @@ pub fn read_maileu_data(dir : String) -> anyhow::Result< (Graph<EuNode , EuEdge 
     log::info!("nb self loops : {}, nb bidirectional edges {}", nb_self_loops, nb_double_dir);
     log::info!("nb nodes = {}", graph.raw_nodes().len());
     log::info!("nb edges = {}", graph.raw_edges().len());
-
     //
-    Ok((graph,nodeset))
+    let idmap = IdMap::<u8,u8>::new(nodeset, relabel);
+    //
+    Ok((graph,idmap))
 } // end of read_maileu_data
 
 
@@ -237,13 +257,19 @@ fn test_load_maileu() {
     let first_node_nweight = first_node_weight.get_nweight();
     let first_node_labels = first_node_nweight.get_labels();
     assert_eq!(first_node_labels.len(), 1);
-    assert_eq!(first_node_labels[0], 1);
+    assert_eq!(first_node_labels[0], 1); // We incremented labels by 1!
     // access via raw_nodes
     let first_node_weight = &graph.raw_nodes()[0].weight;
     let first_node_nweight = first_node_weight.get_nweight();
     let first_node_labels = first_node_nweight.get_labels();
     assert_eq!(first_node_labels.len(), 1);
     assert_eq!(first_node_labels[0], 1);
+    // node 130 has label 0 in datafile, translated to 42
+    let node130_weight = graph.node_weight(NodeIndex::new(130)).unwrap();
+    let node130_nweight = node130_weight.get_nweight();
+    let node130_nweight_labels = node130_nweight.get_labels();
+    assert_eq!(node130_nweight_labels.len(), 1);
+    assert_eq!(node130_nweight_labels[0], 42u8);
 } // end of test_load_maileu
 
 
