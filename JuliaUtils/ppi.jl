@@ -15,7 +15,7 @@ logger = ConsoleLogger(stdout, CoreLogging.Debug)
 # network is symetric, but the whole edges are dumped in file.
 # dumps matrix of graph in file ppi-network.csv and labels in file ppi-labels.csv
 function ppi_network() 
-    vars = matread("/home/jpboth/Data/Graphs/HomoSapiensPPi-node2vec.mat")
+    vars = matread("/home/jpboth/Data/Graphs/PPI/Homo_sapiens.mat")
     network = vars["network"]
     #
     networkio = open("ppi-network.csv","w")
@@ -24,7 +24,7 @@ function ppi_network()
     @info m,n
     nbloop = 0
     len = length(network.nzval)
-    @printf(networkio, "# network-ppi symetric graph all edges in file \n")
+    # network-ppi symetric graph all edges in file
     for j in 1:length(network.colptr) -1
         for l in network.colptr[j]:network.colptr[j+1]-1
             i = network.rowval[l]
@@ -33,10 +33,10 @@ function ppi_network()
             if i == j 
                 nbloop += 1
             end
-            @printf(networkio,"%d %d %d \n", i,j,val)
+            @printf(networkio,"%d %d %d\n", i,j,val)
         end
     end
-    @info nbloop
+    @info "number of self loops" nbloop
     close(networkio)
     # dump labels
     group = vars["group"]
@@ -49,7 +49,7 @@ function ppi_network()
             i = group.rowval[l]
             val = group.nzval[i]
             # in fact val is a garbage value
-            @printf(labelsio,"%d %d %d \n", i,j)
+            @printf(labelsio,"%d %d\n", i,j)
         end
     end
     close(labelsio)

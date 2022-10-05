@@ -81,6 +81,7 @@ pub fn read_ppi_data(dir : String) -> anyhow::Result< (Graph<PpiNode , PpiEdge ,
     // first we read labels
     //
     let filepath = std::path::Path::new(&dir).join("ppi-labels.csv");
+    log::info!("\n reading label file : {:?}", filepath);
     let fileres = OpenOptions::new().read(true).open(&filepath);
     if fileres.is_err() {
         log::error!("read_ppi_data : reload could not open file {:?}", filepath.as_os_str());
@@ -90,25 +91,27 @@ pub fn read_ppi_data(dir : String) -> anyhow::Result< (Graph<PpiNode , PpiEdge ,
     let file = fileres?;
     let bufreader = BufReader::new(file);
     let mut nb_record = 0;
-    let mut node : usize = 0;
+    let mut node : u32 = 0;
     let mut label : u8 = 0;
     let mut max_label = 0u8;
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(bufreader);
     // we have less than 5000 nodes
-    let mut nodelabels = HashMap::<usize, Vec::<u8>>::with_capacity(5000);
+    let mut nodelabels = HashMap::<u32, Vec::<u8>>::with_capacity(5000);
 
     for result in rdr.records() {
         let record = result?;
         if record.len() != nb_fields {
+            log::error!("record num : {}, record : {:?}, record length : {}", nb_record, &record,  record.len());
             println!("non constant number of fields at record {} first record has {}", nb_record+1, nb_fields);
             return Err(anyhow!("non constant number of fields at record {} first record has {}",nb_record+1, nb_fields));   
         }
         let field = record.get(0).unwrap();
-        if let Ok(idx) = field.parse::<usize>() {
+        if let Ok(idx) = field.parse::<u32>() {
             node = idx;
             assert!(node <= 5000);
         }
         else {
+            log::info!("error decoding field 1 of record  {}",nb_record+1);
             return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
         }
         // decode field 1
@@ -132,10 +135,146 @@ pub fn read_ppi_data(dir : String) -> anyhow::Result< (Graph<PpiNode , PpiEdge ,
             }
         }
     } // end for storing labels
-
+    log::info!("end reading labels");
     // relabelling scheme if necessary (change 0 to max_label +1 after check! )
-
+    assert!(max_label < u8::MAX);
+    let mut relabel =  IndexMap::<u8, u8>::new();
+    let val_for_0 = max_label+1;
+    for v in nodelabels.values_mut() {
+        for l in v {
+            if *l == 0 {
+                if relabel.get(l).is_none() {
+                    // first time we see 0
+                    relabel.insert(*l, val_for_0);
+                }
+                *l = val_for_0;
+            }
+            else {
+                if relabel.get(l).is_none() {
+                    // first time we see l != 0
+                    relabel.insert(*l, *l);
+                }                
+            }
+        }
+    }
+    log::info!("end relabelling labels");
+    //
     // read network file
-
-    return Err(anyhow!("not yet"));
+    //
+    let filepath = std::path::Path::new(&dir).join("ppi-network.csv");
+    log::info!("reading network file : {:?}", filepath);
+    let fileres = OpenOptions::new().read(true).open(&filepath);
+    if fileres.is_err() {
+        log::error!("read_ppi_data : reload could not open file {:?}", filepath.as_os_str());
+        println!("directed_from_csv could not open file {:?}", filepath.as_os_str());
+        return Err(anyhow!("directed_from_csv could not open file {}", filepath.display()));            
+    }
+    let file = fileres?;
+    let bufreader = BufReader::new(file);
+    let nb_fields = 3;
+    let mut nb_record = 0;
+    let mut node1 : u32;
+    let mut node2 : u32;
+    let mut gnode1 : Option<NodeIndex>;
+    let mut gnode2 : Option<NodeIndex>;
+    //
+    let mut graph = Graph::<PpiNode, PpiEdge, petgraph::Directed>::new();
+    // This is to retrieve NodeIndex given original num of node as given in data file
+    let mut nodeset = IndexMap::<u32, NodeIndex>::new();
+    //
+    let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(true).from_reader(bufreader);
+    log::info!("reading records");
+    for result in rdr.records() {
+        log::info!("edge record : {}", nb_record);
+        let record = result?;
+        if record.len() != nb_fields {
+            log::error!("record num : {}, record : {:?}, record length : {}", nb_record, &record,  record.len());
+            println!("non constant number of fields at record {} first record has {}", nb_record+1, nb_fields);
+            return Err(anyhow!("non constant number of fields at record {} first record has {}",nb_record+1, nb_fields));   
+        }
+        // decode node1
+        let field = record.get(0).unwrap();
+        if let Ok(idx) = field.parse::<u32>() {
+            node1 = idx;
+            assert!(node <= 5000);
+            if !nodeset.contains_key(&node1) {
+                // we construct node for Graph, recall that nodelabels are already relabelled 
+                let labels = nodelabels.get(&node1).unwrap();
+                let labels = Nweight::<u8>::new(labels.clone());
+                // graph.add_node
+                gnode1 = Some(graph.add_node(PpiNode::new(node1, labels)));
+                nodeset.insert(node1, gnode1.unwrap());
+            }
+            else { // node already in graph, we must retrieve its index
+                gnode1 = Some(*nodeset.get(&node1).unwrap());
+            }
+        }
+        else {
+            log::error!("error decoding node 2 of record  {}",nb_record+1);
+            return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
+        }
+        // decode node2 
+        let field = record.get(1).unwrap();
+        if let Ok(idx) = field.parse::<u32>() {
+            node2 = idx;
+            if !nodeset.contains_key(&node2) {
+                // we construct node for Graph, recall that nodelabels are already relabelled 
+                let labels = nodelabels.get(&node2).unwrap();
+                let labels = Nweight::<u8>::new(labels.clone());
+                // graph.add_node
+                gnode2 = Some(graph.add_node(PpiNode::new(node2, labels)));
+                nodeset.insert(node2, gnode2.unwrap());
+            }
+            else { // node already in graph, we must retrieve its index
+                gnode2 = Some(*nodeset.get(&node2).unwrap());
+            }            
+        }
+        else {
+            log::error!("error decoding node 2 of record  {}",nb_record+1);
+            return Err(anyhow!("error decoding node 2 of record  {}",nb_record+1)); 
+        }
+        nb_record += 1;
+    }  // end of edge parsing
+    //
+    log::info!("nb nodes = {}", graph.raw_nodes().len());
+    log::info!("nb edges = {}", graph.raw_edges().len());
+    //
+    let idmap = IdMap::<u8,u8>::new(nodeset, relabel);
+    //
+    Ok((graph,idmap))
 } // end of read_ppi_data
+
+
+
+//=====================================================================================
+
+
+#[cfg(test)]
+mod tests {
+
+
+const PPI_DIR:&str = "/home/jpboth/Data/Graphs/PPI";
+
+use super::*; 
+
+
+fn log_init_test() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
+
+#[test]
+fn test_load_ppi() {
+    log_init_test();
+    //
+    //
+    let res_graph = read_ppi_data(String::from(PPI_DIR));
+    assert!(res_graph.is_ok());
+    //
+    let (graph, _nodeset) = res_graph.unwrap();
+    //
+    log::info!("ppi nodes : {}, ppi edge : {}", graph.raw_nodes().len(), graph.raw_edges().len());
+} // end of test_load_ppi
+
+
+}  // end of mod tests
