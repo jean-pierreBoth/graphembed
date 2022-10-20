@@ -91,6 +91,11 @@ Embedding and link prediction evaluation for the above data sets are given in fi
 * For the embedding using the randomized svd, increasing the embedding dimension is interesting as far as the corresponding eigenvalues continue to decrease significantly.
 
 * The munmun_twitter_social graph shows that treating a directed graph as an undirected graph give significantly different results in terms of link prediction AUC. 
+
+## Generalized Svd.
+
+An implementation of Generalized Svd comes as a by-product in module [gsvd](./src/atp/gsvd.rs).
+
 ## Installation and Usage
 
 ### Installation

@@ -31,13 +31,17 @@ pub struct IdMap<ToLabel, Label>
 
 
 /// When loading a datafile, A graph is returned together with a structure satisfying trait IdMapper
-/// So that at the end of the embedding process we do have correspondance between embedded vectors (accessed by a row in embbed Array2 corresponding
+/// 
+/// When a node has no input edge or no output edge, if we want to get an Array2 are embedding result we must define a specific label
+/// to fill the corresponding In or Out sketching vector. This is the Default label! 
+/// (An alternative woud have been to return an Option<Vec> for each node, but still we would have to relabel to fit into our labels)
+/// Moreover we may need to map labels in datafile to out implemented labels. So there is a specific relabelling pass in reading data
+/// Typically the default label 0 must be remapped to someting else (max label used + 1) 
+
+/// In the same way at the end of the embedding process we do have correspondance between embedded vectors (accessed by a row in embbed Array2 corresponding
 /// to a NodeIndex) and initial rank of node
 /// 
-/// A correspondance must be kept also for labels as:
-///     1. when reading graph data we may need to translate labels with labels we can run on
-///     2. Our default initialization for labels used when a node has no input for example may clash lables used in original data.
-///         Typically the default label 0 must be remapped to someting else (max label used + 1) 
+
 pub trait IdMapper<ToLabel, Label> {
     fn get_nodeindex(&self, rank : u32) ->  Option<&NodeIndex>;
     //
