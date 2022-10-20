@@ -5,6 +5,10 @@
 //! around a node.
 //! We should get both an embedding of each node in terms of Nlabel, Elabel and a global graph summary vector  
 
+// Biblio for node classification
+//================================
+// Tang L., Liu Huan Relational Learning via Latent Social Dimensions 2009
+// Macskassy Provost Classification in networked data 2007
 
 
 use anyhow::{anyhow};
@@ -863,9 +867,8 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
 
     /// allocation
     pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
-        // allocation of nodeindex
-        // first initialization of previous sketches
-        let parallel = false;
+        // 
+        let parallel = params.get_parallel();
         //
         MgraphSketch{ graph : graph , sk_params : params, has_edge_labels, n_embedded : None, ne_embedded : None, parallel}
     }
@@ -1023,9 +1026,8 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketchAsym<'a, Nlabel
 
     /// allocation
     pub fn new(graph : &'a mut  Graph<NodeData, EdgeData, Ty, Ix>, params : SketchParams, has_edge_labels : bool) -> Self {
-        // allocation of nodeindex
-        // first initialization of previous sketches
-        let parallel = false;
+        //
+        let parallel = params.get_parallel();
         //
         MgraphSketchAsym{ graph : graph , sk_params : params, has_edge_labels, n_embbeded : None, ne_embedded : None, parallel}
     }
@@ -1176,9 +1178,10 @@ use super::*;
 
 use crate::gkernel::idmap::*;
 
-use crate::gkernel::exio::maileu::*;
+use crate::gkernel::exio::{maileu::*, ppisapiens::*};
 
 const MAILEU_DIR:&str = "/home/jpboth/Data/Graphs/Mail-EU";
+const PPI_DIR:&str = "/home/jpboth/Data/Graphs/PPI";
 
 fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -1245,5 +1248,47 @@ fn test_pgraph_maileu() {
 
 }  // end of test_pgraph_maileu
 
+
+
+
+#[test]
+fn test_pgraph_ppi_directed() {
+    log_init_test();
+    let res_graph = read_ppi_directed_data(String::from(PPI_DIR));
+    assert!(res_graph.is_ok());
+    let (mut graph, idmap) = res_graph.unwrap();
+    //
+    const SKETCH_SIZE : usize = 100;
+    let skparams = SketchParams::new(SKETCH_SIZE, 0.1, 10, false, true);
+    let has_edge_labels = false;
+    let mut skgraph = MgraphSketchAsym::new(&mut graph, skparams, has_edge_labels);
+    //
+    let _embedded = skgraph.compute_embedded();
+    let n_embedded = skgraph.get_n_embedded_ref();
+    if n_embedded.is_none() {
+        log::info!("test_pgraph_ppi_directed failed : get_n_embedded_ref failed");
+        std::process::exit(1);
+    }
+    let n_embedded = n_embedded.unwrap();
+    let source = n_embedded.get_embedded_source();
+    let target = n_embedded.get_embedded_target();
+    // dump source / target for some nodes, identified by their id in  data file. Note id in data file are > 0!
+    let node_id: u32  = 1;
+    // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
+    if idmap.get_nodeindex(node_id).is_none() {
+        log::error!("There is no node id : {}", node_id);
+        assert!(idmap.get_nodeindex(node_id).is_some());
+    }
+    let node_index = idmap.get_nodeindex(node_id).unwrap().index();
+    let node_source = n_embedded.get_embedded_node(node_index, edge::OUT);
+    let node_target = n_embedded.get_embedded_node(node_index, edge::IN);
+
+    log::info!("node id : {} , nodeindex : {:?}", node_id, node_index);
+    log::info!("node rank : {:?}, source vector : {:?}", node_index, source.row(node_index as usize));
+    log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index as usize));
+    // compute Jaccard distance between source and target. Must be small due to symetry!
+    let dist = n_embedded.get_vec_distance(&node_source, &node_target);
+    log::info!("jaccard dist between IN and OUT for node : {}, dist : {:.2e}", node_id, dist);
+} // end of test_pgraph_ppi_directed
 
 }  // end of mod tests
