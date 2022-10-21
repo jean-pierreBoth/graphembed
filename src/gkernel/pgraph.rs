@@ -1,3 +1,4 @@
+//!
 //! This module describes Edge and Node data we use in petgraph in an implementation of a nodesketch type algorithm.
 //! Nodes can have multiple discrete labels to modelize multi communities membership and various relations
 //! between nodes.     

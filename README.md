@@ -1,12 +1,22 @@
 # Graphembed
 
-The purpose of this crate is to provide asymetric (and also symetric) embedding of graphs with positively weighted edges.
-The crate comes as a library and as a simple executable with a validation option.  
-It is still in an early version.
+The purpose of this crate is to provide embedding of directed or undirected graphs with positively weighted edges
+and possibly discrete labels attached to nodes.
+
+ - For simple graphs, without data attached to nodes/labels, we provide 2 (rust) modules *nodesketch* and *atp*. A simple executable with a validation option based on link prediction is also provided. 
+
+ - The module *gkernel* is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
+    The algorithm is based on an extension of the hashing strategy used in the module *nodesketch*.  
+    In the undirected case, this module also compute a global embedding vector for the whole graph.
+
+
+
+**It is still in an early version**.
+
 ## Methods
 
-We use two strategies for graph embedding.
-1. The first is based on the paper : 
+### The strategies used in this crate are based on the following papers:
+1. **nodesketch** 
 
 *NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  [https://dl.acm.org/doi/10.1145/3292500.3330951]  
     D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux. 
@@ -20,7 +30,7 @@ a real distance on the embedding space, at least for the symetric embedding.
 
 An extension of the paper is also implemented to get asymetric embedding for directed graph. The similarity is also based on the hash of sets (nodes going to or from) a given node but then the dissimilarity is no more a distance (no symetry and some discrepancy with the triangular inequality).
 
-2. The second is based on the paper:
+2. **atp**
    
 *Asymetric Transitivity Preserving Graph Embedding 2016*  
     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
@@ -34,11 +44,15 @@ The similarity measure is the dot product, so it is not a norm.
 The svd is approximated by randomization as described in Halko-Tropp 2011 as implemented in the [annembed crate](https://crates.io/crates/annembed).
 
 
+### Implementation
 
+Asymetric embeddings compute 2 vectors for each node, once considered as a source, once considered as a target.
+
+ These vectors are computed either as left and right singular vectors of a proximity matrix in the case of the *atp* module. For the *nodesketch* and *gkernel* the embedding vectors are computed as the summary of node id's or labels attached to nodes flowing through the edges going into or from a node.
 
 ## Some data sets
 
-
+### Without labels
 
 Small datasets are given in the Data subdirectory (with 7z compression) to run tests.  
 Larger datasets can be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
@@ -84,6 +98,7 @@ Possibly some data can need to be converted from Tsv format to Csv, before being
 
 ## Some results
 
+### results for the *atp* and *nodesketch* modules
 Embedding and link prediction evaluation for the above data sets are given in file [resultats.md](./resultats.md)
 
 ### Some qualitative comments

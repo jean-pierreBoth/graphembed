@@ -1,5 +1,5 @@
 //! this file implements an extension of the nodesketch algorithm for directed graph.  
-//! The original algorithm is implemented in [nodesketch](super::nodesketch)
+//! The original algorithm is implemented in [nodesketch](super::nodesketchsym)
 //! 
 //! The iterations consists in iteratively constructing new weighted list of neighbours of each node considered 
 //! once as a source and once as a target.  

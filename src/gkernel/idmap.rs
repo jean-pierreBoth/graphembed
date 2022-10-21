@@ -1,6 +1,8 @@
-//! maps original labels of graph data files to discrete labels
+//!
+//! Graph can come with many types of discrete labels. We need to map original labels of graph data files to discrete labels.   
 //! It is possible to have labels in datafile that can be mapped to our discrete labels but that 
-//! are neither strings nor u6, u16 etc. Moreover the default initialization of labels (i.E 0 for u8, u16 etc)
+//! are neither strings nor u6, u16 etc.  
+//! Moreover the default initialization of labels (i.E 0 for u8, u16 etc)
 //! is used internally to cover the case where a  node has no input (or output) edge. In this case
 //! the embedded vector is represented by the default value (i.e 0). 
 //! **So effective labels stored in the graph must not be 0!!**
