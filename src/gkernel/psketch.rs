@@ -326,23 +326,35 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
                     return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
                 }
                 else {
-                    return None;
+                    // entering with INOUT implies symetric, hence here we get an error
+                    log::error!("get_current_sketch_node received EdgeDir::INOUT as arg in asymetric mode ");
+                    std::panic!("get_current_sketch_node received EdgeDir::INOUT as arg in asymetric mode");
                 }
             },
             EdgeDir::OUT => {
                 if self.asymetric_transition.is_some() {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_out.get_current()[node]);
                 }
+                else if self.symetric_transition.is_some() {
+                    return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
+                }
                 else {
-                    return None;
+                   // shoudl not happen
+                   log::error!("get_previous_sketch_node internal error");
+                   std::panic!("get_previous_sketch_node internal error");                    
                 }
             },
             EdgeDir::IN => {
                 if self.asymetric_transition.is_some() {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_in.get_current()[node]);
                 }
+                else if self.symetric_transition.is_some() {
+                    return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
+                }
                 else {
-                    return None;
+                   // shoudl not happen
+                   log::error!("get_previous_sketch_node internal error");
+                   std::panic!("get_previous_sketch_node internal error");
                 }
             },
         } // end match
@@ -358,23 +370,35 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
                     return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
                 }
                 else {
-                    return None;
+                    // entering with INOUT implies symetric, hence here we get an error
+                    log::error!("get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode ");
+                    std::panic!("get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode");
                 }
             },
             EdgeDir::OUT => {
                 if self.asymetric_transition.is_some() {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_out.get_previous()[node]);
                 }
+                else if self.symetric_transition.is_some() {
+                    return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
+                }
                 else {
-                    return None;
+                    // shoudl not happen
+                    log::error!("get_previous_sketch_node internal error");
+                    std::panic!("get_previous_sketch_node internal error");
                 }
             },
             EdgeDir::IN => {
                 if self.asymetric_transition.is_some() {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_in.get_previous()[node]);
                 }
+                else if self.symetric_transition.is_some() {
+                    return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
+                }
                 else {
-                    return None;
+                   // shoudl not happen
+                   log::error!("get_previous_sketch_node internal error");
+                   std::panic!("get_previous_sketch_node internal error");
                 }
             },
         } // end match
@@ -440,6 +464,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     /// serial/parallel symetric iteration on nodes to update sketches
     fn one_iteration_symetric(&self) {
         //
+        log::debug!("in one_iteration_symetric");
         if self.parallel {
             let n_indices : Vec<NodeIndex<Ix>>  = self.graph.node_indices().collect();
             n_indices.into_par_iter().for_each( |ndix| self.treat_node_symetric(&ndix));            
@@ -458,13 +483,15 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     fn process_node_edges_labels(&self, ndix : &NodeIndex<Ix>,  dir : Direction, h_label_n : &mut HashMap::<Nlabel, f64, ahash::RandomState>, 
                     h_label_ne : &mut HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>) {
         //
+        log::trace!("in process_node_edges_labels for node : {}, dir : {:?}", ndix.index(), dir);
+        //
         let mut degree = 0usize; 
         let mut edges = self.graph.edges_directed(*ndix, dir);
         while let Some(edge) = edges.next() {
             degree += 1;
             // get node and weight attribute, it is brought with the weight connection from row to neighbour
             let e_weight = edge.weight();                           // This is petgraph's weight
-            let edge_weight = e_weight.get_eweight();    // This is our Eweight gathering label and f32 weight
+            let edge_weight = e_weight.get_eweight();       // This is our Eweight gathering label and f32 weight
             let edge_label = edge_weight.get_label();
             let neighbour_idx = match dir {
                 Direction::Outgoing => {edge.target() },
@@ -511,7 +538,12 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
             let hop_weight = self.sk_params.get_decay_weight()/self.get_sketch_size() as f64;
             // Problem weight of each label? do we renormalize by number of labels, or the weight of the node
             // will be proportional to the number of its labels??
-            let neighbour_sketch = &self.get_previous_sketch_node(neighbour_idx.index(), edgedir_from_petgraph_dir(dir));
+            let dir = edgedir_from_petgraph_dir(dir);
+            let neighbour_sketch = &self.get_previous_sketch_node(neighbour_idx.index(), dir);
+            if neighbour_sketch.is_none() {
+                log::error!("process_node_edges_labels cannot get previous sketch for neighbour index : {} , dir : {:?}", neighbour_idx.index(), dir);
+                std::panic!();
+            }
             // we take previous sketches and we propagate them to our new Nlabel and Elabel hashmap applying hop_weight
             let neighbour_sketch_n = &*neighbour_sketch.unwrap().get_n_sketch().read();
             for sketch_n in neighbour_sketch_n {
@@ -1283,12 +1315,71 @@ fn test_pgraph_ppi_directed() {
     let node_source = n_embedded.get_embedded_node(node_index, edge::OUT);
     let node_target = n_embedded.get_embedded_node(node_index, edge::IN);
 
+    // this is the vector we get for node_1 in test_pgraph_ppi_undirected
+    let undirected_node_1_v = vec![23, 42, 36, 49, 39, 23, 21, 41, 23, 42, 39, 16, 31, 46, 6, 28, 37, 6, 26, 23, 30, 28, 6, 46, 43, 16, 36, 39, 40, 46,
+                                         37, 26, 42, 37, 17, 6, 6, 37, 37, 11, 42, 30, 21, 46, 49, 23, 31, 40, 23, 40, 23, 40, 43, 9, 43, 21, 30, 32, 46, 22, 
+                                         23, 30, 31, 23, 23, 40, 23, 40, 9, 43, 39, 6, 6, 40, 11, 9, 16, 21, 39, 32, 26, 36, 26, 6, 37, 26, 11, 44, 26, 46, 32,
+                                         31, 23, 31, 40, 40, 44, 32, 11, 17];
+    let undirected_node_1 =  ndarray::Array::from_vec(undirected_node_1_v);
     log::info!("node id : {} , nodeindex : {:?}", node_id, node_index);
     log::info!("node rank : {:?}, source vector : {:?}", node_index, source.row(node_index as usize));
     log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index as usize));
     // compute Jaccard distance between source and target. Must be small due to symetry!
     let dist = n_embedded.get_vec_distance(&node_source, &node_target);
-    log::info!("jaccard dist between IN and OUT for node : {}, dist : {:.2e}", node_id, dist);
+    log::info!("\n jaccard dist between IN and OUT for node : {}, dist : {:.2e}", node_id, dist);
+    assert!(dist < 0.05);
+    // get distance from undirected embedding
+    let dist = n_embedded.get_vec_distance(&undirected_node_1.view(),  &node_target);
+    log::info!("\n jaccard dist between undirected and OUT for node : {}, dist : {:.2e}", node_id, dist);
+
+    // compute global embedding vector
+    let global_v = skgraph.get_global_embedded_n(5 * SKETCH_SIZE);
+    if global_v.is_none() {
+        log::error!("test_pgraph_ppi_directed could not get global embedding vector");
+    }
+    let global_v = global_v.unwrap();
+    log::info!(" test_pgraph_ppi_directed global embedding vector : {:?}", global_v);
 } // end of test_pgraph_ppi_directed
+
+
+
+#[test]
+fn test_pgraph_ppi_undirected() {
+    log_init_test();
+    let res_graph = read_ppi_undirected_data(String::from(PPI_DIR));
+    assert!(res_graph.is_ok());
+    let (mut graph, idmap) = res_graph.unwrap();
+    //
+    const SKETCH_SIZE : usize = 100;
+    let skparams = SketchParams::new(SKETCH_SIZE, 0.1, 10, true, true);
+    let has_edge_labels = false;
+    let mut skgraph = MgraphSketch::new(&mut graph, skparams, has_edge_labels);  
+    //
+    let _embedded = skgraph.compute_embedded();
+    let n_embedded = skgraph.get_n_embedded_ref();
+    if n_embedded.is_none() {
+        log::info!("test_pgraph_ppi_directed failed : get_n_embedded_ref failed");
+        std::process::exit(1);
+    }
+    let n_embedded = n_embedded.unwrap();
+    let _embedded_v = n_embedded.get_embedded();
+    // dump source / target for some nodes, identified by their id in  data file. Note id in data file are > 0!
+    let node_id: u32  = 1;
+    // we must convert into NodeIndex from Graph. (possibly numeration in file is not in order or Id could anything)
+    if idmap.get_nodeindex(node_id).is_none() {
+        log::error!("There is no node id : {}", node_id);
+        assert!(idmap.get_nodeindex(node_id).is_some());
+    }
+    let node_index = idmap.get_nodeindex(node_id).unwrap().index();
+    let node_v = n_embedded.get_embedded_node(node_index, edge::INOUT);
+    log::info!("node index : {:?}, source vector : {:?}", node_index, node_v);
+    let global_v = skgraph.get_global_embedded_n(5 * SKETCH_SIZE);
+    if global_v.is_none() {
+        log::error!("test_pgraph_ppi_undirected could not get global embedding vector");
+    }
+    let global_v = global_v.unwrap();
+    log::info!(" test_pgraph_ppi_undirected global embedding vector : {}", global_v);
+} // end of test_pgraph_ppi_undirected
+
 
 }  // end of mod tests

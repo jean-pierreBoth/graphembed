@@ -206,7 +206,7 @@ pub fn read_ppi_directed_data(dir : String) -> anyhow::Result< (Graph<PpiNode , 
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(true).from_reader(bufreader);
     log::info!("reading records");
     for result in rdr.records() {
-        log::info!("edge record : {}", nb_record);
+        log::debug!("edge record : {}", nb_record);
         let record = result?;
         if record.len() != nb_fields {
             log::error!("record num : {}, record : {:?}, record length : {}", nb_record, &record,  record.len());
@@ -313,7 +313,7 @@ pub fn read_ppi_undirected_data(dir : String) -> anyhow::Result< (Graph<PpiNode 
     let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(true).from_reader(bufreader);
     log::info!("reading records");
     for result in rdr.records() {
-        log::info!("edge record : {}", nb_record);
+        log::debug!("edge record : {}", nb_record);
         let record = result?;
         if record.len() != nb_fields {
             log::error!("record num : {}, record : {:?}, record length : {}", nb_record, &record,  record.len());
