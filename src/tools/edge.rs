@@ -8,6 +8,7 @@ pub const IN : u8 = 1;
 pub const INOUT : u8 = 2;
 
 /// codes for orientation of edge. INOUT is for symetric edge.
+#[derive(Copy, Clone, Debug)]
 pub enum EdgeDir {
     OUT,
     IN,

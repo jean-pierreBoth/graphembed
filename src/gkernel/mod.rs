@@ -1,21 +1,19 @@
-//! This module is dedicated to graph kernels implementations
+//! This module implements directed/undirected graph embedding.
 //! 
-//! To be implmeented 
-//!     - The base 1-Weisfeiler-Lehman rooted subtree algorithm and an optimal assignment version
-//!     - A Hashed version to get a continuous attribute  WL version
+//! It is based on the *nodesketch*. We hash labels as they propagate through the the edges of the graph.
+//! It is inspired by the Weisfeiler-Lehman algorithm used in Graph Kernel litterature.
+//! 
 //!
-//!  
 //! Some References on Graph Kernels are :  
 //! 
 //! - Graph Kernels : A survey. Nikolentzos-Siglidis-Vazirgiannis 2021
-//!     panorama of graphs kernels. links with  GNN. Examples et perfs GNN et Graph Kernels comparées.
-//!     Core Weisfeiler-Lehman and Optimal Assignement Vertex Histogram are OK on unlabeled  or discrete labeled node graph
-//!     
+//     panorama of graphs kernels. links with  GNN. Examples et perfs GNN et Graph Kernels comparées.
+//     Core Weisfeiler-Lehman and Optimal Assignement Vertex Histogram are OK on unlabeled  or discrete labeled node graph
 //! 
 //! - Graph Kernels : State of the art and futures challenges  Borgwart 2020.
-//!     Taxonomy of graph kernels according to directed/undirected edges continuous/discrete labelling of nodes or edges.
-//!         Message passing Kernels of Nikolentsos seems good and covers the directed/undirected graphs and labelled/continuous nodes.
-//!         (but not edges labelling)
+//     Taxonomy of graph kernels according to directed/undirected edges continuous/discrete labelling of nodes or edges.
+//         Message passing Kernels of Nikolentsos seems good and covers the directed/undirected graphs and labelled/continuous nodes.
+//         (but not edges labelling)
 //!
 //!  
 // The first paper : 
@@ -50,15 +48,17 @@
 //pub mod mgraph;
 //pub mod sketch;
 
-/// Defines nterface to petgraph.  
+/// Defines interface to petgraph.  
 pub mod pgraph;
+
 /// Sketching on top of petgraph.  
 pub mod psketch;
 
 /// Defines sketching parameters.
 pub mod params;
 
-/// Defines translations of labels and ranks between raw data from io and our structures in MgraphSketcher
+/// Defines translations of labels and ranks between raw data from io and our structures in MgraphSketcher.
 pub mod idmap;
+
 /// some utilities to load data examples.  
 mod exio;
