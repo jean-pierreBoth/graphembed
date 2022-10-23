@@ -317,92 +317,67 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
     }  // end of graph_has_elabels
 
 
-
     /// get current sketch of node
-    pub fn get_current_sketch_node(&self, node : usize, dir : EdgeDir) -> Option<&Sketch<Nlabel, Elabel>> {
-        match dir {
-            EdgeDir::INOUT => {
-                if self.symetric_transition.is_some() {
-                    return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
-                }
-                else {
-                    // entering with INOUT implies symetric, hence here we get an error
-                    log::error!("get_current_sketch_node received EdgeDir::INOUT as arg in asymetric mode ");
-                    std::panic!("get_current_sketch_node received EdgeDir::INOUT as arg in asymetric mode");
-                }
-            },
-            EdgeDir::OUT => {
-                if self.asymetric_transition.is_some() {
+    fn get_current_sketch_node(&self, node : usize,  dir : EdgeDir) -> Option<&Sketch<Nlabel, Elabel>> {
+        //
+        if self.symetric_transition.is_some() {
+            // in symetric case there is only one direction
+            return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
+        }
+        else if self.asymetric_transition.is_some() {
+            match dir {
+                EdgeDir::OUT => {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_out.get_current()[node]);
                 }
-                else if self.symetric_transition.is_some() {
-                    return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
-                }
-                else {
-                   // shoudl not happen
-                   log::error!("get_previous_sketch_node internal error");
-                   std::panic!("get_previous_sketch_node internal error");                    
-                }
-            },
-            EdgeDir::IN => {
-                if self.asymetric_transition.is_some() {
+                EdgeDir::IN => {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_in.get_current()[node]);
                 }
-                else if self.symetric_transition.is_some() {
-                    return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
-                }
-                else {
-                   // shoudl not happen
-                   log::error!("get_previous_sketch_node internal error");
-                   std::panic!("get_previous_sketch_node internal error");
-                }
-            },
-        } // end match
-    }  // end of get_current_sketch_node
+                _  =>  {
+                    // entering with INOUT implies symetric, hence here we get an error
+                    log::error!("get_current_sketch_node received EdgeDir::INOUT as arg in asymetric mode ");
+                    std::panic!("get_current_sketch_node received EdgeDir::INOUT as arg in asymetric mode");                }
+            }
+        } // end asymetric case 
+        else {
+                // shoudl not happen
+                log::error!("get_current_sketch_node internal error");
+                std::panic!("get_current_sketch_node internal error");
+        }
+    } // end of get_current_sketch_node
 
 
 
     /// get current sketch of node
     fn get_previous_sketch_node(&self, node : usize,  dir : EdgeDir) -> Option<&Sketch<Nlabel, Elabel>> {
-        match dir {
-            EdgeDir::INOUT => {
-                if self.symetric_transition.is_some() {
-                    return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
-                }
-                else {
-                    // entering with INOUT implies symetric, hence here we get an error
-                    log::error!("get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode ");
-                    std::panic!("get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode");
-                }
-            },
-            EdgeDir::OUT => {
-                if self.asymetric_transition.is_some() {
+        //
+        if self.symetric_transition.is_some() {
+            // in symetric case there is only one direction
+            return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
+        }
+        else if self.asymetric_transition.is_some() {
+            match dir {
+                EdgeDir::OUT => {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_out.get_previous()[node]);
                 }
-                else if self.symetric_transition.is_some() {
-                    return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
-                }
-                else {
-                    // shoudl not happen
-                    log::error!("get_previous_sketch_node internal error");
-                    std::panic!("get_previous_sketch_node internal error");
-                }
-            },
-            EdgeDir::IN => {
-                if self.asymetric_transition.is_some() {
+                EdgeDir::IN => {
                     return Some(&self.asymetric_transition.as_ref().unwrap().t_in.get_previous()[node]);
                 }
-                else if self.symetric_transition.is_some() {
-                    return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
-                }
-                else {
-                   // shoudl not happen
-                   log::error!("get_previous_sketch_node internal error");
-                   std::panic!("get_previous_sketch_node internal error");
-                }
-            },
-        } // end match
+                _  =>  {
+                   // entering with INOUT implies symetric, hence here we get an error
+                    log::error!("get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode ");
+                    std::panic!("get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode");                }
+            }
+        } // end asymetric case 
+        else {
+                // shoudl not happen
+                log::error!("get_previous_sketch_node internal error");
+                std::panic!("get_previous_sketch_node internal error");
+        }
     } // end of get_previous_sketch_node
+
+
+
+
 
 
     /// returns sketch_size 
@@ -1338,7 +1313,7 @@ fn test_pgraph_ppi_directed() {
         log::error!("test_pgraph_ppi_directed could not get global embedding vector");
     }
     let global_v = global_v.unwrap();
-    log::info!(" test_pgraph_ppi_directed global embedding vector : {:?}", global_v);
+    log::info!("\n test_pgraph_ppi_directed global embedding vector : {:?}", global_v);
 } // end of test_pgraph_ppi_directed
 
 
@@ -1378,7 +1353,7 @@ fn test_pgraph_ppi_undirected() {
         log::error!("test_pgraph_ppi_undirected could not get global embedding vector");
     }
     let global_v = global_v.unwrap();
-    log::info!(" test_pgraph_ppi_undirected global embedding vector : {}", global_v);
+    log::info!("\n test_pgraph_ppi_undirected global embedding vector : {}", global_v);
 } // end of test_pgraph_ppi_undirected
 
 

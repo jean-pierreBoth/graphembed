@@ -7,7 +7,7 @@ and possibly discrete labels attached to nodes.
 
  - The module *gkernel* is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
     The algorithm is based on an extension of the hashing strategy used in the module *nodesketch*.  
-    In the undirected case, this module also compute a global embedding vector for the whole graph.
+    In the undirected case, this module also computes a global embedding vector for the whole graph.
 
 
 
@@ -115,7 +115,7 @@ An implementation of Generalized Svd comes as a by-product in module [gsvd](./sr
 
 ### Installation
 
-The crate provides two features, required by the *annembed* dependency, to specify which version of lapack you want to use.  
+The crate provides three features, required by the *annembed* dependency, to specify which version of lapack you want to use.  
 For example compilation is done by :
 *cargo build --release --features="openblas-static"* to link statically with openblas.
 The choice of one feature is mandatory to provide required linear algebra library.
