@@ -64,6 +64,7 @@ probminhash = {version = "0.1.6"}
 rand = {version = "0.8"}
 rand_xoshiro = {version = "0.6"}
 rand_distr = {version = "0.4"}
+ordered-float = {version = "3.4"}
 
 annembed = {version = "0.0.8", default = false}
 #annembed ={ path = "../annembed", default = false}

@@ -1,35 +1,121 @@
+#![allow(unused)]
+
+// This file is taken from the crate pav_regression
+// Added following modifications:
+// - genericity over f32, f64
+
+
 use ordered_float::OrderedFloat;
+use num_traits::float::Float;
+
+use num_traits::{NumAssign,FromPrimitive,NumCast};
+use std::iter::{Sum, Product};
+use std::ops::{Add,Neg, AddAssign};
+use std::fmt::{Debug, Display, LowerExp, UpperExp};
+
+
+
+/// Isotonic regression can be done in either mode
+enum Direction {
+    Ascending,
+    Descending,
+}
+/// A point in 2D cartesian space
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub struct Point<T:Float> {
+    x: T,
+    y: T,
+    weight: T,
+}
+
+impl <T> Point<T> 
+    where  T : Float + std::ops::AddAssign {
+    /// Create a new Point
+    pub fn new(x: T, y: T) -> Point<T> {
+        Point { x, y, weight: T::from(1.0).unwrap() }
+    }
+
+    /// Create a new Point with a specified weight
+    pub fn new_with_weight(x: T, y: T, weight: T) -> Point<T> {
+        Point { x, y, weight }
+    }
+
+    // Use getters because modifying points that are part of a regression will have unpredictable
+    // results.
+
+    /// The x position of the point
+    pub fn x(&self) -> T {
+        self.x
+    }
+
+    /// The y position of the point
+    pub fn y(&self) -> T {
+        self.y
+    }
+
+    /// The weight of the point (initially 1.0)
+    pub fn weight(&self) -> T {
+        self.weight
+    }
+
+    fn merge_with(&mut self, other: &Point<T>) {
+        self.x = ((self.x * self.weight) + (other.x * other.weight)) / (self.weight + other.weight);
+
+        self.y = ((self.y * self.weight) + (other.y * other.weight)) / (self.weight + other.weight);
+
+        self.weight += other.weight;
+    }
+}
+
+
+fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T  
+    where T : Float {
+    let prop = (*at_x - (a.x)) / (b.x - a.x);
+    (b.y - a.y) * prop + a.y
+}
+
+
+//==========================================================================================================
+
+/// To store a block of points in isotonic regression
+struct BlockPoint<'a, T:Float> {
+    /// sorting direction
+    direction : Direction,
+    ///
+    points : &'a Vec<Point<T>>
+} // end of BlockPoint
+
+
+//==========================================================================================================
+
 
 /// A vector of points forming an isotonic regression, along with the
 /// centroid point of the original set.
 
 #[derive(Debug, Clone)]
-pub struct IsotonicRegression {
-    points: Vec<Point>,
-    centroid_point: Point,
+pub struct IsotonicRegression<T:Float> {
+    points: Vec<Point<T>>,
+    centroid_point: Point<T>,
 }
 
-enum Direction {
-    Ascending,
-    Descending,
-}
 
-impl IsotonicRegression {
+impl <T> IsotonicRegression<T> 
+    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign {
     /// Find an ascending isotonic regression from a set of points
-    pub fn new_ascending(points: &[Point]) -> IsotonicRegression {
+    pub fn new_ascending(points: &[Point<T>]) -> IsotonicRegression<T> {
         IsotonicRegression::new(points, Direction::Ascending)
     }
 
     /// Find a descending isotonic regression from a set of points
-    pub fn new_descending(points: &[Point]) -> IsotonicRegression {
+    pub fn new_descending(points: &[Point<T>]) -> IsotonicRegression<T> {
         IsotonicRegression::new(points, Direction::Descending)
     }
 
-    fn new(points: &[Point], direction: Direction) -> IsotonicRegression {
+    fn new(points: &[Point<T>], direction: Direction) -> IsotonicRegression<T> {
         assert!(points.len() > 0, "points is empty, can't create regression");
-        let point_count: f64 = points.iter().map(|p| p.weight).sum();
-        let mut sum_x: f64 = 0.0;
-        let mut sum_y: f64 = 0.0;
+        let point_count: T = points.iter().map(|p| p.weight).sum();
+        let mut sum_x: T = T::from(0.0).unwrap();
+        let mut sum_y: T = T::from(0.0).unwrap();
         for point in points {
             sum_x += point.x * point.weight;
             sum_y += point.y * point.weight;
@@ -42,7 +128,8 @@ impl IsotonicRegression {
     }
 
     /// Find the _y_ point at position `at_x`
-    pub fn interpolate(&self, at_x: f64) -> f64 {
+    pub fn interpolate(&self, at_x: T) -> T 
+        where T : Float {
         if self.points.len() == 1 {
             return self.points[0].y;
         } else {
@@ -73,76 +160,27 @@ impl IsotonicRegression {
     }
 
     /// Retrieve the points that make up the isotonic regression
-    pub fn get_points(&self) -> &[Point] {
+    pub fn get_points(&self) -> &[Point<T>] {
         &self.points
     }
 
     /// Retrieve the mean point of the original point set
-    pub fn get_centroid_point(&self) -> &Point {
+    pub fn get_centroid_point(&self) -> &Point<T> {
         &self.centroid_point
     }
 }
 
-/// A point in 2D cartesian space
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub struct Point {
-    x: f64,
-    y: f64,
-    weight: f64,
-}
 
-impl Point {
-    /// Create a new Point
-    pub fn new(x: f64, y: f64) -> Point {
-        Point { x, y, weight: 1.0 }
-    }
-
-    /// Create a new Point with a specified weight
-    pub fn new_with_weight(x: f64, y: f64, weight: f64) -> Point {
-        Point { x, y, weight }
-    }
-
-    // Use getters because modifying points that are part of a regression will have unpredictable
-    // results.
-
-    /// The x position of the point
-    pub fn x(&self) -> f64 {
-        self.x
-    }
-
-    /// The y position of the point
-    pub fn y(&self) -> f64 {
-        self.y
-    }
-
-    /// The weight of the point (initially 1.0)
-    pub fn weight(&self) -> f64 {
-        self.weight
-    }
-
-    fn merge_with(&mut self, other: &Point) {
-        self.x = ((self.x * self.weight) + (other.x * other.weight)) / (self.weight + other.weight);
-
-        self.y = ((self.y * self.weight) + (other.y * other.weight)) / (self.weight + other.weight);
-
-        self.weight += other.weight;
-    }
-}
-
-fn interpolate_two_points(a: &Point, b: &Point, at_x: &f64) -> f64 {
-    let prop = (at_x - (a.x)) / (b.x - a.x);
-    (b.y - a.y) * prop + a.y
-}
-
-fn isotonic(points: &[Point], direction: Direction) -> Vec<Point> {
-    let mut merged_points: Vec<Point> = match direction {
+fn isotonic<T>(points: &[Point<T>], direction: Direction) -> Vec<Point<T>> 
+    where T : Float + AddAssign {
+    let mut merged_points: Vec<Point<T>> = match direction {
         Direction::Ascending => points.iter().copied().collect(),
         Direction::Descending => points.iter().map(|p| Point { y: -p.y, ..*p }).collect(),
     };
 
     merged_points.sort_by_key(|point| OrderedFloat(point.x));
 
-    let mut iso_points: Vec<Point> = Vec::new();
+    let mut iso_points: Vec<Point<T>> = Vec::new();
     for point in &mut merged_points.iter() {
         if iso_points.is_empty() || (point.y > iso_points.last().unwrap().y) {
             iso_points.push(*point)
@@ -166,6 +204,9 @@ fn isotonic(points: &[Point], direction: Direction) -> Vec<Point> {
     };
 }
 
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,9 +214,9 @@ mod tests {
     #[test]
     fn usage_example() {
         let points = &[
-            Point::new(0.0, 1.0),
-            Point::new(1.0, 2.0),
-            Point::new(2.0, 1.5),
+            Point::<f64>::new(0.0, 1.0),
+            Point::<f64>::new(1.0, 2.0),
+            Point::<f64>::new(2.0, 1.5),
         ];
 
         let regression = IsotonicRegression::new_ascending(points);
@@ -186,16 +227,16 @@ mod tests {
 
     #[test]
     fn isotonic_no_points() {
-        assert_eq!(isotonic(&[], Direction::Ascending).is_empty(), true);
+        assert_eq!(isotonic(&[] as &[Point<f64>; 0], Direction::Ascending).is_empty(), true);
     }
 
     #[test]
     fn isotonic_one_point() {
         assert_eq!(
-            isotonic(&[Point::new(1.0, 2.0)], Direction::Ascending)
+            isotonic(&[Point::<f64>::new(1.0, 2.0)], Direction::Ascending)
                 .pop()
                 .unwrap(),
-            Point::new(1.0, 2.0)
+            Point::<f64>::new(1.0, 2.0)
         );
     }
 
@@ -203,7 +244,7 @@ mod tests {
     fn isotonic_simple_merge() {
         assert_eq!(
             isotonic(
-                &[Point::new(1.0, 2.0), Point::new(2.0, 0.0)],
+                &[Point::<f64>::new(1.0, 2.0), Point::<f64>::new(2.0, 0.0)],
                 Direction::Ascending
             )
             .pop()
