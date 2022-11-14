@@ -1,4 +1,3 @@
-//! Sketching work on pgraph.  
 //! The module is inspired from the paper Global Weisfeiler Lehman Kernel Morris-Kersting 2017 <https://arxiv.org/abs/1703.02379>
 //! 
 //! The colouring scheme is replaced by hashing Node Labels and Edge Labels encountered in multihop exploration

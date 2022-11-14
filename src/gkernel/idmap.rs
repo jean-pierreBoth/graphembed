@@ -1,5 +1,5 @@
-//!
-//! Graph can come with many types of discrete labels. We need to map original labels of graph data files to discrete labels.   
+//! Graph can come with many types of discrete labels. We need to map original labels of graph data files to discrete labels.
+//! 
 //! It is possible to have labels in datafile that can be mapped to our discrete labels but that 
 //! are neither strings nor u6, u16 etc.  
 //! Moreover the default initialization of labels (i.E 0 for u8, u16 etc)

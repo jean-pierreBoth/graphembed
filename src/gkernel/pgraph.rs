@@ -1,9 +1,8 @@
-//!
 //! This module describes Edge and Node data we use in petgraph in an implementation of a nodesketch type algorithm.
+//! 
 //! Nodes can have multiple discrete labels to modelize multi communities membership and various relations
-//! between nodes.     
-//! Edges can be directed or not and can have at most one discrete label, but there can be many edges between 2 given nodes
-//! as log as the labels of edge are unique.   
+//! between nodes.    
+//! Edges can be directed or not and can have at most one discrete label, but there can be many edges between 2 given nodes 
 //! Edge can also have a weight, by default set 1.
 //! 
 use std::hash::Hash;
@@ -13,10 +12,12 @@ use std::cmp::Eq;
 
 
 use probminhash::probminhasher::*;
-/// Our labels must satisfy:
-/// For having String as possible labels we need Clone.
-/// To hash strings with sha2 crate we must get something equivalent to AsRef<[u8]>
-/// This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
+/// Our labels must satisfy this trait.
+/// 
+/// - For having String as possible labels we need Clone.
+/// 
+/// - To hash strings or Vectors with sha2 crate we must be able to associate to labels something statisfying a Vec\<u8\>.  
+///     This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
 pub trait LabelT : Send + Sync + Eq + Hash + Clone + Default + std::fmt::Debug + sig::Sig {} 
 
 impl LabelT for u8 {}
@@ -46,7 +47,7 @@ impl<Nlabel, Elabel>  sig::Sig for NElabel<Nlabel, Elabel> where
 
 
 /// defines associated data to a Node.
-/// A node can have many lables or be member of many communities
+/// A node can have many (discrete) labels (may be participate in many communities).
 #[derive(Clone, Debug)]
 pub struct Nweight<Nlabel> {
     /// memberships 
@@ -73,9 +74,9 @@ impl <Nlabel>  Nweight<Nlabel>
 
 //=================================================================================== 
 
-/// Our edge label. Called Eweight as petgraph items attached to an entity is called a weight
-/// If edges are of different types the label option encodes it.  
+/// Our edge label, called Eweight as petgraph items attached to an entity is called a weight.  
 /// The edge has a f32 weight which defaults to 1.
+/// Edges may have discrete labels attached to it, initialized via the label option argument. 
 pub struct Eweight<Elabel> {
     /// edge type/data
     label : Option<Elabel>,
@@ -102,7 +103,7 @@ impl <Elabel> Eweight<Elabel>
 
 }  // end of Eweight
 
-/// Data associated to an edge should satisfy Default and so Label should satisfy default.
+/// Data associated to an edge should satisfy Default and so  Eweight<Elabel> should satisfy Default.
 impl <Elabel> Default for Eweight<Elabel> 
     where Elabel : LabelT {
     fn default() -> Self {
@@ -112,11 +113,13 @@ impl <Elabel> Default for Eweight<Elabel>
 
 //=============================================================================
 
-
+/// A structure defining a node must implement this trait. See examples in gkernel::exio
 pub trait HasNweight<Nlabel:LabelT> {
     fn get_nweight(&self) -> &Nweight<Nlabel>;
 }
 
+
+/// A structure defining an edge must implement this trait. See examples in gkernel::exio
 pub trait HasEweight<Elabel:LabelT> {
     fn get_eweight(&self) -> &Eweight<Elabel>;
 }
