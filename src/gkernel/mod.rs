@@ -1,5 +1,7 @@
 //! This module implements embedding of directed/undirected graph with labels attached to nodes/edges.
 //! 
+//! **It is in a preliminary state**
+//! 
 //! It uses the same strategy as the *nodesketch* module, see [nodesketch](crate::nodesketch).  
 //! We hash labels as they propagate through the the edges of the graph.
 //! It is inspired by the Weisfeiler-Lehman algorithm used in Graph Kernel litterature.

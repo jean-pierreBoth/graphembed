@@ -3,13 +3,11 @@
 The purpose of this crate is to provide embedding of directed or undirected graphs with positively weighted edges
 and possibly discrete labels attached to nodes.
 
-- For simple graphs, without data attached to nodes/labels, we provide 2 (rust) modules *nodesketch* and *atp*. A simple executable with a validation option based on link prediction is also provided.
+- For simple graphs, without data attached to nodes/labels, we provide 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
 
-- The module *gkernel* is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
-    The algorithm is based on an extension of the hashing strategy used in the module *nodesketch*.  
-    In the undirected case, this module also computes a global embedding vector for the whole graph.
-
-**It is still in an early version**.
+- The module **gkernel** is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
+    The algorithm is based on an extension of the hashing strategy used in the module **nodesketch**.  
+    In the undirected case, this module also computes a global embedding vector for the whole graph. **It is still in an early version**.
 
 ## Methods
 
@@ -46,7 +44,7 @@ The svd is approximated by randomization as described in Halko-Tropp 2011 as imp
 
 Asymetric embeddings compute 2 vectors for each node, once considered as a source, once considered as a target.
 
- These vectors are computed either as left and right singular vectors of a proximity matrix in the case of the *atp* module. For the *nodesketch* and *gkernel* the embedding vectors are computed as the summary of node id's or labels attached to nodes flowing through the edges going into or from a node.
+ These vectors are computed either as left and right singular vectors of a proximity matrix in the case of the **atp** module. For the **nodesketch** and **gkernel** the embedding vectors are computed as the summary of node id's or labels attached to nodes flowing through the edges going into or from a node.
 
 ## Some data sets
 
