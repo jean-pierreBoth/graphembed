@@ -1,6 +1,6 @@
 [package]
 name = "graphembed"
-version = "0.0.5"
+version = "0.0.6"
 authors = ["jeanpierre.both@gmail.com"]
 repository = "https://github.com/jean-pierreBoth/graphembed"
 keywords = ["graph", "embedding", "hash"]
@@ -65,8 +65,8 @@ rand = {version = "0.8"}
 rand_xoshiro = {version = "0.6"}
 rand_distr = {version = "0.4"}
 
-#annembed = {version = "0.0.7", default = false}
-annembed ={ path = "../annembed", default = false}
+annembed = {version = "0.0.8", default = false}
+#annembed ={ path = "../annembed", default = false}
 
 #  
 lazy_static = { version = "1.4"}
