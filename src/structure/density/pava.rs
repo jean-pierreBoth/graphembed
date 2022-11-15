@@ -3,7 +3,11 @@
 // This file is taken from the crate pav_regression
 // Added following modifications:
 // - genericity over f32, f64
+// - struct BlockPoint that keep tracks of index of point in block through merge operations
 
+
+
+use anyhow::{anyhow};
 
 use ordered_float::OrderedFloat;
 use num_traits::float::Float;
@@ -13,6 +17,7 @@ use std::iter::{Sum, Product};
 use std::ops::{Add,Neg, AddAssign};
 use std::fmt::{Debug, Display, LowerExp, UpperExp};
 
+use indxvec::Vecops;
 
 
 /// Isotonic regression can be done in either mode
@@ -68,6 +73,16 @@ impl <T> Point<T>
 }
 
 
+/// 
+impl <T:Float> PartialOrd for Point<T> {
+    fn partial_cmp(&self, other: &Point<T>) -> Option<std::cmp::Ordering> {
+        self.x.partial_cmp(&other.x)
+    }
+} // end of impl PartialOrd for Point<T> 
+
+
+
+
 fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T  
     where T : Float {
     let prop = (*at_x - (a.x)) / (b.x - a.x);
@@ -78,13 +93,54 @@ fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T
 //==========================================================================================================
 
 /// To store a block of points in isotonic regression
+/// This structure does the merging.
 struct BlockPoint<'a, T:Float> {
     /// sorting direction
     direction : Direction,
-    ///
-    points : &'a Vec<Point<T>>
+    /// unsorted points,   
+    points : &'a Vec<Point<T>>,
+    /// so that i -> points[sorted_index[i]] is sorted according to direction
+    sorted_index : &'a[usize],
+    /// first index in sorted index. first is in block. So the block is [first, last[
+    first : usize,
+    /// last index in sorted index, last is outside block
+    last : usize,
 } // end of BlockPoint
 
+impl <'a, T> BlockPoint<'a, T>  
+    where T : Float {
+    
+    /// merge two contiguous BlockPoint
+    fn merge(&mut self, other : &BlockPoint<'a, T>) ->  Result<(), anyhow::Error> {
+        // check contiguity
+        if self.last == other.first {
+            self.last = other.last;
+        }
+        else if self.first == other.last {
+            self.first = other.first;
+        }
+        else {
+            log::error!("not contiguous blocks");
+            return Err(anyhow!("not contiguous blocks"));                    
+        }
+        return Ok(());
+    } // end of merge
+
+
+    fn get_centroid(&self) ->  Point<T> {
+        panic!("not yt implemented");
+    }
+
+    /// get first index of block in the Direction ordering
+    fn get_first_index(&self) -> usize {
+        self.first
+    }
+
+    /// get last index of block in the Direction ordering
+    fn get_last_index(&self) -> usize {
+        self.last
+    }
+} // end of impl BlockPoint
 
 //==========================================================================================================
 
