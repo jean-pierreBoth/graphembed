@@ -92,8 +92,6 @@ impl <T:Float> PartialOrd for Point<T> {
 } // end of impl PartialOrd for Point<T> 
 
 
-
-
 fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T  
     where T : Float {
     let prop = (*at_x - (a.x)) / (b.x - a.x);
@@ -103,10 +101,11 @@ fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T
 
 //==========================================================================================================
 
-/// To store a block of points in isotonic regression
-/// This structure does the merging.
-#[derive(Debug)]
-struct BlockPoint<'a, T:Float> {
+// This structure does the merging.
+/// To store a block of iso values points in isotonic regression
+/// This structure stores the index(es) of the original points in the block
+#[derive(Debug, Copy, Clone)]
+pub struct BlockPoint<'a, T:Float> {
     /// sorting direction, TODO do we need it ?
     direction : Direction,
     /// unsorted points,   
@@ -138,6 +137,7 @@ impl <'a, T> BlockPoint<'a, T>
 
     /// merge two contiguous BlockPoint
     fn merge(&mut self, other : &BlockPoint<'a, T>) ->  Result<(), anyhow::Error> {
+        log::debug!("entering block merge self, {} {} other :  {} {} ", self.first, self.last, other.first, other.last);
         // check contiguity
         if self.last == other.first {
             self.last = other.last;
@@ -152,12 +152,14 @@ impl <'a, T> BlockPoint<'a, T>
         // update centroid of blocks
         self.centroid.merge_with(&other.centroid);
         //
+        log::debug!("exiting block merge self, {} {} other :  {} {} ", self.first, self.last, other.first, other.last);
+        //
         return Ok(());
     } // end of merge
 
 
     // return centroid
-    fn get_centroid(&self) ->  Point<T> {
+    pub fn get_centroid(&self) ->  Point<T> {
         self.centroid
     }
 
@@ -179,8 +181,7 @@ impl <'a, T> BlockPoint<'a, T>
                 if self.centroid.y < other.centroid.y { true } else { false}
             },
             Direction::Descending => {
-                if self.centroid.y < other.centroid.y { true } else { false}
-
+                if self.centroid.y > other.centroid.y { true } else { false}
             },
         };
         ordered
@@ -196,13 +197,12 @@ impl <'a, T:Float> PartialEq for BlockPoint<'a,T> {
 } // end of impl PartialOrd for BlockPoint<T> 
 
 
-/// ordering with respect to x for sorting methods. But centroids are compared with respect to y!
+/// ordering with respect to x (!!) for sorting methods. But centroids are classified  with respect to y!
 impl <'a, T:Float> PartialOrd for BlockPoint<'a,T> {
     fn partial_cmp(&self, other: &BlockPoint<T>) -> Option<std::cmp::Ordering> {
         self.centroid.x.partial_cmp(&other.centroid.x)
     }
 } // end of impl PartialOrd for BlockPoint<T> 
-
 
 
 
@@ -213,7 +213,6 @@ fn interpolate_two_blockpoints<T>(a: &BlockPoint<T>, b: &BlockPoint<T>, at_x: &T
 }
 
 //==========================================================================================================
-
 
 /// A vector of points forming an isotonic regression, along with the
 /// centroid point of the original set.
@@ -264,32 +263,46 @@ impl <'a, T> IsotonicRegression<'a, T>
         }
     } // end of new 
 
+
+    // retrieve the block for a point
+    pub fn find_block(&self, at_x : T) -> &BlockPoint<'a,T> {
+        std::panic!("not yet implemented")
+    } // end of find_block
+
+
+    /// returns the index of orignal points that are in this block
+    pub fn get_point_index(&self) -> Vec<usize> {
+        std::panic!("not yet implemented")
+    } // end of get_point_index
+
+
     /// Find the _y_ point at position `at_x`
     pub fn interpolate(&self, at_x: T) -> T 
         where T : Float {
-        if self.points.len() == 1 {
-            return self.points[0].y;
+        //
+        let blocks =  self.blocks.as_ref().unwrap();
+        //
+        if blocks.len() == 1 {
+            return blocks[0].centroid.y;
         } else {
-            let pos = self
-                .points
-                .binary_search_by_key(&OrderedFloat(at_x), |p| OrderedFloat(p.x));
+            let pos = blocks.binary_search_by_key(&OrderedFloat(at_x), |p| OrderedFloat(p.centroid.x));
             return match pos {
-                Ok(ix) => self.points[ix].y,
+                Ok(ix) => blocks[ix].centroid.y,
                 Err(ix) => {
                     if ix < 1 {
                         interpolate_two_points(
-                            &self.points.first().unwrap(),
+                            &blocks.first().unwrap().centroid,
                             &self.centroid_point,
                             &at_x,
                         )
                     } else if ix >= self.points.len() {
                         interpolate_two_points(
                             &self.centroid_point,
-                            self.points.last().unwrap(),
+                            &blocks.last().unwrap().centroid,
                             &at_x,
                         )
                     } else {
-                        interpolate_two_points(&self.points[ix - 1], &self.points[ix], &at_x)
+                        interpolate_two_points(&blocks[ix - 1].centroid, &blocks[ix].centroid, &at_x)
                     }
                 }
             };
@@ -330,18 +343,29 @@ impl <'a, T> IsotonicRegression<'a, T>
         log::info!("nb blocks with different x : {}", blocks.len());
         // we merge blocks as soon there is an ordering violation
         // We scan points according to index. The test of block creation must depend on direction.
+        let mut iso_blocks : Vec<RefCell<BlockPoint<T>>>  = Vec::new(); 
         // TODO possibly we get cache problem and we need to work on a cloned sorted point array? at memory expense
-        for j in (1..blocks.len()).rev() {
+        for i in 0..blocks.len() {
             // check violation with preceding block
-            let mut block_j = &blocks[j];
-            if !blocks[j-1].borrow_mut().is_ordered(&block_j.borrow()) {
-                let block_j_1 = &blocks[j-1];
-                &block_j_1.borrow_mut().merge(&block_j.borrow());
-                blocks.remove(j);
+            let mut inserted = false;
+            let new_iso = blocks[i].clone();
+            while !inserted {
+                if iso_blocks.is_empty() || iso_blocks.last().unwrap().borrow().is_ordered(&new_iso.borrow()) {
+                    iso_blocks.push(blocks[i].clone());
+                    inserted = true;
+                }
+                else {
+                    let new_iso = blocks[i].clone();
+                    let previous = iso_blocks.pop().unwrap();
+                    new_iso.borrow_mut().merge(&previous.borrow());
+                }
             }
         } // end of for on blocks
         //
         log::info!("after final merge nb blocks = {}", blocks.len());
+        // transfer to raw blocks
+        let final_block : Vec<BlockPoint<T>> = iso_blocks.into_iter().map(|obj|  obj.into_inner() ).collect();
+        //
         return Err(anyhow!("not yet implemented"));
     }  // end of do_isotonic
 
