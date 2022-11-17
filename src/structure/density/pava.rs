@@ -5,7 +5,7 @@
 // Added following modifications:
 // - avoid reallocations of points to be dispatched
 // - genericity over f32, f64
-// - added struct BlockPoint that keep track of index of points in block through merge operations
+// - added struct BlockPoint that keep track of index of points in blocks through merge operations
 
 
 
@@ -21,6 +21,9 @@ use std::fmt::{Debug, Display, LowerExp, UpperExp};
 
 use indxvec::Vecops;
 
+use std::cell::RefCell;
+
+const EPSIL : f64 = 1.0E-6;
 
 /// Isotonic regression can be done in either mode
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -81,10 +84,10 @@ impl <T> Point<T>
 }
 
 
-/// ordering with respect to y.
+/// ordering with respect to x for sorting methods. But centroids are compared with respect to y!
 impl <T:Float> PartialOrd for Point<T> {
     fn partial_cmp(&self, other: &Point<T>) -> Option<std::cmp::Ordering> {
-        self.y.partial_cmp(&other.y)
+        self.x.partial_cmp(&other.x)
     }
 } // end of impl PartialOrd for Point<T> 
 
@@ -126,35 +129,10 @@ impl <'a, T> BlockPoint<'a, T>
         BlockPoint{direction, points, index, first , last, centroid : Point::<T>::default()}
     }
 
-    /// Try to push an index in block. Returns Ok if no order violation, or Err. For any coherency error it panics
-    /// Arg sorted_i is the slot in the array index. The point inserted in points[index[sorted_i]]
-    /// On insertion success update centroid.
-    fn push_index(&mut self, sorted_i : usize)  -> Result<(),()>{
-        assert_eq!(self.last, sorted_i);
-        assert!(sorted_i <= self.index.len());
-        // check violation
-        let new_point = self.points[self.index[sorted_i]];
-        match self.direction {
-            Direction::Ascending => {
-                if new_point.y < self.centroid.y {
-                    // violation if inserted point is less than last one
-                    return Err(());
-                }
-                else { // we can merge
-                    self.centroid.merge_with(&new_point);
-                }
-            }
-            Direction::Descending => {
-                // violation if inserted point is greater than last one
-                // TODO
-            }
-        } 
-        //
-        self.last = sorted_i+1;
-        // update centroid
-        self.centroid.merge_with(&new_point);
-        //
-        return Ok(());
+    // creation of block from a point
+    fn new_from_point(direction: Direction, points : &'a Vec<Point<T>>, index : &'a [usize], idx : usize) -> Self {
+        let centroid = points[index[idx]].clone();
+        BlockPoint{direction, points, index,  first : idx , last : idx+1, centroid}
     }
 
 
@@ -177,6 +155,7 @@ impl <'a, T> BlockPoint<'a, T>
         return Ok(());
     } // end of merge
 
+
     // return centroid
     fn get_centroid(&self) ->  Point<T> {
         self.centroid
@@ -191,7 +170,47 @@ impl <'a, T> BlockPoint<'a, T>
     fn get_last_index(&self) -> usize {
         self.last
     }
+
+    // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
+    fn is_ordered(&self, other : &BlockPoint<T>) -> bool {
+        assert_eq!(self.direction, other.direction);
+        let ordered = match self.direction {
+            Direction::Ascending => {
+                if self.centroid.y < other.centroid.y { true } else { false}
+            },
+            Direction::Descending => {
+                if self.centroid.y < other.centroid.y { true } else { false}
+
+            },
+        };
+        ordered
+    } // end of is_ordered
+
 } // end of impl BlockPoint
+
+
+impl <'a, T:Float> PartialEq for BlockPoint<'a,T> {
+    fn eq(&self, other: &BlockPoint<T>) -> bool {
+        self.centroid.eq(&other.centroid)
+    }
+} // end of impl PartialOrd for BlockPoint<T> 
+
+
+/// ordering with respect to x for sorting methods. But centroids are compared with respect to y!
+impl <'a, T:Float> PartialOrd for BlockPoint<'a,T> {
+    fn partial_cmp(&self, other: &BlockPoint<T>) -> Option<std::cmp::Ordering> {
+        self.centroid.x.partial_cmp(&other.centroid.x)
+    }
+} // end of impl PartialOrd for BlockPoint<T> 
+
+
+
+
+fn interpolate_two_blockpoints<T>(a: &BlockPoint<T>, b: &BlockPoint<T>, at_x: &T) -> T  
+    where T : Float {
+    let prop = (*at_x - (a.centroid.x)) / (b.centroid.x - a.centroid.x);
+    (b.centroid.y - a.centroid.y) * prop + a.centroid.y
+}
 
 //==========================================================================================================
 
@@ -233,11 +252,8 @@ impl <'a, T> IsotonicRegression<'a, T>
             sum_x += point.x * point.weight;
             sum_y += point.y * point.weight;
         }
-        // get an ascending index
+        // get a index for access to sorted values
         let mut index = points.mergesort_indexed();
-        if direction == Direction::Descending {
-            index.reverse();
-        }
         let blocks = Vec::<BlockPoint::<'a, T>>::new();
         IsotonicRegression {
             direction,
@@ -296,17 +312,36 @@ impl <'a, T> IsotonicRegression<'a, T>
         if self.blocks.is_some() {
             return Err(anyhow!("regression already done!"));
         }
-        let mut blocks = Vec::<BlockPoint<'a,T>>::new();
-        // we create blocks as soon there is an ordering violation
-        let current_block = BlockPoint::new(self.direction, &self.points, &self.index, 0usize, 0usize);
+        //        
+        let epsil = T::from(EPSIL).unwrap();
+        // we must ensure that there is one initial block point by x coordinate, to guarantee consistent block merge
+        let mut blocks: Vec<RefCell<BlockPoint<T>>>  = Vec::new(); 
+        for i in 0..self.points.len() {
+            let new_block = BlockPoint::<T>::new_from_point(self.direction, &self.points, &self.index, i);
+            if i== 0 || ( i>0 && self.points[self.index[i]].x - self.points[self.index[i-1]].x > epsil) {
+                blocks.push(RefCell::new(new_block));
+            }
+            else {
+                let last_block = blocks.pop().unwrap();
+                last_block.borrow_mut().merge(&new_block);
+                blocks.push(last_block);
+            }
+        }
+        log::info!("nb blocks with different x : {}", blocks.len());
+        // we merge blocks as soon there is an ordering violation
         // We scan points according to index. The test of block creation must depend on direction.
         // TODO possibly we get cache problem and we need to work on a cloned sorted point array? at memory expense
-        let mut blocks = self.blocks.as_mut().unwrap();
-        for i in 0..self.index.len() {
-            // do we have an order violation
-
-
-        } // end of for on sorted index
+        for j in (1..blocks.len()).rev() {
+            // check violation with preceding block
+            let mut block_j = &blocks[j];
+            if !blocks[j-1].borrow_mut().is_ordered(&block_j.borrow()) {
+                let block_j_1 = &blocks[j-1];
+                &block_j_1.borrow_mut().merge(&block_j.borrow());
+                blocks.remove(j);
+            }
+        } // end of for on blocks
+        //
+        log::info!("after final merge nb blocks = {}", blocks.len());
         return Err(anyhow!("not yet implemented"));
     }  // end of do_isotonic
 
