@@ -1,4 +1,4 @@
-#![allow(unused)]
+//#![allow(unused)]
 //! Isotonic regression with PAVA algorithm
 
 // This file is modified from the crate pav_regression
@@ -16,7 +16,6 @@ use ordered_float::OrderedFloat;
 use num_traits::float::Float;
 
 use num_traits::{FromPrimitive};
-use std::ops::{AddAssign};
 use std::fmt::{Debug};
 
 use indxvec::Vecops;
@@ -173,6 +172,11 @@ impl <'a, T> BlockPoint<'a, T>
         self.last
     }
 
+    // returns the index in original  &'a [Point<T>] of points in this block
+    fn get_point_index(&self) -> &[usize] {
+        &self.index[self.first..self.last]
+    }
+
     // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
     fn is_ordered(&self, other : &BlockPoint<T>) -> bool {
         assert_eq!(self.direction, other.direction);
@@ -212,12 +216,6 @@ impl <'a, T:Float + Debug> PartialOrd for BlockPoint<'a,T> {
 } // end of impl PartialOrd for BlockPoint<T> 
 
 
-
-fn interpolate_two_blockpoints<T>(a: &BlockPoint<T>, b: &BlockPoint<T>, at_x: &T) -> T  
-    where T : Float + Debug {
-    let prop = (*at_x - (a.centroid.x)) / (b.centroid.x - a.centroid.x);
-    (b.centroid.y - a.centroid.y) * prop + a.centroid.y
-}
 
 //==========================================================================================================
 
@@ -279,15 +277,20 @@ impl <'a, T> IsotonicRegression<'a, T>
     } // end of new 
 
 
-    // retrieve the block for a point
-    pub fn find_block(&self, at_x : T) -> &BlockPoint<'a,T> {
-        std::panic!("not yet implemented")
-    } // end of find_block
+    /// returns sorting index of orignal points
+    fn get_point_index(&self) -> &[usize] {
+        &self.index
+    } // end of get_point_index
 
 
-    /// returns the index of orignal points that are in this block
-    pub fn get_point_index(&self) -> Vec<usize> {
-        std::panic!("not yet implemented")
+    // return indexes of original points in block blocknum. Does a copy! 
+    fn get_block_point_index<'b:'a>(&'b self, blocknum : usize) -> Option<Vec<usize>> {
+        let blocks = self.get_blocks();
+        if blocknum >= blocks.borrow().len() {
+            return None;
+        }
+        let indexes = Vec::from(blocks.borrow()[blocknum].get_point_index());
+        return Some(indexes);
     } // end of get_point_index
 
 
@@ -330,18 +333,20 @@ impl <'a, T> IsotonicRegression<'a, T>
         }
     }
 
-    /// Retrieve the points that make up the isotonic regression
-    pub fn get_points(&self) -> &[Point<T>] {
+    /// Retrieve the points the input data points that make up the isotonic regression
+    pub fn get_points(&self) -> &'a[Point<T>] {
         &self.points
     }
 
-    pub fn get_blocks<'b:'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
+    fn get_blocks<'b:'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
         &self.blocks
     }
 
 
+    /// returns 
     /// Retrieve the mean point of the original point set+
-    pub fn get_centroid_point(&self) -> &Point<T> {
+    #[allow(unused)]
+    pub fn get_centroid(&self) -> &Point<T> {
         &self.centroid_point
     }
 
@@ -401,15 +406,43 @@ impl <'a, T> IsotonicRegression<'a, T>
         *self.blocks.borrow_mut() = final_blocks;
         if log::log_enabled!(log::Level::Debug) {
             self.print_blocks();
+            self.check_blocks();
         }
         //
         return Ok(());
     }  // end of do_isotonic
 
-    // check contiguity and order
-    fn check_blocks(&self) -> bool {
-        return false;
+    /// get number of blocks of result
+    #[allow(unused)]
+    pub fn get_nb_block(&self) -> usize {
+        self.blocks.borrow().len()
     }
+
+    /// return the centroid of a block 
+    #[allow(unused)]
+    pub fn get_block_centroid(&self, bloc : usize) -> Result<Point<T>, ()> {
+        if bloc > self.get_nb_block() {
+            return Err(());
+        }
+        Ok(self.blocks.borrow()[bloc].centroid)
+    }
+    // Some debugging utilities
+
+    // check contiguity and order. abort if fails!
+    fn check_blocks(&self) -> bool {
+        let blocks = self.blocks.borrow();
+        for i in 0..blocks.len() {
+            if i == 0 {
+                assert_eq!(blocks[0].first,0);
+            }
+            else {
+                assert_eq!(blocks[i-1].last, blocks[i].first);
+            }
+        }
+        assert_eq!(blocks.last().unwrap().last, self.points.len());
+        return true;
+    } // end of check_blocks
+
 
     // debugging method
     fn print_blocks(&self) {
@@ -418,12 +451,8 @@ impl <'a, T> IsotonicRegression<'a, T>
         for i in 0..blocks.len() {
             blocks[i].dump();
         }
-    }
+    } // end of get_nb_blocks
 
-    /// get number of blocks of result
-    pub fn get_nb_block(&self) -> usize {
-        self.blocks.borrow().len()
-    }
 } // end of impl  IsotonicRegression<'a, T> 
 
 
@@ -475,7 +504,7 @@ mod tests {
         let regression = IsotonicRegression::new(points, Direction::Ascending);
         let res = regression.do_isotonic();
         assert!(res.is_ok());
-        assert_eq!(regression.get_centroid_point(), &Point::<f64>::new(1.0, 2.0));
+        assert_eq!(regression.get_centroid(), &Point::<f64>::new(1.0, 2.0));
         assert_eq!(regression.get_nb_block(), 1);
     }
 
@@ -546,15 +575,17 @@ mod tests {
         ];
 
         let regression = IsotonicRegression::new_ascending(points);
+        let _res = regression.do_isotonic();
+        assert_eq!(regression.get_nb_block(),1);
         assert_eq!(
-            regression.get_points(),
-            &[Point::new_with_weight(
+            regression.get_block_centroid(0).unwrap(),
+            Point::new_with_weight(
                 (0.0 + 1.0 + 2.0) / 3.0,
                 (1.0 + 2.0 - 1.0) / 3.0,
                 3.0
-            )]
+            )
         )
-    }
+    } // end of test_isotonic_ascending
 
     #[test]
     fn test_isotonic_descending() {
@@ -567,9 +598,11 @@ mod tests {
             Point::new(2.0, 1.0),
         ];
         let regression = IsotonicRegression::new_descending(points);
+        let _res = regression.do_isotonic();
+        assert_eq!(regression.get_nb_block(),1);
         assert_eq!(
-            regression.get_points(),
-            &[Point::new_with_weight(1.0, 2.0 / 3.0, 3.0)]
+            regression.get_block_centroid(0).unwrap(),
+            Point::new_with_weight(1.0, 2.0 / 3.0, 3.0)
         )
     }
 
