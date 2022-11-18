@@ -15,10 +15,9 @@ use anyhow::{anyhow};
 use ordered_float::OrderedFloat;
 use num_traits::float::Float;
 
-use num_traits::{NumAssign,FromPrimitive};
-use std::iter::{Sum, Product};
+use num_traits::{FromPrimitive};
 use std::ops::{AddAssign};
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug};
 
 use indxvec::Vecops;
 
@@ -77,7 +76,7 @@ impl <T> Point<T>
     }
 
     // useful to merge centroids
-    fn merge_with(&mut self, other: &Point<T>) {
+    fn merge(&mut self, other: &Point<T>) {
         self.x = ((self.x * self.weight) + (other.x * other.weight)) / (self.weight + other.weight);
         self.y = ((self.y * self.weight) + (other.y * other.weight)) / (self.weight + other.weight);
         self.weight += other.weight;
@@ -151,7 +150,7 @@ impl <'a, T> BlockPoint<'a, T>
             return Err(anyhow!("not contiguous blocks"));                    
         }
         // update centroid of blocks
-        self.centroid.merge_with(&other.centroid);
+        self.centroid.merge(&other.centroid);
         //
         log::debug!("exiting block merge self, {} {}", self.first, self.last);
         //
@@ -190,7 +189,7 @@ impl <'a, T> BlockPoint<'a, T>
 
     // debug utility
     #[allow(unused)]
-    fn dump(&self) {
+    pub fn dump(&self) {
         log::debug!("block dump");
         println!("first last centroid : {}  {}   {:?}", self.first, self.last, self.centroid);
         println!("index : {:?}", self.index);
@@ -225,6 +224,7 @@ fn interpolate_two_blockpoints<T>(a: &BlockPoint<T>, b: &BlockPoint<T>, at_x: &T
 /// A vector of points forming an isotonic regression, along with the
 /// centroid point of the original set.
 
+#[allow(unused)]
 #[derive(Debug)]
 pub struct IsotonicRegression<'a, T:Float + Debug + 'static> {
     direction : Direction,
@@ -252,7 +252,6 @@ impl <'a, T> IsotonicRegression<'a, T>
     }
 
     fn new(points: &'a [Point<T>], direction: Direction) -> IsotonicRegression<T> {
-        assert!(points.len() > 0, "points is empty, can't create regression");
         let point_count: T = points.iter().map(|p| p.weight).sum();
         let mut sum_x: T = T::from(0.0).unwrap();
         let mut sum_y: T = T::from(0.0).unwrap();
@@ -261,8 +260,15 @@ impl <'a, T> IsotonicRegression<'a, T>
             sum_y += point.y * point.weight;
         }
         // get a index for access to sorted values
-        let mut index = points.mergesort_indexed();
+        let index;
+        if points.len() > 0 {
+            index = points.mergesort_indexed();
+        }
+        else {
+            index = Vec::<usize>::new();
+        }
         let blocks = Vec::<BlockPoint::<'a, T>>::new();
+        log::debug!("initializing IsotonicRegression");
         IsotonicRegression {
             direction,
             points: points,
@@ -286,13 +292,14 @@ impl <'a, T> IsotonicRegression<'a, T>
 
 
     /// Find the _y_ point at position `at_x`
+    #[allow(unused)]
     pub fn interpolate<'b:'a>(&'b self, at_x: T) -> T 
         where T : Float {
         //
         log::debug!("interpolate nb blocks = {}", self.blocks.borrow().len());
         if self.blocks.borrow().len() == 0 {
             log::info!("uninitialized regression, running do_isotonic");
-            self.do_isotonic();
+            let _res = self.do_isotonic();
         }
         let blocks =  self.blocks.borrow();
         //
@@ -328,14 +335,24 @@ impl <'a, T> IsotonicRegression<'a, T>
         &self.points
     }
 
+    pub fn get_blocks<'b:'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
+        &self.blocks
+    }
+
+
     /// Retrieve the mean point of the original point set+
     pub fn get_centroid_point(&self) -> &Point<T> {
         &self.centroid_point
     }
 
-    //
-    fn do_isotonic<'b:'a>(&'b self)-> Result<(), anyhow::Error>  {
+    /// Finalize initialization of the structure.
+    /// It is recommended to call it directly before calling interpolate as we can check that all is OK.
+    pub fn do_isotonic<'b:'a>(&'b self)-> Result<(), anyhow::Error>  {
         //
+        if self.points.len() == 0 {
+            log::info!("no points to do regression");
+            return Err(anyhow!("no points to do regression"));
+        }
         if self.blocks.borrow().len() != 0 {
             return Err(anyhow!("regression already done!"));
         }
@@ -352,7 +369,7 @@ impl <'a, T> IsotonicRegression<'a, T>
             else {
                 log::debug!("merging two equal points {:#?} {:#?}", self.points[self.index[i-1]].x, self.points[self.index[i]].x);
                 let last_block = blocks.pop().unwrap();
-                last_block.borrow_mut().merge(&new_block);
+                last_block.borrow_mut().merge(&new_block).unwrap();
                 blocks.push(last_block);
             }
         }
@@ -402,44 +419,12 @@ impl <'a, T> IsotonicRegression<'a, T>
             blocks[i].dump();
         }
     }
-} // end of impl  IsotonicRegression<'a, T> 
 
-
-
-
-fn isotonic<T>(points: &[Point<T>], direction: Direction) -> Vec<Point<T>> 
-    where T : Float + Debug + AddAssign {
-    let mut merged_points: Vec<Point<T>> = match direction {
-        Direction::Ascending => points.iter().copied().collect(),
-        Direction::Descending => points.iter().map(|p| Point { y: -p.y, ..*p }).collect(),
-    };
-
-    merged_points.sort_by_key(|point| OrderedFloat(point.x));
-
-    let mut iso_points: Vec<Point<T>> = Vec::new();
-    for point in &mut merged_points.iter() {
-        if iso_points.is_empty() || (point.y > iso_points.last().unwrap().y) {
-            iso_points.push(*point)
-        } else {
-            let mut new_point = *point;
-            loop {
-                if iso_points.is_empty() || (iso_points.last().unwrap().y < (new_point).y) {
-                    iso_points.push(new_point);
-                    break;
-                } else {
-                    let last_to_repl = iso_points.pop();
-                    new_point.merge_with(&last_to_repl.unwrap());
-                }
-            }
-        }
+    /// get number of blocks of result
+    pub fn get_nb_block(&self) -> usize {
+        self.blocks.borrow().len()
     }
-
-    return match direction {
-        Direction::Ascending => iso_points,
-        Direction::Descending => iso_points.iter().map(|p| Point { y: -p.y, ..*p }).collect(),
-    };
-}
-
+} // end of impl  IsotonicRegression<'a, T> 
 
 
 
@@ -471,73 +456,71 @@ mod tests {
 
     #[test]
     fn isotonic_no_points() {
-    //
     log_init_test();
     //
-    assert_eq!(isotonic(&[] as &[Point<f64>; 0], Direction::Ascending).is_empty(), true);
+    let points :  &[Point::<f64>; 0] = &[];
+    let regression = IsotonicRegression::new_ascending(points);
+    let res = regression.do_isotonic();
+    if res.is_err() {
+        println!("{:?}",res.as_ref().err().unwrap());
+    }
+    assert!(&res.is_err());
     }
 
     #[test]
     fn isotonic_one_point() {
-        assert_eq!(
-            isotonic(&[Point::<f64>::new(1.0, 2.0)], Direction::Ascending)
-                .pop()
-                .unwrap(),
-            Point::<f64>::new(1.0, 2.0)
-        );
+        log_init_test();
+        //
+        let points =&[Point::<f64>::new(1.0, 2.0)];
+        let regression = IsotonicRegression::new(points, Direction::Ascending);
+        let res = regression.do_isotonic();
+        assert!(res.is_ok());
+        assert_eq!(regression.get_centroid_point(), &Point::<f64>::new(1.0, 2.0));
+        assert_eq!(regression.get_nb_block(), 1);
     }
 
     #[test]
-    fn isotonic_simple_merge() {
+    fn isotonic_point_merge() {
         //
         log_init_test();
+        let mut point = Point::<f64>::new(1.0, 2.0);
+        point.merge(&Point::<f64>::new(2.0, 0.0));
         //        
-        assert_eq!(
-            isotonic(
-                &[Point::<f64>::new(1.0, 2.0), Point::<f64>::new(2.0, 0.0)],
-                Direction::Ascending
-            )
-            .pop()
-            .unwrap(),
-            Point::new_with_weight(1.5, 1.0, 2.0)
-        );
+        assert_eq!(point, Point::new_with_weight(1.5, 1.0, 2.0));
     }
 
     #[test]
     fn isotonic_one_not_merged() {
         //
         log_init_test();
-        // 
-        assert_eq!(
-            isotonic(
-                &[
-                    Point::new(0.5, -0.5),
-                    Point::new(1.0, 2.0),
-                    Point::new(2.0, 0.0),
-                ],
-                Direction::Ascending
-            ),
-            [Point::new(0.5, -0.5), Point::new_with_weight(1.5, 1.0, 2.0)]
-        );
-    }
+        //
+        let points = &[ Point::new(0.5, -0.5), Point::new(1.0, 2.0), Point::new(2.0, 0.0)];
+        let regression = IsotonicRegression::new(points, Direction::Ascending);
+        let res = regression.do_isotonic();
+        assert!(res.is_ok());
+        assert_eq!(regression.get_nb_block(), 2);
+        let blocks = regression.get_blocks();
+        let centroid_1 = blocks.borrow()[0].get_centroid();
+        let centroid_2 = blocks.borrow()[1].get_centroid();
+        assert_eq!(centroid_1, Point::new(0.5, -0.5));
+        assert_eq!(centroid_2, Point::new_with_weight(1.5, 1.0, 2.0));
+    } // end of isotonic_one_not_merged
+
 
     #[test]
     fn isotonic_merge_three() {
         //
         log_init_test();
         // 
-        assert_eq!(
-            isotonic(
-                &[
-                    Point::new(0.0, 1.0),
-                    Point::new(1.0, 2.0),
-                    Point::new(2.0, -1.0),
-                ],
-                Direction::Ascending
-            ),
-            [Point::new_with_weight(1.0, 2.0 / 3.0, 3.0)]
-        );
-    }
+        let points = &[Point::new(0.0, 1.0), Point::new(1.0, 2.0), Point::new(2.0, -1.0)];
+        let regression = IsotonicRegression::new(points, Direction::Ascending);
+        let res = regression.do_isotonic();
+        assert!(res.is_ok());
+        assert_eq!(regression.get_nb_block(), 1);
+        let blocks = regression.get_blocks();
+        let centroid_1 = blocks.borrow()[0].get_centroid();
+        assert_eq!(centroid_1, Point::new_with_weight(1.0, 2.0 / 3.0, 3.0));
+    } // end of isotonic_merge_three
 
     #[test]
     fn test_interpolate() {
@@ -549,6 +532,7 @@ mod tests {
             IsotonicRegression::new_ascending(&points);
         assert!((regression.interpolate(1.5) - 6.0).abs() < f64::EPSILON);
     }
+
 
     #[test]
     fn test_isotonic_ascending() {
@@ -603,6 +587,7 @@ mod tests {
         assert_eq!(regression.interpolate(0.5), 2.5);
     }
 
+
     #[test]
     fn test_single_point_regression() {
         //
@@ -613,14 +598,4 @@ mod tests {
         assert_eq!(regression.interpolate(0.0), 3.0);
     }
 
-    #[test]
-    fn test_point_accessors() {
-        //
-        log_init_test();
-        // 
-        let point = Point { x: 1.0, y: 2.0 , weight : 3.0};
-        assert_eq!(point.x(), 1.0);
-        assert_eq!(point.y(), 2.0);
-        assert_eq!(point.weight(), 3.0);
-    }
 }
