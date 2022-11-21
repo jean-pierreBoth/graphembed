@@ -5,6 +5,7 @@
 // Added following modifications:
 // - avoid reallocations of points to be dispatched
 // - genericity over f32, f64
+// - take into account case of multiple points with same abscisse
 // - added struct BlockPoint that keep track of index of points in blocks through merge operations
 // - methods to get contents of each block
 
@@ -26,7 +27,7 @@ const EPSIL : f64 = 1.0E-6;
 
 /// Isotonic regression can be done in either mode
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum Direction {
+pub enum Direction {
     Ascending,
     Descending,
 }
@@ -123,7 +124,7 @@ pub struct BlockPoint<'a, T:Float + Debug> {
 impl <'a, T> BlockPoint<'a, T>  
     where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug {
     
-    fn new(direction: Direction, points : &'a Vec<Point<T>>, index : &'a [usize], first : usize, last : usize) -> Self {
+    pub fn new(direction: Direction, points : &'a Vec<Point<T>>, index : &'a [usize], first : usize, last : usize) -> Self {
         BlockPoint{direction, points, index, first , last, centroid : Point::<T>::default()}
     }
 
@@ -163,16 +164,17 @@ impl <'a, T> BlockPoint<'a, T>
     }
 
     /// get first index of block in the Direction ordering
-    fn get_first_index(&self) -> usize {
+    pub fn get_first_index(&self) -> usize {
         self.first
     }
 
     /// get last index of block in the Direction ordering
-    fn get_last_index(&self) -> usize {
+    pub fn get_last_index(&self) -> usize {
         self.last
     }
 
     // returns the index in original  &'a [Point<T>] of points in this block
+    #[allow(unused)]
     fn get_point_index(&self) -> &[usize] {
         &self.index[self.first..self.last]
     }
@@ -197,6 +199,16 @@ impl <'a, T> BlockPoint<'a, T>
         log::debug!("block dump");
         println!("first last centroid : {}  {}   {:?}", self.first, self.last, self.centroid);
         println!("index : {:?}", self.index);
+        println!(" first points :");
+        let nbd = (self.last-self.first).min(3);
+        for i in 0..nbd {
+            println!(" point i : {}  : {:?}", i , self.points[self.index[self.first+i]]);
+        }
+        println!(" last points :");
+        let nbd = (self.last-self.first).min(3).min(self.index.len());
+        for i in (1..nbd).rev() {
+            println!(" point i : {}  : {:?}", i , self.points[self.index[self.last-i]]);
+        }         
     }
 } // end of impl BlockPoint
 
@@ -222,7 +234,6 @@ impl <'a, T:Float + Debug> PartialOrd for BlockPoint<'a,T> {
 /// A vector of points forming an isotonic regression, along with the
 /// centroid point of the original set.
 
-#[allow(unused)]
 #[derive(Debug)]
 pub struct IsotonicRegression<'a, T:Float + Debug + 'static> {
     direction : Direction,
@@ -278,13 +289,14 @@ impl <'a, T> IsotonicRegression<'a, T>
 
 
     /// returns sorting index of orignal points
+    #[allow(unused)]
     fn get_point_index(&self) -> &[usize] {
         &self.index
     } // end of get_point_index
 
 
     // return indexes of original points in block blocknum. Does a copy! 
-    fn get_block_point_index<'b:'a>(&'b self, blocknum : usize) -> Option<Vec<usize>> {
+    pub fn get_block_point_index<'b:'a>(&'b self, blocknum : usize) -> Option<Vec<usize>> {
         let blocks = self.get_blocks();
         if blocknum >= blocks.borrow().len() {
             return None;
@@ -295,7 +307,6 @@ impl <'a, T> IsotonicRegression<'a, T>
 
 
     /// Find the _y_ point at position `at_x`
-    #[allow(unused)]
     pub fn interpolate<'b:'a>(&'b self, at_x: T) -> T 
         where T : Float {
         //
@@ -338,14 +349,13 @@ impl <'a, T> IsotonicRegression<'a, T>
         &self.points
     }
 
-    fn get_blocks<'b:'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
+    pub(crate) fn get_blocks<'b:'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
         &self.blocks
     }
 
 
     /// returns 
     /// Retrieve the mean point of the original point set+
-    #[allow(unused)]
     pub fn get_centroid(&self) -> &Point<T> {
         &self.centroid_point
     }
@@ -413,13 +423,11 @@ impl <'a, T> IsotonicRegression<'a, T>
     }  // end of do_isotonic
 
     /// get number of blocks of result
-    #[allow(unused)]
     pub fn get_nb_block(&self) -> usize {
         self.blocks.borrow().len()
     }
 
     /// return the centroid of a block 
-    #[allow(unused)]
     pub fn get_block_centroid(&self, bloc : usize) -> Result<Point<T>, ()> {
         if bloc > self.get_nb_block() {
             return Err(());
