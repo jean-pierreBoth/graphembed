@@ -3,3 +3,5 @@
 
 /// implements pava algorith for isotonic regression. adapted from pav_regression crate (See crates.io)
 pub  mod pava;
+
+pub(crate) mod algodens;
