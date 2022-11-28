@@ -1,5 +1,8 @@
+//!
+//! Adapted from pav_regression crate (See crates.io)
+
 //#![allow(unused)]
-//! Isotonic regression with PAVA algorithm
+
 
 // This file is modified from the crate pav_regression
 // Added following modifications:
@@ -110,7 +113,7 @@ pub struct BlockPoint<'a, T:Float + Debug> {
     direction : Direction,
     /// unsorted points,   
     points : &'a [Point<T>],
-    /// so that i -> points[sorted_index[i]] is sorted according to direction
+    /// so that i -> points\[sorted_index\[i\]\] is sorted according to direction
     index : &'a[usize],
     /// first index in sorted index. first is in block. So the block is [first, last[
     first : usize,
