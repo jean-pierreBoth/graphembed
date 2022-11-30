@@ -79,11 +79,11 @@ Possibly some data can need to be converted from Tsv format to Csv, before being
 
 1. Symetric
 
-*youtube.  Nodes: 1134890 Edges: 2987624 <https://snap.stanford.edu/data/com-Youtube.html>
+- youtube.  Nodes: 1134890 Edges: 2987624 <https://snap.stanford.edu/data/com-Youtube.html>
 
 2. Asymetric
 
-*twitter as tested in Hope  <http://konect.cc/networks/munmun_twitter_social>
+- twitter as tested in Hope  <http://konect.cc/networks/munmun_twitter_social>
         465017 nodes 834797 edges
 
 ## Some results

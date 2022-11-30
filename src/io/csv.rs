@@ -1,5 +1,7 @@
 //! Construct or dump a (small) graph or its matricial representation FULL or CSR from data from a csv file.
 //! 
+//! The graph constructed can be in sprs::CsMat, petgraph::GraphMap,  petgraph::Csr or the annembed MatRepr representation.  
+//! 
 //! If a file is declared as symetric but is in fact asymetric, the graph is symetrized upon reading.
 //! If some edges are multiply defined as a consequence, the code emits a warning on the first multiply defined edges, 
 //! dumps them, and finally gives a summary on the number edges multiply defined.
@@ -86,7 +88,7 @@ pub(crate) fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
 /// N and E in Grap<N,E,Ty,Ix are data (weights) associated to node and edge respectively>
 /// instantiate with UnDirected for undirected graph
 /// 
-pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> anyhow::Result<GraphMap<N, (), Ty>> 
+pub fn unweighted_csv_to_graphmap<N, Ty>(filepath : &Path, delim : u8) -> anyhow::Result<GraphMap<N, (), Ty>> 
     where   N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display ,
             Ty : EdgeType {
     //
@@ -99,7 +101,7 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
     let fileres = OpenOptions::new().read(true).open(&filepath);
     if fileres.is_err() {
         log::error!("ProcessingState reload_json : reload could not open file {:?}", filepath.as_os_str());
-        println!("directed_from_csv could not open file {:?}", filepath.as_os_str());
+        println!("unweighted_csv_to_graphmap could not open file {:?}", filepath.as_os_str());
         return Err(anyhow!("directed_from_csv could not open file {}", filepath.display()));            
     }
     let mut file = fileres?;
@@ -134,13 +136,19 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
         //
         if nb_record == 0 {
             nb_fields = record.len();
+            log::info!("nb fields = {}", nb_fields);
+            if nb_fields !=2 {
+                log::error!("unweighted_csv_to_graphmap got nb_fileds different from 2, check the delimitor , got {:?} as delimitor ", delim as char);
+                return Err(anyhow!("found only one field in record, check the delimitor , got {:?} as delimitor ", delim as char));
+            }
         }
         else {
             if record.len() != nb_fields {
-                println!("non constant number of fields at record {} first record has {}",nb_record+1,  nb_fields);
-                return Err(anyhow!("non constant number of fields at record {} first record has {}",nb_record+1,  nb_fields));   
+                println!("non constant number of fields at record {} first record has {}",nb_record,  nb_fields);
+                return Err(anyhow!("non constant number of fields at record {} first record has {}",nb_record,  nb_fields));   
             }
         }
+        //
         // we have 2 fields
         let field = record.get(0).unwrap();
         // decode into Ix type
@@ -172,7 +180,123 @@ pub fn directed_unweighted_csv_to_graph<N, Ty>(filepath : &Path, delim : u8) -> 
     log::info!("directed_unweighted_csv_to_graph read nb record : {}", nb_record);
     //
     Ok(graph)
-} // end of directed_unweighted_csv_to_graph
+} // end of unweighted_csv_to_graphmap
+
+
+
+/// get a weighted GraphMap. Morally the weight correspondinf to type W should be a Float
+pub fn weighted_csv_to_graphmap<N, W, Ty>(filepath : &Path, delim : u8) -> anyhow::Result<GraphMap<N, W, Ty>> 
+    where   N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display ,
+            W : FromStr + Float,
+            Ty : EdgeType {
+    //
+    // first get number of header lines
+    let nb_headers_line = get_header_size(&filepath)?;
+    log::info!("weighted_csv_to_graphmap , got header nb lines {}", nb_headers_line);
+    //
+    // get rid of potential lines beginning with # or %
+    // initialize a reader from filename, skip lines beginning with # or %
+    let fileres = OpenOptions::new().read(true).open(&filepath);
+    if fileres.is_err() {
+        log::error!("ProcessingState reload_json : reload could not open file {:?}", filepath.as_os_str());
+        println!("weighted_csv_to_graphmap could not open file {:?}", filepath.as_os_str());
+        return Err(anyhow!("weighted_csv_to_graphmap could not open file {}", filepath.display()));            
+    }
+    let mut file = fileres?;
+    // skip header lines
+    let mut nb_skipped = 0;
+    let mut c = [0];
+    loop {
+        file.read_exact(&mut c)?;
+        if c[0] == '\n' as u8 {
+            nb_skipped += 1;
+        }
+        if nb_skipped  == nb_headers_line {
+            break;
+        }
+    }
+    // now we can parse records and construct a parser from current position of file
+    // we already skipped headers
+    let mut rdr = ReaderBuilder::new().delimiter(delim).flexible(false).has_headers(false).from_reader(file);
+    //
+    let nb_nodes_guess = 50_000;   // to pass as function argument
+    let mut graph = GraphMap::<N, W, Ty>::with_capacity(nb_nodes_guess, 500_000);
+    //
+    let mut nb_record = 0;
+    let mut nb_fields = 0;
+    let mut node1 : N;
+    let mut node2 : N;
+    let mut weight : W;
+    for result in rdr.records() {
+        let record = result?;
+        if log::log_enabled!(Level::Info) && nb_record <= 5 {
+            log::info!("{:?}", record);
+        }
+        //
+        if nb_record == 0 {
+            nb_fields = record.len();
+            log::info!("nb fields = {}", nb_fields);
+            if nb_fields < 2 {
+                log::error!("csv::weighted_csv_to_graphmap : got nb_fileds different from 2, check the delimitor , got {:?} as delimitor ", delim as char);
+                return Err(anyhow!("found only one field in record, check the delimitor , got {:?} as delimitor ", delim as char));
+            }
+        }
+        else {
+            if record.len() != nb_fields {
+                println!("non constant number of fields at record {} first record has {}",nb_record,  nb_fields);
+                return Err(anyhow!("csv::weighted_csv_to_graphmap : non constant number of fields at record {} first record has {}",nb_record,  nb_fields));   
+            }
+        }
+        //
+        // we have 2 fields
+        let field = record.get(0).unwrap();
+        // decode into Ix type
+        if let Ok(idx) = field.parse::<N>() {
+            node1 = idx;
+            graph.add_node(idx);
+        }
+        else {
+            return Err(anyhow!("error decoding field 1 of record  {}",nb_record+1)); 
+        }
+        let field = record.get(1).unwrap();
+        if let Ok(idx) = field.parse::<N>() {
+            node2 = idx;
+            graph.add_node(idx);
+        }
+        else {
+            return Err(anyhow!("error decoding field 2 of record  {}",nb_record+1)); 
+        }
+        //
+        if nb_fields == 3 {
+            // then we read a weight
+            let field = record.get(2).unwrap();
+            if let Ok(w) = field.parse::<W>() {
+                weight = w;
+            }
+            else {
+                log::debug!("error decoding field 3 of record {}", nb_record+1);
+                return Err(anyhow!("error decoding field 3 of record  {}",nb_record+1)); 
+            }
+        }
+        else {
+            weight = W::one();
+        }
+        //
+        graph.add_edge(node1, node2, weight);
+        //
+        nb_record += 1;
+        if log::log_enabled!(Level::Info) && nb_record <= 5 {
+            log::info!("{:?}", record);
+            log::info!(" node1 {}, node2 {}", node1, node2);
+        }
+        // now fill graph
+    } // end of for
+    log::info!("weighted_csv_to_graphmap read nb record : {}", nb_record);
+    //
+    Ok(graph)
+} // end of weighted_csv_to_graphmap
+
+
 
 
 
@@ -496,16 +620,10 @@ fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-#[test]
-fn load_undirected() {
-    // 
-    println!("\n\n load_undirected");
-    log_init_test();
 
-} // end test load_undirected
 
 #[test]
-fn test_directed_unweighted_csv_to_graph() {
+fn test_directed_unweighted_csv_to_graphmap() {
     // We load  wiki-Vote.txt taken from Snap data directory. It is in Data directory of the crate.
     log_init_test();
     // path from where we launch cargo test
@@ -514,7 +632,7 @@ fn test_directed_unweighted_csv_to_graph() {
     let header_size = get_header_size(&path);
     assert_eq!(header_size.unwrap(),4);
     println!("\n\n test_directed_unweighted_csv_to_graph data : {:?}", path);
-    let graph = directed_unweighted_csv_to_graph::<u32, Directed>(&path, b'\t');
+    let graph = unweighted_csv_to_graphmap::<u32, Directed>(&path, b'\t');
     if let Err(err) = &graph {
         eprintln!("ERROR: {}", err);
     }
