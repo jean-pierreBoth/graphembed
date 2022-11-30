@@ -1,6 +1,6 @@
 //! density decomposition algorithm driver
 
-//#![allow(unused)]
+#![allow(unused)]
 
 /// We use Csr graph representation from petgraph.
 /// 
@@ -25,8 +25,8 @@ use parking_lot::{RwLock};
 use atomic::{Atomic, Ordering};
 use rayon::prelude::*;
 
-use petgraph::graph::{DefaultIx};
-use petgraph::csr::{Csr, EdgeReference};
+use petgraph::graph::{Graph, EdgeReference, DefaultIx};
+// use petgraph::csr::{Csr, EdgeReference};
 use petgraph::{Undirected, visit::*};
 
 
@@ -43,26 +43,26 @@ impl Default for WeightSplit {
 
 
 /// Structure describing how weight of edges is dispatched to nodes.
-struct EdgeSplit<'a, F, Ty> {
-    edge : EdgeReference<'a, F, Ty>,
+struct EdgeSplit<'a, F> {
+    edge : EdgeReference<'a, F>,
     wsplit : WeightSplit
 }
 
-impl <'a, F, Ty> EdgeSplit<'a, F, Ty> {
-    fn new(edge : EdgeReference<'a,F, Ty>, wsplit : WeightSplit) -> Self {
+impl <'a, F> EdgeSplit<'a, F> {
+    fn new(edge : EdgeReference<'a,F>, wsplit : WeightSplit) -> Self {
         EdgeSplit{edge, wsplit}
     }
 }
 
 
 /// Structure describing how the weight of edges is dispatched onto tis vertices.
-struct AlphaR<'a,F, Ty> {
+struct AlphaR<'a,F> {
     r : Vec<F>,
-    alpha : Vec<EdgeSplit<'a,F, Ty>>
+    alpha : Vec<EdgeSplit<'a,F>>
 }
 
-impl <'a, F, Ty> AlphaR<'a, F , Ty> {
-    fn new(r : Vec<F>, alpha : Vec<EdgeSplit<'a,F, Ty>>) -> Self {
+impl <'a, F> AlphaR<'a, F> {
+    fn new(r : Vec<F>, alpha : Vec<EdgeSplit<'a,F>>) -> Self {
         AlphaR{r,alpha}
     }
 } // end of impl AlphaR
@@ -71,7 +71,7 @@ impl <'a, F, Ty> AlphaR<'a, F , Ty> {
 
 /// initialize alpha and r (as defined in paper) by Frank-Wolfe algorithm
 /// returns (alpha, r) alpha is dimensioned to number of edges, r is dimensioned to number of vertex
-fn get_alpha_r<'a, F>(graph : &'a Csr<(), F, Undirected>, nbiter : usize) -> (Vec<Arc<RwLock<EdgeSplit<'a, F, Undirected>>>> , Vec<Arc<Atomic<F>>>)
+fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) -> (Vec<Arc<RwLock<EdgeSplit<'a, F>>>> , Vec<Arc<Atomic<F>>>)
     where F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send {
     //
     // how many nodes and edges
@@ -79,7 +79,7 @@ fn get_alpha_r<'a, F>(graph : &'a Csr<(), F, Undirected>, nbiter : usize) -> (Ve
     let nb_edges = graph.edge_count();
     // we will need to update r with // loops on edges.
     // We bet on low degree versus number of edges so low contention (See hogwild)
-    let mut alpha : Vec<Arc<RwLock<EdgeSplit<'a, F, Undirected>>>> = Vec::with_capacity(nb_edges);
+    let mut alpha : Vec<Arc<RwLock<EdgeSplit<'a, F>>>> = Vec::with_capacity(nb_edges);
     //
     let edges = graph.edge_references();
     for e in edges {
@@ -87,38 +87,30 @@ fn get_alpha_r<'a, F>(graph : &'a Csr<(), F, Undirected>, nbiter : usize) -> (Ve
         let split = EdgeSplit::new(e, WeightSplit(weight.to_f32().unwrap()/2., weight.to_f32().unwrap()/2.));
         alpha.push(Arc::new(RwLock::new(split)));
     }
-    // now we initialize r
-    let r :  Vec<Arc<Atomic<F>>> = (0..nb_nodes).into_iter().map(|i| Arc::new(Atomic::<F>::new(F::zero()))).collect();
-    // function that computes r from alpha
-    let r_from_alpha = | r :  &Vec<Arc<Atomic<F>>> , alpha : &Vec<Arc<RwLock<EdgeSplit<'a, F, Undirected>>>>|  {
-            (0..alpha.len()).into_par_iter().for_each(|i| {
+    // now we initialize r to 0
+    let r :  Vec<Arc<Atomic<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(Atomic::<F>::new(F::zero()))).collect();
+    //
+    // a function that computes r from alpha after each iteration
+    //
+    let r_from_alpha = | r :  &Vec<Arc<Atomic<F>>> , alpha : &Vec<Arc<RwLock<EdgeSplit<'a, F>>>>|  {
+            // reset r to 0
+            (0..nb_nodes).into_par_iter().for_each(|i| {
+                r[i].store(F::zero(), Ordering::Relaxed);
+            });
+            // alpha's load transferred to r
+        (0..alpha.len()).into_par_iter().for_each(|i| {
                 let alpha_i = alpha[i].read();
-                let old_value = r[alpha_i.edge.source() as usize].load(Ordering::Relaxed);
-                r[alpha_i.edge.source() as usize].store(old_value + *alpha_i.edge.weight(), Ordering::Relaxed);
-                r[alpha_i.edge.target() as usize].store(old_value + *alpha_i.edge.weight(), Ordering::Relaxed);
+                let old_value = r[alpha_i.edge.source().index()].load(Ordering::Relaxed);
+                r[alpha_i.edge.source().index()].store(old_value + F::from(alpha_i.wsplit.0).unwrap(), Ordering::Relaxed);
+
+                let old_value = r[alpha_i.edge.target().index()].load(Ordering::Relaxed);
+                r[alpha_i.edge.target().index()].store(old_value + F::from(alpha_i.wsplit.1).unwrap(), Ordering::Relaxed);
             }
         );
     };
     //
     // We dispatch alpha to r
     r_from_alpha(&r, &alpha);
-    // we can do iterations
-    (0..alpha.len()).into_par_iter().for_each(|i| {
-            // treat first node
-            let alpha_i = alpha[i].read();
-            let weight = F::from(alpha_i.wsplit.0).unwrap();
-            let node = alpha_i.edge.source();
-            let arc = &r[node as usize];
-            let new_value =  arc.load(Ordering::Relaxed) + weight;;
-            arc.store(new_value, Ordering::Relaxed);
-            // treat second node
-            let weight = F::from(alpha_i.wsplit.1).unwrap();
-            let node = alpha_i.edge.target();
-            let arc = &r[node as usize];
-            let new_value =  arc.load(Ordering::Relaxed) + weight;;
-            arc.store(new_value, Ordering::Relaxed);
-        }
-    );
     // now do iterations
     let delta_e : Vec<Arc<RwLock<WeightSplit>>> = (0..nb_edges).into_iter().map(
         |_| Arc::new(RwLock::new(WeightSplit::default()))
@@ -158,14 +150,45 @@ fn get_alpha_r<'a, F>(graph : &'a Csr<(), F, Undirected>, nbiter : usize) -> (Ve
 
 
 /// check stability of the vertex list gpart with respect to alfar
-fn is_stable<'a, F:Float, Ty>(graph : &'a Csr<F>, alfar : &'a AlphaR<'a,F, Ty>, gpart: &Vec<DefaultIx>) -> bool {
+fn is_stable<'a, F:Float, Ty>(graph : &'a Graph<(), F, Undirected>, alfar : &'a AlphaR<'a,F>, gpart: &Vec<DefaultIx>) -> bool {
     panic!("not yet implemented");
     return false;
 }  // end is_stable
 
 
 /// build a tentative decomposition from alphar using the PAVA regression
-fn try_decomposition<'a,F:Float, Ty>(alphar : &'a AlphaR<'a,F, Ty>) -> Vec<Vec<DefaultIx>> {
+fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx>> {
 
     panic!("not yet implemented");
 } // end of try_decomposition
+
+
+//==========================================================================================================
+
+mod tests {
+    use super::*;
+
+    use crate::io::csv::weighted_csv_to_graphmap;
+
+    fn log_init_test() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    } 
+
+    #[test]
+    fn density_miserables() {
+        log_init_test();
+        //
+        log::debug!("in algodens density_miserables");
+        let path = std::path::Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::info!("\n\n algodens::density_miserables, loading file {:?}", path);
+        let res = weighted_csv_to_graphmap::<u32, f64, Undirected>(&path, b' ');
+        if res.is_err() {
+            log::error!("algodens::density_miserables failed in csv_to_trimat");
+            assert_eq!(1, 0);
+        }
+        // now we can convert into a Graph
+        let graph = res.unwrap().into_graph::<>();
+        // check get_alpha_r
+        let (alpha, r) = get_alpha_r(&graph, 5);
+    }
+} // end of mod tests

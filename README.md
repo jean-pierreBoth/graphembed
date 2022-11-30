@@ -60,11 +60,9 @@ Larger datasets can be downloaded from the SNAP data collections <https://snap.s
 - Les miserables  <http://konect.cc/networks/moreno_lesmis>
     les miserables  co occurence of characters in Victor Hugo's novel 'Les Misérables'.
 
-  CA-GrQc.txt       <https://snap.stanford.edu/data/ca-GrQc.html>
+- p2p-Gnutella08.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella08.html>
 
-*p2p-Gnutella08.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella08.html>
-
-2. Asymetric graphs
+1. Asymetric graphs
 
 - wiki-vote               <https://snap.stanford.edu/data/wiki-Vote.html>
         7115 nodes 103689 edges
