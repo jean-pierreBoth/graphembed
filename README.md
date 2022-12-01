@@ -62,7 +62,7 @@ Larger datasets can be downloaded from the SNAP data collections <https://snap.s
 
 - p2p-Gnutella08.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella08.html>
 
-1. Asymetric graphs
+2. Asymetric graphs
 
 - wiki-vote               <https://snap.stanford.edu/data/wiki-Vote.html>
         7115 nodes 103689 edges

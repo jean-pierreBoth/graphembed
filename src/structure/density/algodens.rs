@@ -2,7 +2,9 @@
 
 #![allow(unused)]
 
-/// We use Csr graph representation from petgraph.
+
+
+/// We use Graph representation from petgraph.
 /// 
 /// For Frank-Wolfe iterations, we need // access to edges.
 ///      We use sprs graph representation and // access to rows.
@@ -20,20 +22,20 @@ use cpu_time::ProcessTime;
 
 use num_traits::{float::*, FromPrimitive};
 
+// synchronization primitive
 use std::sync::{Arc};
 use parking_lot::{RwLock};
 use atomic::{Atomic, Ordering};
 use rayon::prelude::*;
 
 use petgraph::graph::{Graph, EdgeReference, DefaultIx};
-// use petgraph::csr::{Csr, EdgeReference};
 use petgraph::{Undirected, visit::*};
 
+// to get sorting with index as result
+use indxvec::Vecops;
 
 
 /// describes weight of each node of an edge.
-/// Is in accordance with [Edge](Edge), first item correspond to first item of edge.
-
 #[derive(Copy,Clone,Debug)]
 pub struct WeightSplit(f32,f32);
 
@@ -43,6 +45,7 @@ impl Default for WeightSplit {
 
 
 /// Structure describing how weight of edges is dispatched to nodes.
+#[derive(Copy, Clone)]
 struct EdgeSplit<'a, F> {
     edge : EdgeReference<'a, F>,
     wsplit : WeightSplit
@@ -71,9 +74,12 @@ impl <'a, F> AlphaR<'a, F> {
 
 /// initialize alpha and r (as defined in paper) by Frank-Wolfe algorithm
 /// returns (alpha, r) alpha is dimensioned to number of edges, r is dimensioned to number of vertex
-fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) -> (Vec<Arc<RwLock<EdgeSplit<'a, F>>>> , Vec<Arc<Atomic<F>>>)
+fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) -> (Vec<EdgeSplit<'a, F>> , Vec<F>)
     where F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send {
     //
+    log::info!("entering Frank-Wolfe iterations");
+    let cpu_start = ProcessTime::now();
+    let sys_start = SystemTime::now();
     // how many nodes and edges
     let nb_nodes = graph.node_count();
     let nb_edges = graph.edge_count();
@@ -94,15 +100,15 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
     //
     let r_from_alpha = | r :  &Vec<Arc<Atomic<F>>> , alpha : &Vec<Arc<RwLock<EdgeSplit<'a, F>>>>|  {
             // reset r to 0
-            (0..nb_nodes).into_par_iter().for_each(|i| {
+        (0..nb_nodes).into_par_iter().for_each(|i| {
                 r[i].store(F::zero(), Ordering::Relaxed);
-            });
+        });
             // alpha's load transferred to r
         (0..alpha.len()).into_par_iter().for_each(|i| {
                 let alpha_i = alpha[i].read();
                 let old_value = r[alpha_i.edge.source().index()].load(Ordering::Relaxed);
                 r[alpha_i.edge.source().index()].store(old_value + F::from(alpha_i.wsplit.0).unwrap(), Ordering::Relaxed);
-
+                // process target
                 let old_value = r[alpha_i.edge.target().index()].load(Ordering::Relaxed);
                 r[alpha_i.edge.target().index()].store(old_value + F::from(alpha_i.wsplit.1).unwrap(), Ordering::Relaxed);
             }
@@ -124,11 +130,14 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
         (0..alpha.len()).into_par_iter().for_each(|i| {
             let mut delta_i = delta_e[i].write();
             let alpha_i = alpha[i].read();
+            let source = alpha_i.edge.source();
+            let target = alpha_i.edge.target();
+            let r_source = r[source.index()].load(Ordering::Relaxed);
+            let r_target = r[target.index()].load(Ordering::Relaxed);
             // get edge node with min r. The smaller gets the weight
-            if alpha_i.wsplit.0 <  alpha_i.wsplit.1  { 
+            if r_source <  r_target  { 
                 delta_i.0 = alpha_i.edge.weight().to_f32().unwrap();
                 delta_i.1 = 0.;
-
             } else {
                 delta_i.1 = alpha_i.edge.weight().to_f32().unwrap();
                 delta_i.0 = 0.;
@@ -144,8 +153,14 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
         // now we recompute r
         r_from_alpha(&r, &alpha);
     } // end of // loop on edges 
+    // We do not need locks any more, simplify
+    let r_s: Vec<F> = r.iter().map( |v| v.load(Ordering::Relaxed)).collect();
+    let alpha_s: Vec<EdgeSplit<'a,F>> = alpha.iter().map(|a| a.read().clone()).collect();
     //
-    return (alpha, r);       
+    log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
+            sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
+    //
+    return (alpha_s, r_s);       
 } // end of get_alpha_r
 
 
@@ -162,6 +177,36 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
     panic!("not yet implemented");
 } // end of try_decomposition
 
+
+
+
+#[cfg_attr(doc, katexit::katexit)]
+/// computes a decomposition of graph in blocks of vertices of decreasing density. 
+/// 
+/// The blocks satisfy:
+///  - $B_{i} \subset B_{i+1}$ 
+///  - $B_{0}=\emptyset , B_{max}=V$ where $V$ is the set of vertices of G.
+ 
+pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>) 
+    where  F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send {
+    let nbiter = 5;
+    let (alpha,r) = get_alpha_r(graph, nbiter);
+    //
+    let mut y : Vec<F> = (0..r.len()).into_iter().map(|_| F::zero()).collect();
+    for i in 0..alpha.len() {
+        let mut weight = F::zero();
+        let node_max = if alpha[i].wsplit.0 > alpha[i].wsplit.1 {
+            alpha[i].edge.source().index()
+        }
+        else {
+            alpha[i].edge.target().index()
+        };
+        y[node_max] += *alpha[i].edge.weight();
+    } // end of for i
+
+    // go to PAVA algorithm in decresing mode, the decomposition of y in blocks makes a tentative decomposition 
+
+} // end of approximate_decomposition
 
 //==========================================================================================================
 

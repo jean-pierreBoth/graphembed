@@ -85,7 +85,7 @@ env_logger = { version = "0.9"}
 # hack to avoid interaction bug with intel-mkl
 anyhow = { version = "1.0.58" }
 # for documentation
-katexit = {version = "0.1.0"}
+katexit = {version = "0.1"}
 
 
 [features]
