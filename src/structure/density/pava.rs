@@ -155,7 +155,7 @@ impl <'a, T> BlockPoint<'a, T>
         // update centroid of blocks
         self.centroid.merge(&other.centroid);
         //
-        log::debug!("exiting block merge self, {} {}", self.first, self.last);
+        log::debug!("exiting block merge self, {} {}, centroid : {:?}", self.first, self.last, self.centroid);
         //
         return Ok(());
     } // end of merge
@@ -199,9 +199,9 @@ impl <'a, T> BlockPoint<'a, T>
     // debug utility
     #[allow(unused)]
     pub fn dump(&self) {
-        log::debug!("block dump");
+        log::debug!("\n \n block dump");
         println!("first last centroid : {}  {}   {:?}", self.first, self.last, self.centroid);
-        println!("index : {:?}", self.index);
+//        println!("index : {:?}", self.index);
         println!(" first points :");
         let nbd = (self.last-self.first).min(3);
         for i in 0..nbd {
@@ -238,7 +238,7 @@ impl <'a, T:Float + Debug> PartialOrd for BlockPoint<'a,T> {
 /// centroid point of the original set.
 
 #[derive(Debug)]
-pub struct IsotonicRegression<'a, T:Float + Debug + 'static> {
+pub struct IsotonicRegression<'a, T:Float + Debug> {
     direction : Direction,
     /// points, unsorted,
     points: &'a[Point<T>],
@@ -252,7 +252,7 @@ pub struct IsotonicRegression<'a, T:Float + Debug + 'static> {
 
 
 impl <'a, T> IsotonicRegression<'a, T> 
-    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug + 'static {
+    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug  {
     /// Find an ascending isotonic regression from a set of points
     pub fn new_ascending(points: &[Point<T>]) -> IsotonicRegression<T> {
         IsotonicRegression::new(points, Direction::Ascending)
@@ -367,6 +367,8 @@ impl <'a, T> IsotonicRegression<'a, T>
     /// It is recommended to call it directly before calling interpolate as we can check that all is OK.
     pub fn do_isotonic<'b:'a>(&'b self)-> Result<(), anyhow::Error>  {
         //
+        log::debug!("do_isotonic , nb points : {:?}", self.points.len());
+        //
         if self.points.len() == 0 {
             log::info!("no points to do regression");
             return Err(anyhow!("no points to do regression"));
@@ -380,7 +382,13 @@ impl <'a, T> IsotonicRegression<'a, T>
         let mut blocks: Vec<RefCell<BlockPoint<T>>>  = Vec::new(); 
         for i in 0..self.points.len() {
             let new_block = BlockPoint::<T>::new_from_point(self.direction, self.points, &self.index, i);
-            assert!(i==0 || (i > 0 && self.points[self.index[i]].x > self.points[self.index[i-1]].x));
+            if !(i==0 || (i > 0 && self.points[self.index[i]].x >= self.points[self.index[i-1]].x)) {
+                log::warn!("i : {}, point : {:?}", i , self.points[self.index[i]].x);
+                if i > 0 {
+                    log::warn!("point i-1 : {:?}, point i : {:?}", self.points[self.index[i-1]].x, self.points[self.index[i]].x);
+                }
+            }
+//            assert!(i==0 || (i > 0 && self.points[self.index[i]].x >= self.points[self.index[i-1]].x));
             if i== 0 || ( i>0 && self.points[self.index[i]].x - self.points[self.index[i-1]].x > epsil) {
                 blocks.push(RefCell::new(new_block));
             }
@@ -402,7 +410,7 @@ impl <'a, T> IsotonicRegression<'a, T>
             let new_iso = blocks[i].clone();
             while !inserted {
                 if iso_blocks.is_empty() || iso_blocks.last().unwrap().borrow().is_ordered(&new_iso.borrow()) {
-                    log::debug!("inserting block, centroid : {:?} ", new_iso.borrow().centroid);
+                    log::debug!("\n inserting new block, centroid : {:?} ", new_iso.borrow().centroid);
                     iso_blocks.push(new_iso.clone());
                     inserted = true;
                 }
@@ -413,7 +421,7 @@ impl <'a, T> IsotonicRegression<'a, T>
             }
         } // end of for on blocks
         //
-        log::info!("after final merge nb blocks = {}", iso_blocks.len());
+        log::info!("\n after final merge nb blocks = {}", iso_blocks.len());
         // transfer to raw blocks
         let final_blocks : Vec<BlockPoint<T>> = iso_blocks.into_iter().map(|obj|  obj.into_inner() ).collect();
         *self.blocks.borrow_mut() = final_blocks;
@@ -440,7 +448,7 @@ impl <'a, T> IsotonicRegression<'a, T>
     // Some debugging utilities
 
     // check contiguity and order. abort if fails!
-    fn check_blocks(&self) -> bool {
+    pub(crate) fn check_blocks(&self) -> bool {
         let blocks = self.blocks.borrow();
         for i in 0..blocks.len() {
             if i == 0 {
@@ -456,7 +464,7 @@ impl <'a, T> IsotonicRegression<'a, T>
 
 
     // debugging method
-    fn print_blocks(&self) {
+    pub(crate) fn print_blocks(&self) {
         log::debug!("dump of blocks");
         let blocks = self.blocks.borrow();
         for i in 0..blocks.len() {

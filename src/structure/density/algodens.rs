@@ -33,7 +33,8 @@ use petgraph::{Undirected, visit::*};
 
 // to get sorting with index as result
 use indxvec::Vecops;
-
+//
+use super::pava::{Point, IsotonicRegression};
 
 /// describes weight of each node of an edge.
 #[derive(Copy,Clone,Debug)]
@@ -75,7 +76,7 @@ impl <'a, F> AlphaR<'a, F> {
 /// initialize alpha and r (as defined in paper) by Frank-Wolfe algorithm
 /// returns (alpha, r) alpha is dimensioned to number of edges, r is dimensioned to number of vertex
 fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) -> (Vec<EdgeSplit<'a, F>> , Vec<F>)
-    where F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send {
+    where F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send + std::fmt::Debug {
     //
     log::info!("entering Frank-Wolfe iterations");
     let cpu_start = ProcessTime::now();
@@ -188,8 +189,9 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
 ///  - $B_{0}=\emptyset , B_{max}=V$ where $V$ is the set of vertices of G.
  
 pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>) 
-    where  F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send {
-    let nbiter = 5;
+        where  F : Float + std::fmt::Debug + std::iter::Sum + FromPrimitive 
+                        + std::ops::AddAssign + std::ops::DivAssign + Sync + Send {
+    let nbiter = 10;
     let (alpha,r) = get_alpha_r(graph, nbiter);
     //
     let mut y : Vec<F> = (0..r.len()).into_iter().map(|_| F::zero()).collect();
@@ -203,8 +205,17 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
         };
         y[node_max] += *alpha[i].edge.weight();
     } // end of for i
-
-    // go to PAVA algorithm in decresing mode, the decomposition of y in blocks makes a tentative decomposition 
+    // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition 
+    // as r increases , y increases.
+    let points : Vec<Point<F>> = (0..r.len()).into_iter().map(|i| Point::new(-r[i], y[i])).collect();
+    let iso_regression = IsotonicRegression::new_descending(&points);
+    let res_regr = iso_regression.do_isotonic();
+    if res_regr.is_err() {
+        log::error!("approximate_decomposition failed in iso_regression regression");
+        std::process::exit(1);
+    }
+    let res = iso_regression.check_blocks();
+   // we try to get blocks
 
 } // end of approximate_decomposition
 
@@ -235,5 +246,8 @@ mod tests {
         let graph = res.unwrap().into_graph::<>();
         // check get_alpha_r
         let (alpha, r) = get_alpha_r(&graph, 5);
+        log::debug!("r : {:?}", &r[0..20]);
+        //
+        approximate_decomposition(&graph);
     }
 } // end of mod tests
