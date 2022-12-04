@@ -34,7 +34,7 @@ use petgraph::{Undirected, visit::*};
 // to get sorting with index as result
 use indxvec::Vecops;
 //
-use super::pava::{Point, IsotonicRegression};
+use super::pava::{Point, BlockPoint, IsotonicRegression};
 
 /// describes weight of each node of an edge.
 #[derive(Copy,Clone,Debug)]
@@ -69,6 +69,13 @@ impl <'a, F> AlphaR<'a, F> {
     fn new(r : Vec<F>, alpha : Vec<EdgeSplit<'a,F>>) -> Self {
         AlphaR{r,alpha}
     }
+    
+    /// get r field
+    pub fn get_r(&self) -> &Vec<F> { &self.r}
+
+    /// get alpha field
+    pub fn get_alpha(&self) -> &Vec<EdgeSplit<'a,F>> { &self.alpha }
+
 } // end of impl AlphaR
 
 
@@ -165,8 +172,11 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
 } // end of get_alpha_r
 
 
-/// check stability of the vertex list gpart with respect to alfar
-fn is_stable<'a, F:Float, Ty>(graph : &'a Graph<(), F, Undirected>, alfar : &'a AlphaR<'a,F>, gpart: &Vec<DefaultIx>) -> bool {
+/// check stability of a given vertex block with respect to alfar
+fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, block : &BlockPoint<'a,F>) -> bool {
+    //
+    let alfa = alphar.get_alpha().clone();
+
     panic!("not yet implemented");
     return false;
 }  // end is_stable
@@ -177,6 +187,7 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
 
     panic!("not yet implemented");
 } // end of try_decomposition
+
 
 
 
@@ -206,7 +217,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
         y[node_max] += *alpha[i].edge.weight();
     } // end of for i
     // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition 
-    // as r increases , y increases.
+    // as -r increases , y decreases. We begin algo by densest blocks!
     let points : Vec<Point<F>> = (0..r.len()).into_iter().map(|i| Point::new(-r[i], y[i])).collect();
     let iso_regression = IsotonicRegression::new_descending(&points);
     let res_regr = iso_regression.do_isotonic();
@@ -215,7 +226,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
         std::process::exit(1);
     }
     let res = iso_regression.check_blocks();
-   // we try to get blocks
+    // we try to get blocks
 
 } // end of approximate_decomposition
 

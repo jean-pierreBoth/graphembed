@@ -115,11 +115,11 @@ pub struct BlockPoint<'a, T:Float + Debug> {
     points : &'a [Point<T>],
     /// so that i -> points\[sorted_index\[i\]\] is sorted according to direction
     index : &'a[usize],
-    /// first index in sorted index. first is in block. So the block is [first, last[
+    /// first index in sorted index. first is in block. So the block consists in  points[index[first] ... points[index[last] [
     first : usize,
     /// last index in sorted index, last is outside block
     last : usize,
-    //
+    /// centroid of block of points
     centroid : Point<T>,
 } // end of BlockPoint
 
@@ -167,20 +167,32 @@ impl <'a, T> BlockPoint<'a, T>
     }
 
     /// get first index of block in the Direction ordering
-    pub fn get_first_index(&self) -> usize {
+    pub(crate) fn get_first_index(&self) -> usize {
         self.first
     }
 
     /// get last index of block in the Direction ordering
-    pub fn get_last_index(&self) -> usize {
+    pub(crate) fn get_last_index(&self) -> usize {
         self.last
     }
 
     // returns the index in original  &'a [Point<T>] of points in this block
     #[allow(unused)]
-    fn get_point_index(&self) -> &[usize] {
+    fn get_point_index_unsorted(&self) -> &[usize] {
         &self.index[self.first..self.last]
     }
+
+
+    // useful to build iterator. return a point given its rank in sorted index
+    fn get_point(&self, idx : usize) -> Option<&'a Point<T>> {
+        if idx < self.first || idx >= self.last{
+            return None;
+        }
+        else {
+            return Some(&self.points[self.index[idx]]);
+        }
+    } // end of get_point
+
 
     // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
     fn is_ordered(&self, other : &BlockPoint<T>) -> bool {
@@ -213,7 +225,13 @@ impl <'a, T> BlockPoint<'a, T>
             println!(" point i : {}  : {:?}", i , self.points[self.index[self.last-i]]);
         }         
     }
+
+    /// get an iterator over points in block
+    pub fn get_point_iter(&'a self) -> PointIterator<'a,T> {
+        return PointIterator::new(&self, self.index);
+    }
 } // end of impl BlockPoint
+
 
 
 impl <'a, T:Float + Debug> PartialEq for BlockPoint<'a,T> {
@@ -229,6 +247,50 @@ impl <'a, T:Float + Debug> PartialOrd for BlockPoint<'a,T> {
         self.centroid.x.partial_cmp(&other.centroid.x)
     }
 } // end of impl PartialOrd for BlockPoint<T> 
+
+//
+
+/// An iterator over points in a Block
+pub struct PointIterator<'a, T:Float + Debug> {
+    // block of point
+    block : BlockPoint<'a, T> ,
+    /// so that i -> points\[sorted_index\[i\]\] is sorted according to direction
+    index : &'a[usize],
+    /// index between block.first... block.last
+    pt_index : usize,
+} // end of struct PointIterator
+
+
+
+impl<'a, T> PointIterator<'a, T> 
+    where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug {
+
+    fn new(block : &'a BlockPoint<'a, T>, index : &'a[usize]) -> Self {
+        PointIterator{block: block.clone(), index:index, pt_index : block.get_first_index()}
+    }
+
+} // end of impl<'a, T> PointIterator
+
+
+
+impl <'a, T> Iterator for PointIterator<'a, T> 
+            where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug  {
+    //
+    type Item = (&'a Point<T>, usize);
+    /// next returns a (&point, rank in array of points in the whole isotonic regression)
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pt_index >= self.block.get_last_index() || self.pt_index < self.block.get_first_index() {
+            return None;
+        }
+        else {
+            let point = self.block.get_point(self.pt_index).unwrap();
+            let idx = self.pt_index;
+            self.pt_index += 1;
+            return Some((point, self.index[idx]));
+        }
+    } // end of next
+
+} // end  of impl Iterator for PointIterator<'a, T>
 
 
 
@@ -304,7 +366,7 @@ impl <'a, T> IsotonicRegression<'a, T>
         if blocknum >= blocks.borrow().len() {
             return None;
         }
-        let indexes = Vec::from(blocks.borrow()[blocknum].get_point_index());
+        let indexes = Vec::from(blocks.borrow()[blocknum].get_point_index_unsorted());
         return Some(indexes);
     } // end of get_point_index
 
@@ -357,7 +419,17 @@ impl <'a, T> IsotonicRegression<'a, T>
     }
 
 
-    /// returns 
+    /// return the BlockPoint of rank rank
+    pub fn get_block(&self, rank : usize) -> Option<BlockPoint<T>> {
+        if rank < self.blocks.borrow().len() {
+            Some(self.blocks.borrow()[rank])
+        }
+        else {
+            None
+        }
+    } // get_block
+
+
     /// Retrieve the mean point of the original point set+
     pub fn get_centroid(&self) -> &Point<T> {
         &self.centroid_point
