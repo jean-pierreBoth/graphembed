@@ -125,7 +125,7 @@ pub struct BlockPoint<'a, T:Float + Debug> {
 
 
 impl <'a, T> BlockPoint<'a, T>  
-    where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug {
+    where T : Float + std::ops::DivAssign + std::ops::AddAssign + Debug {
     
     pub fn new(direction: Direction, points : &'a Vec<Point<T>>, index : &'a [usize], first : usize, last : usize) -> Self {
         BlockPoint{direction, points, index, first , last, centroid : Point::<T>::default()}
@@ -194,6 +194,18 @@ impl <'a, T> BlockPoint<'a, T>
     } // end of get_point
 
 
+    // given rank in (so unsorted) Points array , returns true i point is in block else false
+    pub(crate) fn is_in_block(&self, rank : usize) -> bool {
+        let idx = self.index[rank];
+        if idx < self.first || idx >= self.last {
+            return false
+        }
+        else {
+            return true
+        }
+    } // end of is_in_block
+
+
     // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
     fn is_ordered(&self, other : &BlockPoint<T>) -> bool {
         assert_eq!(self.direction, other.direction);
@@ -207,6 +219,7 @@ impl <'a, T> BlockPoint<'a, T>
         };
         ordered
     } // end of is_ordered
+
 
     // debug utility
     #[allow(unused)]

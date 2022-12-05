@@ -28,7 +28,7 @@ use parking_lot::{RwLock};
 use atomic::{Atomic, Ordering};
 use rayon::prelude::*;
 
-use petgraph::graph::{Graph, EdgeReference, DefaultIx};
+use petgraph::graph::{Graph, EdgeReference, NodeIndex, DefaultIx};
 use petgraph::{Undirected, visit::*};
 
 // to get sorting with index as result
@@ -172,10 +172,45 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
 } // end of get_alpha_r
 
 
-/// check stability of a given vertex block with respect to alfar
-fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, block : &BlockPoint<'a,F>) -> bool {
+/// check stability of a given vertex block with respect to alfar (algo 2 of Danisch paper)
+fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, block : &BlockPoint<'a,F>) -> bool 
+    where F : Float + std::ops::DivAssign + std::ops::AddAssign + std::fmt::Debug + Sync + Send ,
+          N : Copy {
     //
-    let alfa = alphar.get_alpha().clone();
+    let mut alfa_tmp = alphar.get_alpha().clone();
+    // TODO try to // this loop?
+    let mut ptiter = block.get_point_iter();
+    while let Some((&pt, rank_pt)) = ptiter.next() {
+        let pt_idx = NodeIndex::new(rank_pt);
+        // rank guve us the index in graph
+        let mut neighbours = graph.neighbors_undirected(pt_idx);
+        // is neighbor in block
+        while let Some(neighbor) = neighbours.next() {
+            let neighbor_u = neighbor.index();
+            if block.is_in_block(neighbor_u) == false {
+                // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
+                let (edge_idx, direction) = graph.find_edge_undirected(pt_idx, neighbor).unwrap();
+                let edge = graph.edge_endpoints(edge_idx).unwrap();
+                // we must check for order
+                assert!(edge.0 == pt_idx && edge.1 == neighbor);
+                alfa_tmp[edge_idx.index()].wsplit.0 = 0.;
+                alfa_tmp[edge_idx.index()].wsplit.1 = alfa_tmp[edge_idx.index()].edge.weight().to_f32().unwrap();
+            }
+        }
+    } // end while on point in blocks
+    // we must recompute r from alfa_tmp
+    let nb_nodes = alphar.get_r().len();
+    let mut r :  Vec<Arc<Atomic<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(Atomic::<F>::new(F::zero()))).collect();
+    (0..alfa_tmp.len()).into_par_iter().for_each(|i| {
+            let alpha_i = alfa_tmp[i];
+            let old_value = r[alpha_i.edge.source().index()].load(Ordering::Relaxed);
+            r[alpha_i.edge.source().index()].store(old_value + F::from(alpha_i.wsplit.0).unwrap(), Ordering::Relaxed);
+            // process target
+            let old_value = r[alpha_i.edge.target().index()].load(Ordering::Relaxed);
+            r[alpha_i.edge.target().index()].store(old_value + F::from(alpha_i.wsplit.1).unwrap(), Ordering::Relaxed);
+        }
+    );
+    // we must check that r is greater on block than outside
 
     panic!("not yet implemented");
     return false;
@@ -184,7 +219,6 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
 
 /// build a tentative decomposition from alphar using the PAVA regression
 fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx>> {
-
     panic!("not yet implemented");
 } // end of try_decomposition
 
