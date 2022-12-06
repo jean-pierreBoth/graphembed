@@ -232,11 +232,12 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
 /// The blocks satisfy:
 ///  - $B_{i} \subset B_{i+1}$ 
 ///  - $B_{0}=\emptyset , B_{max}=V$ where $V$ is the set of vertices of G.
+///  - each block must be stable
  
 pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>) 
         where  F : Float + std::fmt::Debug + std::iter::Sum + FromPrimitive 
                         + std::ops::AddAssign + std::ops::DivAssign + Sync + Send ,
-               N : Copy  {
+               N : Copy {
     //
     let nbiter = 10;
     let alpha_r = get_alpha_r(graph, nbiter);
@@ -266,9 +267,9 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
     let res = iso_regression.check_blocks();
     // we try to get blocks. Must make union of bi to get increasing sequence of blocks
     let nb_blocks = iso_regression.get_nb_block();
-    /*
-    let mut stable_blocks = Vec::<BlockPoint<_,F>>::new();
-    let mut block_start: Option<BlockPoint<_,F>> = None;
+    
+    let mut stable_blocks = Vec::<BlockPoint<F>>::new();
+    let mut block_start: Option<BlockPoint<F>> = None;
      
     for i in 0..nb_blocks {
         let block = iso_regression.get_block(i).unwrap().clone();
@@ -288,10 +289,8 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
     if block_start.is_some() {
         panic!("should not happen");
     }
-    */
-
-    // now we have in blockunion, an increasing family of blocks, check stability
-
+    // now we have in blockunion, an increasing family of stable blocks
+    panic!("is_stable is not finished");
 } // end of approximate_decomposition
 
 //==========================================================================================================
