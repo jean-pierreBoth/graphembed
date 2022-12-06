@@ -115,7 +115,7 @@ pub struct BlockPoint<'a, T:Float + Debug> {
     points : &'a [Point<T>],
     /// so that i -> points\[sorted_index\[i\]\] is sorted according to direction
     index : &'a[usize],
-    /// first index in sorted index. first is in block. So the block consists in  points[index[first] ... points[index[last] [
+    /// first index in sorted index. first is in block. So the block consists in  points\[index\[first\] ... points\[index\[last] \[
     first : usize,
     /// last index in sorted index, last is outside block
     last : usize,
@@ -139,7 +139,7 @@ impl <'a, T> BlockPoint<'a, T>
 
 
     /// merge two contiguous BlockPoint
-    fn merge(&mut self, other : &BlockPoint<'a, T>) ->  Result<(), anyhow::Error> {
+    pub(crate) fn merge(&mut self, other : &BlockPoint<'a, T>) ->  Result<(), anyhow::Error> {
         log::debug!("entering block merge self, {} {} other :  {} {} ", self.first, self.last, other.first, other.last);
         // check contiguity
         if self.last == other.first {
@@ -161,7 +161,7 @@ impl <'a, T> BlockPoint<'a, T>
     } // end of merge
 
 
-    // return centroid
+    /// return centroid
     pub fn get_centroid(&self) ->  Point<T> {
         self.centroid
     }
@@ -221,7 +221,7 @@ impl <'a, T> BlockPoint<'a, T>
     } // end of is_ordered
 
 
-    // debug utility
+    /// debug utility, 
     #[allow(unused)]
     pub fn dump(&self) {
         log::debug!("\n \n block dump");

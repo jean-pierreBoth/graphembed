@@ -82,7 +82,7 @@ impl <'a, F> AlphaR<'a, F> {
 
 /// initialize alpha and r (as defined in paper) by Frank-Wolfe algorithm
 /// returns (alpha, r) alpha is dimensioned to number of edges, r is dimensioned to number of vertex
-fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) -> (Vec<EdgeSplit<'a, F>> , Vec<F>)
+fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) -> AlphaR<'a,F>
     where F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send + std::fmt::Debug {
     //
     log::info!("entering Frank-Wolfe iterations");
@@ -168,7 +168,7 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
     log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
             sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
     //
-    return (alpha_s, r_s);       
+    return AlphaR::new(r_s, alpha_s);       
 } // end of get_alpha_r
 
 
@@ -235,9 +235,13 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
  
 pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>) 
         where  F : Float + std::fmt::Debug + std::iter::Sum + FromPrimitive 
-                        + std::ops::AddAssign + std::ops::DivAssign + Sync + Send {
+                        + std::ops::AddAssign + std::ops::DivAssign + Sync + Send ,
+               N : Copy  {
+    //
     let nbiter = 10;
-    let (alpha,r) = get_alpha_r(graph, nbiter);
+    let alpha_r = get_alpha_r(graph, nbiter);
+    let alpha = alpha_r.get_alpha();
+    let r = alpha_r.get_r();
     //
     let mut y : Vec<F> = (0..r.len()).into_iter().map(|_| F::zero()).collect();
     for i in 0..alpha.len() {
@@ -260,7 +264,33 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
         std::process::exit(1);
     }
     let res = iso_regression.check_blocks();
-    // we try to get blocks
+    // we try to get blocks. Must make union of bi to get increasing sequence of blocks
+    let nb_blocks = iso_regression.get_nb_block();
+    /*
+    let mut stable_blocks = Vec::<BlockPoint<_,F>>::new();
+    let mut block_start: Option<BlockPoint<_,F>> = None;
+     
+    for i in 0..nb_blocks {
+        let block = iso_regression.get_block(i).unwrap().clone();
+        if block_start == None {
+            block_start = Some(block);
+        }
+        else {
+            block_start.as_mut().unwrap().merge(&block);
+        }
+        // if bi is stable we push it
+        if is_stable(graph, &alpha_r, block_start.as_ref().unwrap()) {
+            stable_blocks.push(block_start.unwrap());
+        } else {
+            continue;
+        }
+    }
+    if block_start.is_some() {
+        panic!("should not happen");
+    }
+    */
+
+    // now we have in blockunion, an increasing family of blocks, check stability
 
 } // end of approximate_decomposition
 
@@ -290,7 +320,8 @@ mod tests {
         // now we can convert into a Graph
         let graph = res.unwrap().into_graph::<>();
         // check get_alpha_r
-        let (alpha, r) = get_alpha_r(&graph, 5);
+        let alpha_r = get_alpha_r(&graph, 5);
+        let r = alpha_r.get_r();
         log::debug!("r : {:?}", &r[0..20]);
         //
         approximate_decomposition(&graph);

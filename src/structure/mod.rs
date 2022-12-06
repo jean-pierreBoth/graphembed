@@ -20,3 +20,6 @@
 
 /// density decomposition according to Danisch Chan Sozio _Large Scale decomposition via convex programming 2017_
 pub mod density;
+
+/// core decompositions according to Batagelj Zaversnik 2011
+pub mod cores;
