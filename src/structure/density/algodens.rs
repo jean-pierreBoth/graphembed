@@ -177,6 +177,9 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
     where F : Float + std::ops::DivAssign + std::ops::AddAssign + std::fmt::Debug + Sync + Send ,
           N : Copy {
     //
+    log::info!("in is_stable");
+    //
+    
     let mut alfa_tmp = alphar.get_alpha().clone();
     // TODO try to // this loop?
     let mut ptiter = block.get_point_iter();
@@ -192,9 +195,17 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
                 let (edge_idx, direction) = graph.find_edge_undirected(pt_idx, neighbor).unwrap();
                 let edge = graph.edge_endpoints(edge_idx).unwrap();
                 // we must check for order
-                assert!(edge.0 == pt_idx && edge.1 == neighbor);
-                alfa_tmp[edge_idx.index()].wsplit.0 = 0.;
-                alfa_tmp[edge_idx.index()].wsplit.1 = alfa_tmp[edge_idx.index()].edge.weight().to_f32().unwrap();
+                if edge.0 == pt_idx && edge.1 == neighbor {
+                    alfa_tmp[edge_idx.index()].wsplit.0 = 0.;
+                    alfa_tmp[edge_idx.index()].wsplit.1 = alfa_tmp[edge_idx.index()].edge.weight().to_f32().unwrap();
+                }
+                else if edge.0 == neighbor && edge.1 == pt_idx {
+                    alfa_tmp[edge_idx.index()].wsplit.0 = alfa_tmp[edge_idx.index()].edge.weight().to_f32().unwrap();
+                    alfa_tmp[edge_idx.index()].wsplit.1 = 0.;                    
+                }
+                else {
+                    panic!("should not happen");
+                }
             }
         }
     } // end while on point in blocks
@@ -203,6 +214,7 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
     let mut r :  Vec<Arc<Atomic<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(Atomic::<F>::new(F::zero()))).collect();
     (0..alfa_tmp.len()).into_par_iter().for_each(|i| {
             let alpha_i = alfa_tmp[i];
+            // process source node of edge
             let old_value = r[alpha_i.edge.source().index()].load(Ordering::Relaxed);
             r[alpha_i.edge.source().index()].store(old_value + F::from(alpha_i.wsplit.0).unwrap(), Ordering::Relaxed);
             // process target
@@ -211,9 +223,35 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
         }
     );
     // we must check that r is greater on block than outside
-
-    panic!("not yet implemented");
-    return false;
+    let mut min_in_block = F::max_value();
+    let mut max_not_in_block = F::zero();
+    (0..r.len()).into_iter().for_each(|i| if block.is_in_block(i) {
+            min_in_block = min_in_block.min(r[i].load(Ordering::Relaxed));
+        }
+        else {
+            max_not_in_block = max_not_in_block.max(r[i].load(Ordering::Relaxed));
+        }
+    );
+/* 
+    let r = alphar.get_r();
+    let mut min_in_block = F::max_value();
+    let mut max_not_in_block = F::zero();
+    (0..r.len()).into_iter().for_each(|i| if block.is_in_block(i) {
+            min_in_block = min_in_block.min(r[i]);
+        }
+        else {
+            max_not_in_block = max_not_in_block.max(r[i]);
+        }
+    );    
+    if log::log_enabled!(log::Level::Debug) {
+        log::debug!(" block first : {}, block last : {}", block.get_first_index(), block.get_last_index());
+        log::debug!(" min in block : {:?} max out block : {:?}", min_in_block, max_not_in_block);
+    }
+    */
+    
+    let stable = if min_in_block > max_not_in_block {true} else { return false};
+    //
+    return stable;
 }  // end is_stable
 
 
@@ -270,7 +308,9 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
     
     let mut stable_blocks = Vec::<BlockPoint<F>>::new();
     let mut block_start: Option<BlockPoint<F>> = None;
-     
+    log::info!(" unionization and stability check");
+    let cpu_start = ProcessTime::now();
+    let sys_start = SystemTime::now();
     for i in 0..nb_blocks {
         let block = iso_regression.get_block(i).unwrap().clone();
         if block_start == None {
@@ -281,16 +321,21 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
         }
         // if bi is stable we push it
         if is_stable(graph, &alpha_r, block_start.as_ref().unwrap()) {
+            log::info!("got a stable block");
             stable_blocks.push(block_start.unwrap());
+            block_start = None;
         } else {
             continue;
         }
     }
+    // last block should be stable
     if block_start.is_some() {
         panic!("should not happen");
     }
+    log::info!("approximate_decomposition, nb stable blocks : {}", stable_blocks.len());
+    log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
+            sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
     // now we have in blockunion, an increasing family of stable blocks
-    panic!("is_stable is not finished");
 } // end of approximate_decomposition
 
 //==========================================================================================================
