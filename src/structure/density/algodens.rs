@@ -34,7 +34,7 @@ use petgraph::{Undirected, visit::*};
 // to get sorting with index as result
 use indxvec::Vecops;
 //
-use super::pava::{Point, BlockPoint, PointBlockLocator, IsotonicRegression};
+use super::pava::{Point, BlockPoint, PointIterator, PointBlockLocator, IsotonicRegression};
 
 /// describes weight of each node of an edge.
 #[derive(Copy,Clone,Debug)]
@@ -172,15 +172,17 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
 } // end of get_alpha_r
 
 
+
+
+
 /// check stability of a given vertex block with respect to alfar (algo 2 of Danisch paper)
-fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, block : &BlockPoint<'a,F>, 
-                regression : &'a IsotonicRegression<'a,F>, numbloc: usize) -> bool 
+fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, 
+            pointblockloc : &'a PointBlockLocator<'a,F>,  block : &BlockPoint<'a,F>, numbloc: usize) -> bool 
     where F : Float + std::iter::Sum + FromPrimitive + std::ops::DivAssign + std::ops::AddAssign + std::fmt::Debug + Sync + Send ,
           N : Copy {
     //
-    log::info!("in is_stable");
+    log::info!("\n in is_stable for block : {}", numbloc);
     //
-    let pointblockloc = PointBlockLocator::new(regression);
     let mut alfa_tmp = alphar.get_alpha().clone();
     // TODO try to // this loop?
     let mut ptiter = block.get_point_iter();
@@ -191,7 +193,7 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
         // is neighbor in block
         while let Some(neighbor) = neighbours.next() {
             let neighbor_u = neighbor.index();
-            if pointblockloc.get_block_num(neighbor_u) != numbloc {
+            if pointblockloc.get_point_block_num(neighbor_u).unwrap() != numbloc {
                 // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
                 let (edge_idx, direction) = graph.find_edge_undirected(pt_idx, neighbor).unwrap();
                 let edge = graph.edge_endpoints(edge_idx).unwrap();
@@ -210,6 +212,7 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
             }
         }
     } // end while on point in blocks
+    log::info!("in is stable recomputing r from alfa");
     // we must recompute r from alfa_tmp
     let nb_nodes = alphar.get_r().len();
     let mut r :  Vec<Arc<Atomic<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(Atomic::<F>::new(F::zero()))).collect();
@@ -226,13 +229,15 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
     // we must check that r is greater on block than outside
     let mut min_in_block = F::max_value();
     let mut max_not_in_block = F::zero();
-    (0..r.len()).into_iter().for_each(|i| if pointblockloc.get_block_num(i) == numbloc {
+    (0..r.len()).into_iter().for_each(|i| if pointblockloc.get_point_block_num(i).unwrap() == numbloc {
             min_in_block = min_in_block.min(r[i].load(Ordering::Relaxed));
         }
         else {
             max_not_in_block = max_not_in_block.max(r[i].load(Ordering::Relaxed));
         }
     );
+    log::info!("stability result  bloc : {}, min in block {:?}, max out block {:?}", numbloc, min_in_block, max_not_in_block);
+
 /* 
     let r = alphar.get_r();
     let mut min_in_block = F::max_value();
@@ -249,8 +254,8 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
         log::debug!(" min in block : {:?} max out block : {:?}", min_in_block, max_not_in_block);
     }
     */
-
     let stable = if min_in_block > max_not_in_block {true} else { return false};
+    log::info!("stability result : {:?}, bloc : {}, min in block {:?}, max out block {:?}", stable, numbloc, min_in_block, max_not_in_block);
     //
     return stable;
 }  // end is_stable
@@ -278,7 +283,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
                         + std::ops::AddAssign + std::ops::DivAssign + Sync + Send ,
                N : Copy {
     //
-    let nbiter = 10;
+    let nbiter = 100;
     let alpha_r = get_alpha_r(graph, nbiter);
     let alpha = alpha_r.get_alpha();
     let r = alpha_r.get_r();
@@ -304,7 +309,10 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
         std::process::exit(1);
     }
     let res = iso_regression.check_blocks();
-    // we try to get blocks. Must make union of bi to get increasing sequence of blocks
+
+    // we try to get blocks. Must make union of blocks to get increasing sequence of blocks
+    // and check their stability
+    let pointblocklocator = PointBlockLocator::new(&iso_regression);
     let nb_blocks = iso_regression.get_nb_block();
     
     let mut stable_blocks = Vec::<BlockPoint<F>>::new();
@@ -321,7 +329,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
             block_start.as_mut().unwrap().merge(&block);
         }
         // if bi is stable we push it
-        if is_stable(graph, &alpha_r, block_start.as_ref().unwrap(), &iso_regression, i) {
+        if is_stable(graph, &alpha_r, &pointblocklocator , block_start.as_ref().unwrap(), i) {
             log::info!("got a stable block");
             stable_blocks.push(block_start.unwrap());
             block_start = None;
@@ -349,6 +357,63 @@ mod tests {
     fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();
     } 
+
+    #[test]
+    fn pava_miserables() {
+        log_init_test();
+        //
+        log::debug!("in algodens density_miserables");
+        let path = std::path::Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        log::info!("\n\n algodens::density_miserables, loading file {:?}", path);
+        let res = weighted_csv_to_graphmap::<u32, f64, Undirected>(&path, b' ');
+        if res.is_err() {
+            log::error!("algodens::density_miserables failed in csv_to_trimat");
+            assert_eq!(1, 0);
+        }
+        // now we can convert into a Graph
+        let graph = res.unwrap().into_graph::<>();
+        // check get_alpha_r
+        let alpha_r = get_alpha_r(&graph, 5);
+        let alpha = alpha_r.get_alpha();
+        let r = alpha_r.get_r();
+        //
+        let mut y : Vec<f64> = (0..r.len()).into_iter().map(|_| 0.).collect();
+        for i in 0..alpha.len() {
+            let mut weight = 0.;
+            let node_max = if alpha[i].wsplit.0 > alpha[i].wsplit.1 {
+                alpha[i].edge.source().index()
+            }
+            else {
+                alpha[i].edge.target().index()
+            };
+            y[node_max] += *alpha[i].edge.weight();
+        } // end of for i
+        // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition 
+        // as -r increases , y decreases. We begin algo by densest blocks!
+        let points : Vec<Point<f64>> = (0..r.len()).into_iter().map(|i| Point::new(-r[i], y[i])).collect();
+        let iso_regression = IsotonicRegression::new_descending(&points);
+        let res_regr = iso_regression.do_isotonic();
+        if res_regr.is_err() {
+            log::error!("approximate_decomposition failed in iso_regression regression");
+            std::process::exit(1);
+        }
+        let res = iso_regression.check_blocks();
+        // check iterator on bloc2
+        let block = iso_regression.get_block(4).unwrap();
+        log::debug!("\n block dump");
+        block.dump();
+        log::debug!("\n block iteration");
+        let mut blockiter = PointIterator::new(&block, iso_regression.get_point_index());
+        let mut nb_points_in = 0;
+        while let Some(point) = blockiter.next() {
+            log::debug!("point : {:?}", point);
+            nb_points_in += 1;
+        }
+        assert_eq!(nb_points_in, block.get_nb_points());
+    }  // end of pava_miserables
+
+
+
 
     #[test]
     fn density_miserables() {

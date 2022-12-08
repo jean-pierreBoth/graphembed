@@ -194,7 +194,10 @@ impl <'a, T> BlockPoint<'a, T>
     } // end of get_point
 
 
-
+    /// get number of points in block
+    pub fn get_nb_points(&self) -> usize {
+        self.last- self.first
+    }
 
     // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
     fn is_ordered(&self, other : &BlockPoint<T>) -> bool {
@@ -268,7 +271,7 @@ pub struct PointIterator<'a, T:Float + Debug> {
 impl<'a, T> PointIterator<'a, T> 
     where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug {
 
-    fn new(block : &'a BlockPoint<'a, T>, index : &'a[usize]) -> Self {
+    pub fn new(block : &'a BlockPoint<'a, T>, index : &'a[usize]) -> Self {
         PointIterator{block: block.clone(), index:index, pt_index : block.get_first_index()}
     }
 
@@ -280,7 +283,7 @@ impl <'a, T> Iterator for PointIterator<'a, T>
             where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug  {
     //
     type Item = (&'a Point<T>, usize);
-    /// next returns a (&point, rank in array of points in the whole isotonic regression)
+    /// next returns a (&point, rank) in array of *unsorted* points as given to the isotonic regression allocator
     fn next(&mut self) -> Option<Self::Item> {
         if self.pt_index >= self.block.get_last_index() || self.pt_index < self.block.get_first_index() {
             return None;
@@ -297,11 +300,9 @@ impl <'a, T> Iterator for PointIterator<'a, T>
 
 //=========================================================================================================
 
+/// This structure stores the affectation of each original point to its block
 pub struct PointBlockLocator<'a, T:Float + Debug> {
-    regression : &'a IsotonicRegression<'a, T>,
-    /// index[i] in regression gives the i-th point in sorting order, inversed_index[i] gives
-    /// where is the i-th (with respect to unsorted point array in regression) point in sorted array
-    inversed_index : Vec<usize>,
+    _regression : &'a IsotonicRegression<'a, T>,
     /// point[i] is to be found in blocknum[i]
     blocknum : Vec<u32>
 }
@@ -313,7 +314,7 @@ impl<'a, T> PointBlockLocator<'a,T>
     pub fn new(regression : &'a IsotonicRegression<'a, T>)  -> Self {
         let index = regression.get_point_index();
         // essentially we invert index
-        let mut rank = Vec::<usize>::with_capacity(index.len());
+        let mut rank :Vec::<usize> = (0..index.len()).into_iter().map(|_| 0).collect();
         for i in 0..index.len() {
             let k = index[i];
             rank[k] = i;
@@ -322,18 +323,19 @@ impl<'a, T> PointBlockLocator<'a,T>
         let nb_blocks = regression.get_nb_block();
         let mut nb_found = 0;
         let mut blocknum : Vec::<u32> = (0..index.len()).into_iter().map(|_| 0).collect();
-        let mut last_b_found : i64 = -1;
+        let mut last_b_found : usize = 0;
         let mut found : bool;
         for i in 0..index.len() {
             let k = index[i];
             found = false;
             // TODO as order of block and index coincinde we can search from last block b accepted
-            for b in 0..nb_blocks {
+            for b in last_b_found..nb_blocks {
                 let block = regression.get_block(b).unwrap();
-                if i >= block.get_first_index() && i < block.get_first_index() {
+                if i >= block.get_first_index() && i < block.get_last_index() {
                     blocknum[k] = b as u32;
                     nb_found += 1;
-                    last_b_found = b as i64;
+                    log::debug!("PointBlockLocator setting point i: {}, set to blocnum  : {}", i, b);
+                    last_b_found = b;
                     found = true;
                     break;
                 }
@@ -345,13 +347,20 @@ impl<'a, T> PointBlockLocator<'a,T>
         }
         assert_eq!(nb_found, index.len());
         //
-        PointBlockLocator{regression, inversed_index : rank, blocknum}
+        PointBlockLocator{_regression : regression,  blocknum}
     } // end of new
 
     /// return the block of a point
-    pub fn get_block_num(&self, k : usize) -> usize {
-        self.blocknum[k] as usize
-    }
+    pub fn get_point_block_num(&self, k : usize) -> Result<usize,anyhow::Error> {
+        if k < self.blocknum.len() {
+            Ok(self.blocknum[k] as usize)
+        }
+        else {
+            Err(anyhow!("too large arg, not so many blocks"))
+        }
+    } // end of get_point_block_num
+
+
 }  // end of PointBlockLocator
 
 
@@ -414,9 +423,8 @@ impl <'a, T> IsotonicRegression<'a, T>
     } // end of new 
 
 
-    /// returns sorting index of orignal points
-    #[allow(unused)]
-    fn get_point_index(&self) -> &[usize] {
+    /// returns sorting index of original points in the order of the isotonic regression
+    pub fn get_point_index(&self) -> &[usize] {
         &self.index
     } // end of get_point_index
 
@@ -677,7 +685,7 @@ mod tests {
         //
         log_init_test();
         //
-        let points = &[ Point::new(0.5, -0.5), Point::new(1.0, 2.0), Point::new(2.0, 0.0)];
+        let points = &[ Point::new(0.5, -0.5), Point::new(2.0, 0.0), Point::new(1.0, 2.0)];
         let regression = IsotonicRegression::new(points, Direction::Ascending);
         let res = regression.do_isotonic();
         assert!(res.is_ok());
@@ -687,6 +695,12 @@ mod tests {
         let centroid_2 = blocks.borrow()[1].get_centroid();
         assert_eq!(centroid_1, Point::new(0.5, -0.5));
         assert_eq!(centroid_2, Point::new_with_weight(1.5, 1.0, 2.0));
+        // now test PointBlockIterator
+        // first point is in block 0, points 1 and 2 are in block 1
+        let locator = PointBlockLocator::new(&regression);
+        assert_eq!(locator.get_point_block_num(0).unwrap(), 0);
+        assert_eq!(locator.get_point_block_num(1).unwrap(), 1);
+        assert_eq!(locator.get_point_block_num(2).unwrap(), 1);
     } // end of isotonic_one_not_merged
 
 
@@ -784,5 +798,6 @@ mod tests {
         let regression = IsotonicRegression::new_ascending(&points);
         assert_eq!(regression.interpolate(0.0), 3.0);
     }
+
 
 }
