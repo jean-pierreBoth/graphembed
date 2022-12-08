@@ -194,16 +194,6 @@ impl <'a, T> BlockPoint<'a, T>
     } // end of get_point
 
 
-    // given rank in (so unsorted) Points array , returns true i point is in block else false
-    pub(crate) fn is_in_block(&self, rank : usize) -> bool {
-        let idx = self.index[rank];
-        if idx < self.first || idx >= self.last {
-            return false
-        }
-        else {
-            return true
-        }
-    } // end of is_in_block
 
 
     // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
@@ -305,6 +295,64 @@ impl <'a, T> Iterator for PointIterator<'a, T>
 
 } // end  of impl Iterator for PointIterator<'a, T>
 
+//=========================================================================================================
+
+pub struct PointBlockLocator<'a, T:Float + Debug> {
+    regression : &'a IsotonicRegression<'a, T>,
+    /// index[i] in regression gives the i-th point in sorting order, inversed_index[i] gives
+    /// where is the i-th (with respect to unsorted point array in regression) point in sorted array
+    inversed_index : Vec<usize>,
+    /// point[i] is to be found in blocknum[i]
+    blocknum : Vec<u32>
+}
+
+
+impl<'a, T> PointBlockLocator<'a,T> 
+    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug  {
+        //
+    pub fn new(regression : &'a IsotonicRegression<'a, T>)  -> Self {
+        let index = regression.get_point_index();
+        // essentially we invert index
+        let mut rank = Vec::<usize>::with_capacity(index.len());
+        for i in 0..index.len() {
+            let k = index[i];
+            rank[k] = i;
+        }
+        // now for each value of rank we must find block such that block.first <= rank < block.last
+        let nb_blocks = regression.get_nb_block();
+        let mut nb_found = 0;
+        let mut blocknum : Vec::<u32> = (0..index.len()).into_iter().map(|_| 0).collect();
+        let mut last_b_found : i64 = -1;
+        let mut found : bool;
+        for i in 0..index.len() {
+            let k = index[i];
+            found = false;
+            // TODO as order of block and index coincinde we can search from last block b accepted
+            for b in 0..nb_blocks {
+                let block = regression.get_block(b).unwrap();
+                if i >= block.get_first_index() && i < block.get_first_index() {
+                    blocknum[k] = b as u32;
+                    nb_found += 1;
+                    last_b_found = b as i64;
+                    found = true;
+                    break;
+                }
+            }
+            if found != true {
+                log::error!(" point cannot be located in any block");
+                regression.check_blocks();
+            }
+        }
+        assert_eq!(nb_found, index.len());
+        //
+        PointBlockLocator{regression, inversed_index : rank, blocknum}
+    } // end of new
+
+    /// return the block of a point
+    pub fn get_block_num(&self, k : usize) -> usize {
+        self.blocknum[k] as usize
+    }
+}  // end of PointBlockLocator
 
 
 //==========================================================================================================
@@ -327,7 +375,7 @@ pub struct IsotonicRegression<'a, T:Float + Debug> {
 
 
 impl <'a, T> IsotonicRegression<'a, T> 
-    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug  {
+    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug {
     /// Find an ascending isotonic regression from a set of points
     pub fn new_ascending(points: &[Point<T>]) -> IsotonicRegression<T> {
         IsotonicRegression::new(points, Direction::Ascending)
@@ -485,6 +533,8 @@ impl <'a, T> IsotonicRegression<'a, T>
             }
         }
         log::info!("nb blocks with different x : {}", blocks.len());
+        //
+        
         // we merge blocks as soon there is an ordering violation
         // We scan points according to index. The test of block creation must depend on direction.
         let mut iso_blocks : Vec<RefCell<BlockPoint<T>>>  = Vec::new(); 

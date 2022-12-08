@@ -34,7 +34,7 @@ use petgraph::{Undirected, visit::*};
 // to get sorting with index as result
 use indxvec::Vecops;
 //
-use super::pava::{Point, BlockPoint, IsotonicRegression};
+use super::pava::{Point, BlockPoint, PointBlockLocator, IsotonicRegression};
 
 /// describes weight of each node of an edge.
 #[derive(Copy,Clone,Debug)]
@@ -173,13 +173,14 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
 
 
 /// check stability of a given vertex block with respect to alfar (algo 2 of Danisch paper)
-fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, block : &BlockPoint<'a,F>) -> bool 
-    where F : Float + std::ops::DivAssign + std::ops::AddAssign + std::fmt::Debug + Sync + Send ,
+fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, block : &BlockPoint<'a,F>, 
+                regression : &'a IsotonicRegression<'a,F>, numbloc: usize) -> bool 
+    where F : Float + std::iter::Sum + FromPrimitive + std::ops::DivAssign + std::ops::AddAssign + std::fmt::Debug + Sync + Send ,
           N : Copy {
     //
     log::info!("in is_stable");
     //
-    
+    let pointblockloc = PointBlockLocator::new(regression);
     let mut alfa_tmp = alphar.get_alpha().clone();
     // TODO try to // this loop?
     let mut ptiter = block.get_point_iter();
@@ -190,7 +191,7 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
         // is neighbor in block
         while let Some(neighbor) = neighbours.next() {
             let neighbor_u = neighbor.index();
-            if block.is_in_block(neighbor_u) == false {
+            if pointblockloc.get_block_num(neighbor_u) != numbloc {
                 // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
                 let (edge_idx, direction) = graph.find_edge_undirected(pt_idx, neighbor).unwrap();
                 let edge = graph.edge_endpoints(edge_idx).unwrap();
@@ -225,7 +226,7 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
     // we must check that r is greater on block than outside
     let mut min_in_block = F::max_value();
     let mut max_not_in_block = F::zero();
-    (0..r.len()).into_iter().for_each(|i| if block.is_in_block(i) {
+    (0..r.len()).into_iter().for_each(|i| if pointblockloc.get_block_num(i) == numbloc {
             min_in_block = min_in_block.min(r[i].load(Ordering::Relaxed));
         }
         else {
@@ -248,7 +249,7 @@ fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirecte
         log::debug!(" min in block : {:?} max out block : {:?}", min_in_block, max_not_in_block);
     }
     */
-    
+
     let stable = if min_in_block > max_not_in_block {true} else { return false};
     //
     return stable;
@@ -320,7 +321,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
             block_start.as_mut().unwrap().merge(&block);
         }
         // if bi is stable we push it
-        if is_stable(graph, &alpha_r, block_start.as_ref().unwrap()) {
+        if is_stable(graph, &alpha_r, block_start.as_ref().unwrap(), &iso_regression, i) {
             log::info!("got a stable block");
             stable_blocks.push(block_start.unwrap());
             block_start = None;
