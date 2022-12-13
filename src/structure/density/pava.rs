@@ -347,7 +347,7 @@ pub(crate) fn get_point_blocnum<T>(regression : &IsotonicRegression<T>) -> Vec<u
 
 /// This structure stores the affectation of each original point to its block
 pub struct PointBlockLocator {
-    /// point[i] is to be found in blocknum[i]
+    /// point`[i`] is to be found in blocknum`[i`]
     blocknum : Vec<u32>
 }
 
