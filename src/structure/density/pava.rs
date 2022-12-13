@@ -254,7 +254,8 @@ impl <'a, T:Float + Debug> PartialOrd for BlockPoint<'a,T> {
     }
 } // end of impl PartialOrd for BlockPoint<T> 
 
-//
+// ==========
+
 
 /// An iterator over points in a Block
 pub struct PointIterator<'a, T:Float + Debug> {
@@ -300,54 +301,62 @@ impl <'a, T> Iterator for PointIterator<'a, T>
 
 //=========================================================================================================
 
+
+
+pub(crate) fn get_point_blocnum<T>(regression : &IsotonicRegression<T>) -> Vec<u32> 
+    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug {
+        //
+    let index = regression.get_point_index();
+    // essentially we invert index
+    let mut rank :Vec::<usize> = (0..index.len()).into_iter().map(|_| 0).collect();
+    for i in 0..index.len() {
+        let k = index[i];
+        rank[k] = i;
+    }
+    // now for each value of rank we must find block such that block.first <= rank < block.last
+    let nb_blocks = regression.get_nb_block();
+    let mut nb_found = 0;
+    let mut blocknum : Vec::<u32> = (0..index.len()).into_iter().map(|_| 0).collect();
+    let mut last_b_found : usize = 0;
+    let mut found : bool;
+    for i in 0..index.len() {
+        let k = index[i];
+        found = false;
+        // TODO as order of block and index coincinde we can search from last block b accepted
+        for b in last_b_found..nb_blocks {
+            let block = regression.get_block(b).unwrap();
+            if i >= block.get_first_index() && i < block.get_last_index() {
+                blocknum[k] = b as u32;
+                nb_found += 1;
+                log::debug!("PointBlockLocator setting point index: {}, rank : {}, set to blocnum  : {}", i, k, b);
+                last_b_found = b;
+                found = true;
+                break;
+            }
+        }
+        if found != true {
+            log::error!(" point cannot be located in any block");
+            regression.check_blocks();
+        }
+    }
+    assert_eq!(nb_found, index.len());
+    return blocknum;
+}
+
+
+
 /// This structure stores the affectation of each original point to its block
-pub struct PointBlockLocator<'a, T:Float + Debug> {
-    _regression : &'a IsotonicRegression<'a, T>,
+pub struct PointBlockLocator {
     /// point[i] is to be found in blocknum[i]
     blocknum : Vec<u32>
 }
 
 
-impl<'a, T> PointBlockLocator<'a,T> 
-    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug  {
+impl PointBlockLocator  {
         //
-    pub fn new(regression : &'a IsotonicRegression<'a, T>)  -> Self {
-        let index = regression.get_point_index();
-        // essentially we invert index
-        let mut rank :Vec::<usize> = (0..index.len()).into_iter().map(|_| 0).collect();
-        for i in 0..index.len() {
-            let k = index[i];
-            rank[k] = i;
-        }
-        // now for each value of rank we must find block such that block.first <= rank < block.last
-        let nb_blocks = regression.get_nb_block();
-        let mut nb_found = 0;
-        let mut blocknum : Vec::<u32> = (0..index.len()).into_iter().map(|_| 0).collect();
-        let mut last_b_found : usize = 0;
-        let mut found : bool;
-        for i in 0..index.len() {
-            let k = index[i];
-            found = false;
-            // TODO as order of block and index coincinde we can search from last block b accepted
-            for b in last_b_found..nb_blocks {
-                let block = regression.get_block(b).unwrap();
-                if i >= block.get_first_index() && i < block.get_last_index() {
-                    blocknum[k] = b as u32;
-                    nb_found += 1;
-                    log::debug!("PointBlockLocator setting point i: {}, set to blocnum  : {}", i, b);
-                    last_b_found = b;
-                    found = true;
-                    break;
-                }
-            }
-            if found != true {
-                log::error!(" point cannot be located in any block");
-                regression.check_blocks();
-            }
-        }
-        assert_eq!(nb_found, index.len());
-        //
-        PointBlockLocator{_regression : regression,  blocknum}
+    pub fn new<T> (regression : &IsotonicRegression<T>)  -> Self 
+    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug {
+        PointBlockLocator{blocknum : get_point_blocnum(&regression)}
     } // end of new
 
     /// return the block of a point
@@ -361,6 +370,10 @@ impl<'a, T> PointBlockLocator<'a,T>
     } // end of get_point_block_num
 
 
+    /// return num bloc of each point
+    pub fn get_point_blocnum(&mut self) -> &mut Vec<u32> {
+        &mut self.blocknum
+    }
 }  // end of PointBlockLocator
 
 

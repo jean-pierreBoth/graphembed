@@ -34,7 +34,7 @@ use petgraph::{Undirected, visit::*};
 // to get sorting with index as result
 use indxvec::Vecops;
 //
-use super::pava::{Point, BlockPoint, PointIterator, PointBlockLocator, IsotonicRegression};
+use super::pava::{Point, BlockPoint, PointIterator, PointBlockLocator, IsotonicRegression, get_point_blocnum};
 
 /// describes weight of each node of an edge.
 #[derive(Copy,Clone,Debug)]
@@ -176,88 +176,106 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
 
 
 /// check stability of a given vertex block with respect to alfar (algo 2 of Danisch paper)
-fn is_stable<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, 
-            pointblockloc : &'a PointBlockLocator<'a,F>,  block : &BlockPoint<'a,F>, numbloc: usize) -> bool 
-    where F : Float + std::iter::Sum + FromPrimitive + std::ops::DivAssign + std::ops::AddAssign + std::fmt::Debug + Sync + Send ,
+fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, 
+                    iso_regression : &'a IsotonicRegression<F>)
+    where F : Float + std::iter::Sum + FromPrimitive + std::ops::DivAssign + std::ops::AddAssign + std::ops::SubAssign + std::fmt::Debug + Sync + Send ,
           N : Copy {
     //
-    log::info!("\n in is_stable for block : {}", numbloc);
+    let nb_reg_blocks = iso_regression.get_nb_block();
+    let mut pointblocklocator = PointBlockLocator::new(&iso_regression);
+    // numblocks as coming from isotonic_regression
+    let mut reg_numblocks = get_point_blocnum(&iso_regression);
     //
     let mut alfa_tmp = alphar.get_alpha().clone();
-    // TODO try to // this loop?
-    let mut ptiter = block.get_point_iter();
-    while let Some((&pt, rank_pt)) = ptiter.next() {
-        let pt_idx = NodeIndex::new(rank_pt);
-        // rank guve us the index in graph
-        let mut neighbours = graph.neighbors_undirected(pt_idx);
-        // is neighbor in block
-        while let Some(neighbor) = neighbours.next() {
-            let neighbor_u = neighbor.index();
-            if pointblockloc.get_point_block_num(neighbor_u).unwrap() != numbloc {
-                // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
-                let (edge_idx, direction) = graph.find_edge_undirected(pt_idx, neighbor).unwrap();
-                let edge = graph.edge_endpoints(edge_idx).unwrap();
-                // we must check for order
-                if edge.0 == pt_idx && edge.1 == neighbor {
-                    alfa_tmp[edge_idx.index()].wsplit.0 = 0.;
-                    alfa_tmp[edge_idx.index()].wsplit.1 = alfa_tmp[edge_idx.index()].edge.weight().to_f32().unwrap();
-                }
-                else if edge.0 == neighbor && edge.1 == pt_idx {
-                    alfa_tmp[edge_idx.index()].wsplit.0 = alfa_tmp[edge_idx.index()].edge.weight().to_f32().unwrap();
-                    alfa_tmp[edge_idx.index()].wsplit.1 = 0.;                    
-                }
-                else {
-                    panic!("should not happen");
+    let mut r = alphar.get_r().clone();
+    let mut r_test = alphar.get_r().clone();
+    // initialize stable_numblocks to sthing  impossible so we know if some points leap through a hole of the algo
+    let mut stable_numblocks: Vec<u32> = (0..r.len()).into_iter().map(|_| (nb_reg_blocks+1) as u32).collect();
+    let mut block_start = 0;
+    let mut points_waiting = Vec::<usize>::with_capacity(r.len());
+    let mut block_waiting : u32 = 0;
+    //
+    for numbloc in 0..nb_reg_blocks {
+        log::info!("\n stability check for block : {}", numbloc);
+        let block = iso_regression.get_block(numbloc).unwrap().clone();
+        let mut ptiter = block.get_point_iter();
+        while let Some((&pt, rank_pt)) = ptiter.next() {
+            let pt_idx = NodeIndex::new(rank_pt);
+            points_waiting.push(pt_idx.index());
+            // rank guve us the index in graph
+            let mut neighbours = graph.neighbors_undirected(pt_idx);
+            // is neighbor in block
+            while let Some(neighbor) = neighbours.next() {
+                let neighbor_u = neighbor.index();
+                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() == numbloc+1 {
+                    // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
+                    let (edge_idx, direction) = graph.find_edge_undirected(pt_idx, neighbor).unwrap();
+                    let edge = graph.edge_endpoints(edge_idx).unwrap();
+                    // we must check for order. We have the same order of of the 2-uple in wsplit and in edge
+                    if edge.0 == pt_idx && edge.1 == neighbor {
+                        let old_value = r_test[edge.0.index()];
+                        r_test[edge.0.index()] -= F::from(alfa_tmp[edge_idx.index()].wsplit.0).unwrap();
+                        r_test[edge.1.index()] += F::from(alfa_tmp[edge_idx.index()].wsplit.0).unwrap();
+                    }
+                    else if edge.0 == neighbor && edge.1 == pt_idx {
+                        r_test[edge.1.index()] -= F::from(alfa_tmp[edge_idx.index()].wsplit.0).unwrap();
+                        r_test[edge.0.index()] += F::from(alfa_tmp[edge_idx.index()].wsplit.0).unwrap();                                            
+                    }
+                    else {
+                        panic!("should not happen");
+                    }
                 }
             }
+        } // end while on point in blocks
+        // we must check that r is greater on block than outside
+        let mut min_in_block = F::max_value();
+        let mut max_not_in_block = F::zero();
+        (0..r_test.len()).into_iter().for_each(|i| {
+            let b = pointblocklocator.get_point_block_num(i).unwrap();
+            if b == numbloc {
+                min_in_block = min_in_block.min(r_test[i]);
+            }
+            else if b > numbloc {
+                // we 
+                max_not_in_block = max_not_in_block.max(r_test[i]);
+            }
         }
-    } // end while on point in blocks
-    log::info!("in is stable recomputing r from alfa");
-    // we must recompute r from alfa_tmp
-    let nb_nodes = alphar.get_r().len();
-    let mut r :  Vec<Arc<Atomic<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(Atomic::<F>::new(F::zero()))).collect();
-    (0..alfa_tmp.len()).into_par_iter().for_each(|i| {
-            let alpha_i = alfa_tmp[i];
-            // process source node of edge
-            let old_value = r[alpha_i.edge.source().index()].load(Ordering::Relaxed);
-            r[alpha_i.edge.source().index()].store(old_value + F::from(alpha_i.wsplit.0).unwrap(), Ordering::Relaxed);
-            // process target
-            let old_value = r[alpha_i.edge.target().index()].load(Ordering::Relaxed);
-            r[alpha_i.edge.target().index()].store(old_value + F::from(alpha_i.wsplit.1).unwrap(), Ordering::Relaxed);
-        }
-    );
-    // we must check that r is greater on block than outside
-    let mut min_in_block = F::max_value();
-    let mut max_not_in_block = F::zero();
-    (0..r.len()).into_iter().for_each(|i| if pointblockloc.get_point_block_num(i).unwrap() == numbloc {
-            min_in_block = min_in_block.min(r[i].load(Ordering::Relaxed));
+        );
+        log::info!("stability result  bloc : {}, min in block {:?}, max out block {:?}", numbloc, min_in_block, max_not_in_block);
+        if min_in_block > max_not_in_block {
+            // got a stable block, we reset r with r_test
+            log::info!("stable bloc : {}, min in block {:?}, max out block {:?}",numbloc, min_in_block, max_not_in_block);
+            (0..r_test.len()).into_iter().for_each(|i| r[i] = r_test[i]);
+            for p in &points_waiting {
+                stable_numblocks[*p] = block_waiting;
+            }
+            block_start = numbloc+1;
+            if block_start >= nb_reg_blocks {
+                log::debug! ("check stability examined all initial regreesion blocks");
+                break;
+            }
         }
         else {
-            max_not_in_block = max_not_in_block.max(r[i].load(Ordering::Relaxed));
+            // reset r_test to last stable state
+            (0..r_test.len()).into_iter().for_each(|i| r_test[i] = r[i]);
         }
-    );
-    log::info!("stability result  bloc : {}, min in block {:?}, max out block {:?}", numbloc, min_in_block, max_not_in_block);
+    }  // end of loop on initial_blocks
 
-/* 
-    let r = alphar.get_r();
-    let mut min_in_block = F::max_value();
-    let mut max_not_in_block = F::zero();
-    (0..r.len()).into_iter().for_each(|i| if block.is_in_block(i) {
-            min_in_block = min_in_block.min(r[i]);
-        }
-        else {
-            max_not_in_block = max_not_in_block.max(r[i]);
-        }
-    );    
+/*  
     if log::log_enabled!(log::Level::Debug) {
         log::debug!(" block first : {}, block last : {}", block.get_first_index(), block.get_last_index());
         log::debug!(" min in block : {:?} max out block : {:?}", min_in_block, max_not_in_block);
     }
     */
-    let stable = if min_in_block > max_not_in_block {true} else { return false};
-    log::info!("stability result : {:?}, bloc : {}, min in block {:?}, max out block {:?}", stable, numbloc, min_in_block, max_not_in_block);
-    //
-    return stable;
+    // a check
+    for i in 0..r.len() {
+        if stable_numblocks[i] >= (nb_reg_blocks+1) as u32 {
+            log::error!(" point is not affected a good block");
+            std::panic!();
+        }
+    }
+    // now we can return stable_numblocks
+    return;
 }  // end is_stable
 
 
@@ -266,6 +284,21 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
     panic!("not yet implemented");
 } // end of try_decomposition
 
+
+// TODO to be cleaned 
+// the bloc with the greater num is merged into the one with the least blocnum
+fn merge_max_in_min_bloc_num(blocnum : &mut Vec<u32>, bloc1 : u32, bloc2 : u32) {
+    //
+    assert!(bloc1 != bloc2);
+    //
+    let minbloc = bloc1.min(bloc2);
+    let maxbloc = bloc1.max(bloc2);
+    for i in 0..blocnum.len() {
+        if blocnum[i] == maxbloc {
+            blocnum[i] = minbloc;
+        }
+    }
+} // end of merge_bloc_num
 
 
 
@@ -280,7 +313,7 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
  
 pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>) 
         where  F : Float + std::fmt::Debug + std::iter::Sum + FromPrimitive 
-                        + std::ops::AddAssign + std::ops::DivAssign + Sync + Send ,
+                        + std::ops::AddAssign + std::ops::DivAssign + std::ops::SubAssign + Sync + Send ,
                N : Copy {
     //
     let nbiter = 100;
@@ -312,26 +345,31 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
 
     // we try to get blocks. Must make union of blocks to get increasing sequence of blocks
     // and check their stability
-    let pointblocklocator = PointBlockLocator::new(&iso_regression);
+    let mut pointblocklocator = PointBlockLocator::new(&iso_regression);
+    let mut numblocks = get_point_blocnum(&iso_regression);
     let nb_blocks = iso_regression.get_nb_block();
     
     let mut stable_blocks = Vec::<BlockPoint<F>>::new();
-    let mut block_start: Option<BlockPoint<F>> = None;
+    let mut block_start: Option<(BlockPoint<F>, u32)> = None;
+    //
     log::info!(" unionization and stability check");
     let cpu_start = ProcessTime::now();
     let sys_start = SystemTime::now();
-    for i in 0..nb_blocks {
+    check_stability(graph,&alpha_r, &iso_regression);
+/*     for i in 0..nb_blocks {
         let block = iso_regression.get_block(i).unwrap().clone();
         if block_start == None {
-            block_start = Some(block);
+            block_start = Some((block, u32::try_from(i).unwrap()));
         }
         else {
-            block_start.as_mut().unwrap().merge(&block);
+            block_start.as_mut().unwrap().0.merge(&block);
+            merge_max_in_min_bloc_num(&mut numblocks, block_start.unwrap().1, u32::try_from(i).unwrap());            
+            // TODO BUG! pointblocklocator must be adjusted accordingly!!!
         }
         // if bi is stable we push it
-        if is_stable(graph, &alpha_r, &pointblocklocator , block_start.as_ref().unwrap(), i) {
+        if is_stable(graph, &alpha_r, &mut pointblocklocator , block_start.as_ref().unwrap()) {
             log::info!("got a stable block");
-            stable_blocks.push(block_start.unwrap());
+            stable_blocks.push(block_start.unwrap().0);
             block_start = None;
         } else {
             continue;
@@ -340,7 +378,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
     // last block should be stable
     if block_start.is_some() {
         panic!("should not happen");
-    }
+    } */
     log::info!("approximate_decomposition, nb stable blocks : {}", stable_blocks.len());
     log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
             sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
@@ -373,7 +411,7 @@ mod tests {
         // now we can convert into a Graph
         let graph = res.unwrap().into_graph::<>();
         // check get_alpha_r
-        let alpha_r = get_alpha_r(&graph, 5);
+        let alpha_r = get_alpha_r(&graph, 50);
         let alpha = alpha_r.get_alpha();
         let r = alpha_r.get_r();
         //
@@ -410,6 +448,16 @@ mod tests {
             nb_points_in += 1;
         }
         assert_eq!(nb_points_in, block.get_nb_points());
+        //
+        let pointblockloc = PointBlockLocator::new(&iso_regression);
+        let block = iso_regression.get_block(0).unwrap();
+        // dump degrees of each nodes
+        let nb_nodes = graph.node_count();
+        for node in 0..nb_nodes {
+            let degree = graph.neighbors(NodeIndex::new(node)).count();
+            log::info!(" node : {}, degree : {}", node, degree);
+        }
+        check_stability(&graph, &alpha_r, &iso_regression);
     }  // end of pava_miserables
 
 
@@ -430,9 +478,10 @@ mod tests {
         // now we can convert into a Graph
         let graph = res.unwrap().into_graph::<>();
         // check get_alpha_r
-        let alpha_r = get_alpha_r(&graph, 5);
+        let alpha_r = get_alpha_r(&graph, 50);
         let r = alpha_r.get_r();
         log::debug!("r : {:?}", &r[0..20]);
+
         //
         approximate_decomposition(&graph);
     }
