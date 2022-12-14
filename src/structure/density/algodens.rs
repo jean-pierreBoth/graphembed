@@ -40,7 +40,7 @@ use super::pava::{Point, PointBlockLocator, IsotonicRegression, get_point_blocnu
 
 /// describes weight of each node of an edge.
 #[derive(Copy,Clone,Debug)]
-pub struct WeightSplit(f32,f32);
+pub(crate) struct WeightSplit(f32,f32);
 
 impl Default for WeightSplit {
     fn default() -> Self { WeightSplit(0., 0.)}
@@ -283,9 +283,13 @@ fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx
 
 
 #[cfg_attr(doc, katexit::katexit)]
-/// computes a decomposition of graph in blocks of vertices of decreasing density. 
+/// This structure store the decomposition of graph in maximal blocks of densest density.  
+/// Increasing the size of a block would decrease its density. The decomposition is thus naturally defined.   
 /// 
-/// First we search maximal densest subsets $S_{i}$ are deduced from the isotonic regression.  
+/// The blocks of vertices are of decreasing density. The exact decomposition is unique.
+/// We provide here the approximate decomposition, which is the result of the function [approximate_decomposition](approximate_decomposition)
+/// 
+/// First we search maximal densest subsets $S_{i}$. There are deduced from the isotonic regression by a stability check.  
 /// Then we get a diminishingly dense decomposition of the graph in blocks $B_{i}$.  
 /// The blocks satisfy:
 ///  - $B_{i} \subset B_{i+1}$ 
@@ -301,7 +305,7 @@ pub struct StableDecomposition {
     /// list of numblocks as given in s but sorted in increasing num
     index : Vec<usize>,
     /// for each block give its beginning position in index. 
-    /// block[0] begins at 0, block[1] begins at index[block_start[1]]
+    /// block\[0\] begins at 0, block\[1\] begins at index\[block_start\[1\]\]
     block_start : Vec<usize>,
 } // end of struct StabeDecomposition
 
@@ -352,7 +356,7 @@ impl StableDecomposition {
         let nb_block = self.block_start.len();
         let mut pt_list = Vec::<usize>::new();
         let start = self.block_start[blocknum];
-        let end = if blocknum < nb_block - 1 { self.index[blocknum+1]} else { self.index.len() };
+        let end = if blocknum < nb_block - 1 { self.block_start[blocknum+1]} else { self.index.len() };
         log::debug!("bloc start in index : {}, end (excluded) : {}", start, end);
         for p in start..end {
             pt_list.push(self.index[p]);
@@ -371,8 +375,9 @@ impl StableDecomposition {
 
 
 
-/// computes a decomposition of graph in blocks of vertices of decreasing density. 
-pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>) 
+/// computes an approximate decomposition of graph in blocks of vertices of decreasing density.  
+/// nb_iter is the number of iteration asked for. A standard value is 500.
+pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter: usize) -> StableDecomposition
         where  F : Float + std::fmt::Debug + std::iter::Sum + FromPrimitive 
                         + std::ops::AddAssign + std::ops::DivAssign + std::ops::SubAssign + Sync + Send ,
                N : Copy {
@@ -380,7 +385,6 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
     let cpu_start = ProcessTime::now();
     let sys_start = SystemTime::now();
     //
-    let nbiter = 100;
     let alpha_r = get_alpha_r(graph, nbiter);
     log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
             sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
@@ -421,8 +425,8 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>)
     //
     log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
             sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
-
-    // now we have in blockunion, an increasing family of stable blocks
+    //
+    s
 } // end of approximate_decomposition
 
 //==========================================================================================================
@@ -455,7 +459,7 @@ mod tests {
         // now we can convert into a Graph
         let graph = res.unwrap().into_graph::<>();
         // check get_alpha_r
-        let alpha_r = get_alpha_r(&graph, 50);
+        let alpha_r = get_alpha_r(&graph, 400);
         let alpha = alpha_r.get_alpha();
         let r = alpha_r.get_r();
         //
@@ -505,7 +509,9 @@ mod tests {
         let blocnum = 0;
         let block = decomposition.get_block_points(blocnum).unwrap();
         log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);
-    }  // end of pava_miserables
+        let blocnum = 1;
+        let block = decomposition.get_block_points(blocnum).unwrap();
+        log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);    }  // end of pava_miserables
 
 
 
@@ -528,8 +534,8 @@ mod tests {
         let alpha_r = get_alpha_r(&graph, 50);
         let r = alpha_r.get_r();
         log::debug!("r : {:?}", &r[0..20]);
-
         //
-        approximate_decomposition(&graph);
+        let nb_iter = 100;
+        approximate_decomposition(&graph, nb_iter);
     }
 } // end of mod tests
