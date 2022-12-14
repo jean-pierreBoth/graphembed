@@ -15,6 +15,8 @@
 
 
 
+use anyhow::{anyhow};
+use log::{log_enabled, Level};
 
 use std::time::{SystemTime};
 use cpu_time::ProcessTime;
@@ -26,6 +28,8 @@ use std::sync::{Arc};
 use parking_lot::{RwLock};
 use atomic::{Atomic, Ordering};
 use rayon::prelude::*;
+
+use indxvec::Vecops;
 
 use petgraph::graph::{Graph, EdgeReference, NodeIndex, DefaultIx};
 use petgraph::{Undirected, visit::*};
@@ -131,7 +135,7 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
     for iter in 0..nbiter {
         let gamma = 2. / (2. + iter as f32);
         //
-        log::info!("iteration : {}, {:.3e}", iter, gamma);
+        log::trace!("iteration : {}, {:.3e}", iter, gamma);
         //
         (0..alpha.len()).into_par_iter().for_each(|i| {
             let mut delta_i = delta_e[i].write();
@@ -175,7 +179,7 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
 
 /// check stability of a given vertex block with respect to alfar (algo 2 of Danisch paper)
 fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Undirected>, alphar : &'a AlphaR<'a,F>, 
-                    iso_regression : &'a IsotonicRegression<F>) -> Vec<u32>
+                    iso_regression : &'a IsotonicRegression<F>) -> StableDecomposition
     where F : Float + std::iter::Sum + FromPrimitive + std::ops::DivAssign + std::ops::AddAssign + std::ops::SubAssign + std::fmt::Debug + Sync + Send ,
           N : Copy {
     //
@@ -191,20 +195,20 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     let mut block_waiting : u32 = 0;
     //
     for numbloc in 0..nb_reg_blocks {
-        log::info!("\n stability check for block : {}", numbloc);
+        log::debug!("\n stability check for block : {}", numbloc);
         let block = iso_regression.get_block(numbloc).unwrap().clone();
+        // TODO this iteration can be made // if necessary
         let mut ptiter = block.get_point_iter();
         while let Some((&_pt, rank_pt)) = ptiter.next() {
             let pt_idx = NodeIndex::new(rank_pt);
             points_waiting.push(pt_idx.index());
             // rank guve us the index in graph
-            let mut neighbours = graph.neighbors_undirected(pt_idx);
+            let mut neighbours = graph.neighbors(pt_idx).detach();
             // is neighbor in block
-            while let Some(neighbor) = neighbours.next() {
+            while let Some((edge_idx,neighbor)) = neighbours.next(graph) {
                 let neighbor_u = neighbor.index();
                 if pointblocklocator.get_point_block_num(neighbor_u).unwrap() == numbloc+1 {
                     // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
-                    let (edge_idx, _direction) = graph.find_edge_undirected(pt_idx, neighbor).unwrap();
                     let edge = graph.edge_endpoints(edge_idx).unwrap();
                     // we must check for order. We have the same order of of the 2-uple in wsplit and in edge
                     if edge.0 == pt_idx && edge.1 == neighbor {
@@ -235,7 +239,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             }
         }
         );
-        log::debug!("stability result  bloc : {}, min in block {:?}, max out block {:?}", numbloc, min_in_block, max_not_in_block);
+        log::trace!("stability result  bloc : {}, min in block {:?}, max out block {:?}", numbloc, min_in_block, max_not_in_block);
         if min_in_block > max_not_in_block {
             // got a stable block, we reset r with r_test
             log::info!("stable bloc : {}, regr block : {:?}, min in block {:?}, max out block {:?}",block_waiting, numbloc, min_in_block, max_not_in_block);
@@ -258,7 +262,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     // a check
     for i in 0..r.len() {
         if stable_numblocks[i] >= (nb_reg_blocks+1) as u32 {
-            log::error!(" point is not affected a good block");
+            log::error!(" point is not affected a good block, point : {}, stable block : {}", i, stable_numblocks[i]);
             std::panic!();
         }
     }
@@ -267,8 +271,8 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
         log::info!("point : {},  bloc : {}", p , stable_numblocks[p]);
     }
     // now we can return stable_numblocks
-    return stable_numblocks;
-}  // end is_stable
+    StableDecomposition::new(stable_numblocks)
+}  // end check_stability
 
 
 /// build a tentative decomposition from alphar using the PAVA regression
@@ -294,17 +298,76 @@ pub struct StableDecomposition {
     /// stable blocks filtered . Give for each point the $S_{i}$ to which the point belongs.
     /// Alternativeley s`[i`] contains the densest stable block to which node i belongs
     s : Vec<u32>,
-
+    /// list of numblocks as given in s but sorted in increasing num
+    index : Vec<usize>,
+    /// for each block give its beginning position in index. 
+    /// block[0] begins at 0, block[1] begins at index[block_start[1]]
+    block_start : Vec<usize>,
 } // end of struct StabeDecomposition
 
+
 impl StableDecomposition {
-    pub fn new(s : Vec<u32>) -> Self { 
-        StableDecomposition{s:s}
-    }
+    pub fn new(s : Vec<u32>) -> Self {
+        log::info!("StableDecomposition::new");
+        let index = s.mergesort_indexed().rank(true);
+        log::debug!("sorted s : {}, {}", s[index[0]], s[index[1]]);
+        let last_block = s[index[index.len()-1]] as usize;
+        log::debug!("last block : {}", last_block);
+        //
+        let mut block_start  = Vec::<usize>::with_capacity(last_block);
+        let mut current_block = 0;
+        for i in 0..s.len() {
+            log::debug!("i : {}, point : {}, current_block : {}", i, index[i], current_block);
+            if i == 0 || s[index[i]]  > current_block {
+                if s[index[i]] > 0 {
+                    log::info!("bloc : {} has size : {}", current_block, i - block_start[current_block as usize]);
+                }
+                block_start.push(i);
+                current_block = s[index[i]];
+            }
+        }
+        //
+        if log_enabled!(Level::Debug) {
+            log::debug!(" indexes : {:?}", index);
+            log::debug!(" block start : {:?}", block_start);
+        }
+        //
+        StableDecomposition{s, index, block_start}
+    }  // end of new StableDecomposition
+
 
     /// get densest block for a node
     pub fn get_densest_block(&self, node: usize) -> usize { self.s[node] as usize}
+
+
+
+    /// returns the points in a given block
+    pub fn get_block_points(&self, blocknum : usize) -> Result<Vec<usize>, anyhow::Error> {
+        //
+        log::debug!(" in get_block_points, blocnum : {}", blocknum);
+        //
+        if blocknum > self.block_start.len() {
+            return Err(anyhow!("too large num of block"));
+        }
+        let nb_block = self.block_start.len();
+        let mut pt_list = Vec::<usize>::new();
+        let start = self.block_start[blocknum];
+        let end = if blocknum < nb_block - 1 { self.index[blocknum+1]} else { self.index.len() };
+        log::debug!("bloc start in index : {}, end (excluded) : {}", start, end);
+        for p in start..end {
+            pt_list.push(self.index[p]);
+        }
+        if log_enabled!(Level::Debug) {
+            log::debug!(" indexes : {:?}", self.index);
+            log::debug!(" block start : {:?}", start);
+        }
+        Ok(pt_list)
+    } // end of get_block_points
 } // end of impl StableDecomposition
+
+
+
+
 
 
 
@@ -438,7 +501,10 @@ mod tests {
             let degree = graph.neighbors(NodeIndex::new(node)).count();
             log::info!(" node : {}, degree : {}", node, degree);
         }
-        check_stability(&graph, &alpha_r, &iso_regression);
+        let decomposition = check_stability(&graph, &alpha_r, &iso_regression);
+        let blocnum = 0;
+        let block = decomposition.get_block_points(blocnum).unwrap();
+        log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);
     }  // end of pava_miserables
 
 
