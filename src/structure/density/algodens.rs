@@ -15,8 +15,6 @@
 
 
 
-use anyhow::{anyhow};
-use log::{log_enabled, Level};
 
 use std::time::{SystemTime};
 use cpu_time::ProcessTime;
@@ -29,15 +27,14 @@ use parking_lot::{RwLock};
 use atomic::{Atomic, Ordering};
 use rayon::prelude::*;
 
-use indxvec::Vecops;
 
-use petgraph::graph::{Graph, EdgeReference, NodeIndex, DefaultIx};
+use petgraph::graph::{Graph, EdgeReference, NodeIndex};
 use petgraph::{Undirected, visit::*};
 
 // to get sorting with index as result
 //
 use super::pava::{Point, PointBlockLocator, IsotonicRegression, get_point_blocnum};
-
+use super::stable::{StableDecomposition};
 /// describes weight of each node of an edge.
 #[derive(Copy,Clone,Debug)]
 pub(crate) struct WeightSplit(f32,f32);
@@ -148,9 +145,13 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
             if r_source <  r_target  { 
                 delta_i.0 = alpha_i.edge.weight().to_f32().unwrap();
                 delta_i.1 = 0.;
-            } else {
+            } else if r_target < r_source {
                 delta_i.1 = alpha_i.edge.weight().to_f32().unwrap();
                 delta_i.0 = 0.;
+            }
+            else {
+                delta_i.0 = 0.5 * alpha_i.edge.weight().to_f32().unwrap();
+                delta_i.1 = delta_i.0;
             };
         }); // end of // computation of 
         // update delta_e for evolution of alpha
@@ -260,9 +261,11 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
         }
     }  // end of loop on initial_blocks
     // a check
+    assert_eq!(points_waiting.len(),0);
     for i in 0..r.len() {
         if stable_numblocks[i] >= (nb_reg_blocks+1) as u32 {
             log::error!(" point is not affected a good block, point : {}, stable block : {}", i, stable_numblocks[i]);
+            iso_regression.check_blocks();
             std::panic!();
         }
     }
@@ -273,101 +276,6 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     // now we can return stable_numblocks
     StableDecomposition::new(stable_numblocks)
 }  // end check_stability
-
-
-/// build a tentative decomposition from alphar using the PAVA regression
-#[allow(unused)]
-fn try_decomposition<'a,F:Float>(alphar : &'a AlphaR<'a,F>) -> Vec<Vec<DefaultIx>> {
-    panic!("not yet implemented");
-} // end of try_decomposition
-
-
-#[cfg_attr(doc, katexit::katexit)]
-/// This structure store the decomposition of graph in maximal blocks of densest density.  
-/// Increasing the size of a block would decrease its density. The decomposition is thus naturally defined.   
-/// 
-/// The blocks of vertices are of decreasing density. The exact decomposition is unique.
-/// We provide here the approximate decomposition, which is the result of the function [approximate_decomposition](approximate_decomposition)
-/// 
-/// First we search maximal densest subsets $S_{i}$. There are deduced from the isotonic regression by a stability check.  
-/// Then we get a diminishingly dense decomposition of the graph in blocks $B_{i}$.  
-/// The blocks satisfy:
-///  - $B_{i} \subset B_{i+1}$ 
-///  - $B_{0}=\emptyset , B_{max}=V$ where $V$ is the set of vertices of G.
-///  - each block must be stable.    
-/// 
-///  The blocks are defined by $B_{i} = B_{i-1} \cup S_{i}$
-pub struct StableDecomposition {
-    /// list of disjoint maximal densest subsets deduced from the isotonic regression.
-    /// stable blocks filtered . Give for each point the $S_{i}$ to which the point belongs.
-    /// Alternativeley s`[i`] contains the densest stable block to which node i belongs
-    s : Vec<u32>,
-    /// list of numblocks as given in s but sorted in increasing num
-    index : Vec<usize>,
-    /// for each block give its beginning position in index. 
-    /// block\[0\] begins at 0, block\[1\] begins at index\[block_start\[1\]\]
-    block_start : Vec<usize>,
-} // end of struct StabeDecomposition
-
-
-impl StableDecomposition {
-    pub fn new(s : Vec<u32>) -> Self {
-        log::info!("StableDecomposition::new");
-        let index = s.mergesort_indexed().rank(true);
-        log::debug!("sorted s : {}, {}", s[index[0]], s[index[1]]);
-        let last_block = s[index[index.len()-1]] as usize;
-        log::debug!("last block : {}", last_block);
-        //
-        let mut block_start  = Vec::<usize>::with_capacity(last_block);
-        let mut current_block = 0;
-        for i in 0..s.len() {
-            log::debug!("i : {}, point : {}, current_block : {}", i, index[i], current_block);
-            if i == 0 || s[index[i]]  > current_block {
-                if s[index[i]] > 0 {
-                    log::info!("bloc : {} has size : {}", current_block, i - block_start[current_block as usize]);
-                }
-                block_start.push(i);
-                current_block = s[index[i]];
-            }
-        }
-        //
-        if log_enabled!(Level::Debug) {
-            log::debug!(" indexes : {:?}", index);
-            log::debug!(" block start : {:?}", block_start);
-        }
-        //
-        StableDecomposition{s, index, block_start}
-    }  // end of new StableDecomposition
-
-
-    /// get densest block for a node
-    pub fn get_densest_block(&self, node: usize) -> usize { self.s[node] as usize}
-
-
-
-    /// returns the points in a given block
-    pub fn get_block_points(&self, blocknum : usize) -> Result<Vec<usize>, anyhow::Error> {
-        //
-        log::debug!(" in get_block_points, blocnum : {}", blocknum);
-        //
-        if blocknum > self.block_start.len() {
-            return Err(anyhow!("too large num of block"));
-        }
-        let nb_block = self.block_start.len();
-        let mut pt_list = Vec::<usize>::new();
-        let start = self.block_start[blocknum];
-        let end = if blocknum < nb_block - 1 { self.block_start[blocknum+1]} else { self.index.len() };
-        log::debug!("bloc start in index : {}, end (excluded) : {}", start, end);
-        for p in start..end {
-            pt_list.push(self.index[p]);
-        }
-        if log_enabled!(Level::Debug) {
-            log::debug!(" indexes : {:?}", self.index);
-            log::debug!(" block start : {:?}", start);
-        }
-        Ok(pt_list)
-    } // end of get_block_points
-} // end of impl StableDecomposition
 
 
 
@@ -538,4 +446,6 @@ mod tests {
         let nb_iter = 100;
         approximate_decomposition(&graph, nb_iter);
     }
+
+
 } // end of mod tests
