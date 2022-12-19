@@ -132,7 +132,9 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
     for iter in 0..nbiter {
         let gamma = 2. / (2. + iter as f32);
         //
-        log::trace!("iteration : {}, {:.3e}", iter, gamma);
+        if iter % 100 == 0 {
+            log::info!("iteration : {}, {:.3e}", iter, gamma);
+        }
         //
         (0..alpha.len()).into_par_iter().for_each(|i| {
             let mut delta_i = delta_e[i].write();
@@ -183,6 +185,9 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
                     iso_regression : &'a IsotonicRegression<F>) -> StableDecomposition
     where F : Float + std::iter::Sum + FromPrimitive + std::ops::DivAssign + std::ops::AddAssign + std::ops::SubAssign + std::fmt::Debug + Sync + Send ,
           N : Copy {
+    //
+    let cpu_start = ProcessTime::now();
+    let sys_start = SystemTime::now();
     //
     let nb_reg_blocks = iso_regression.get_nb_block();
     let pointblocklocator = PointBlockLocator::new(&iso_regression);
@@ -267,6 +272,9 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             }
         }
     }  // end of loop on initial_blocks
+    //
+    log::info!("\n check stability sys time(s) {:.2e} cpu time(s) {:.2e}", 
+            sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
     // a check
     assert_eq!(points_waiting.len(),0);
     for i in 0..r.len() {
@@ -277,9 +285,11 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
         }
     }
     // dump stable_numblocks
-    log::info!("dumping stable_numblocks");
-    for p in 0..stable_numblocks.len() {
-        log::info!("point : {},  bloc : {}", p , stable_numblocks[p]);
+    if log::log_enabled!(log::Level::Debug) {
+        log::debug!("dumping stable_numblocks");
+        for p in 0..stable_numblocks.len() {
+            log::debug!("point : {},  bloc : {}", p , stable_numblocks[p]);
+        }
     }
     // now we can return stable_numblocks
     StableDecomposition::new(stable_numblocks)
@@ -302,7 +312,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>, 
     let sys_start = SystemTime::now();
     //
     let alpha_r = get_alpha_r(graph, nbiter);
-    log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
+    log::info!("fn get_alpha_r sys time(s) {:.2e} cpu time(s) {:.2e}", 
             sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
     //
     let alpha = alpha_r.get_alpha();
@@ -339,7 +349,7 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>, 
     let sys_start = SystemTime::now();
     let s = check_stability(graph,&alpha_r, &iso_regression);
     //
-    log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
+    log::info!("\n approximate_decomposition sys time(s) {:.2e} cpu time(s) {:.2e}", 
             sys_start.elapsed().unwrap().as_secs(), cpu_start.elapsed().as_secs());
     //
     s
@@ -447,13 +457,24 @@ mod tests {
         }
         // now we can convert into a Graph
         let graph = res.unwrap().into_graph::<>();
-        // check get_alpha_r
-        let alpha_r = get_alpha_r(&graph, 50);
-        let r = alpha_r.get_r();
-        log::debug!("r : {:?}", &r[0..20]);
         //
         let nb_iter = 100;
-        approximate_decomposition(&graph, nb_iter);
+        let decomposition = approximate_decomposition(&graph, nb_iter);
+        let nb_blocks = decomposition.get_nb_blocks();
+        log::info!("pava_miserables got nb_block : {nb_blocks}");
+        // get blocksizes
+        let mut blocksize = Vec::<usize>::new();
+        for blocnum in 0..nb_blocks.min(10) {
+            let bsize = decomposition.get_nbpoints_in_block(blocnum).unwrap();
+            blocksize.push(bsize);
+            log::info!("density_miserables : points of block : {blocnum} , {bsize}");
+        }
+        for blocnum in 0..nb_blocks.min(10) {
+            let block = decomposition.get_block_points(blocnum).unwrap();
+            assert_eq!(block.len(), blocksize[blocnum]);
+            log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);
+        }
+
     }
 
 

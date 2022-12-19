@@ -57,12 +57,12 @@ impl StableDecomposition {
                 block_start.push(i);
             }
             else if s[index[i]]  > current_block {
-                log::info!("bloc : {} has size : {}", current_block, i - block_start[current_block as usize]);
+                log::debug!("bloc : {} has size : {}", current_block, i - block_start[current_block as usize]);
                 block_start.push(i);
                 current_block = s[index[i]];
             }
             else if i == s.len() - 1 {
-                log::info!("bloc : {} has size : {}", current_block, s.len() - block_start[current_block as usize]);
+                log::debug!("bloc : {} has size : {}", current_block, s.len() - block_start[current_block as usize]);
             }
         }
         //
@@ -75,9 +75,35 @@ impl StableDecomposition {
     }  // end of new StableDecomposition
 
 
-    /// get densest block for a node
-    pub fn get_densest_block(&self, node: usize) -> usize { self.s[node] as usize}
+    /// get number of points in a block
+    pub fn get_nbpoints_in_block(&self, blocknum : usize) -> Result<usize,()> {
+        let size = self.block_start.len();
+        //
+        if blocknum >= size {
+            return Err(());
+        }
+        else if blocknum == size - 1 {
+            return Ok(self.s.len() - self.block_start[blocknum]);
+        }
+        else {
+            return Ok(self.block_start[blocknum+1] - self.block_start[blocknum]);
+        }
+        //
+    } // end of get_nbpoints_in_block
 
+
+
+    /// get densest block num for a node
+    pub fn get_densest_block(&self, node: usize) -> Result<usize,()> { 
+        if node < self.s.len() {
+            Ok(self.s[node] as usize)
+        }
+        else {
+            Err(())
+        }
+    }  // end of get_densest_block
+
+    /// returns the number of blocks of the decomposition
     pub fn get_nb_blocks(&self) -> usize { 
         if self.index.len() > 0 { 1 + self.s[self.index[self.index.len()-1]] as usize } 
         else {0usize} 
@@ -88,7 +114,7 @@ impl StableDecomposition {
         //
         log::debug!("\n  in get_block_points, blocnum : {}", blocknum);
         //
-        if blocknum > self.block_start.len() {
+        if blocknum >= self.block_start.len() {
             return Err(anyhow!("too large num of block"));
         }
         let nb_block = self.block_start.len();
