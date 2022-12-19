@@ -41,5 +41,16 @@ pub fn main() {
     //
     let orkut_graph = orkut_graph.unwrap();
     let nb_iter = 500;
-    approximate_decomposition(&orkut_graph , nb_iter);
+    let decomposition = approximate_decomposition(&orkut_graph , nb_iter);
+    let nb_blocks = decomposition.get_nb_blocks();
+    log::info!("orkut decomposition got nb_block : {nb_blocks}");
+    for blocnum in 0..nb_blocks.min(10) {
+        let block = decomposition.get_block_points(blocnum).unwrap();
+        log::info!("orkhut : points of block : {} , {:?}", blocnum, block.len());
+    }
+    //
+    for blocnum in 0..nb_blocks.min(10) {
+        let bsize = decomposition.get_nbpoints_in_block(blocnum).unwrap();
+        log::info!("orkhut : points of block : {blocnum} , {bsize}");
+    }
 } // end of main
