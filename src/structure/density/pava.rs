@@ -553,7 +553,7 @@ impl <'a, T> IsotonicRegression<'a, T>
                 blocks.push(last_block);
             }
         }
-        log::info!("nb blocks with different x : {}", blocks.len());
+        log::info!("nb blocks before ordering violation : {}", blocks.len());
         //
         
         // we merge blocks as soon there is an ordering violation

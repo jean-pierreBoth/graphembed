@@ -213,7 +213,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             // is neighbor in block
             while let Some((edge_idx,neighbor)) = neighbours.next(graph) {
                 let neighbor_u = neighbor.index();
-                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() == numbloc+1 {
+                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() >= numbloc+1 {
                     // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
                     let edge = graph.edge_endpoints(edge_idx).unwrap();
                     // we must check for order. We have the same order of of the 2-uple in wsplit and in edge
@@ -464,12 +464,12 @@ mod tests {
         log::info!("pava_miserables got nb_block : {nb_blocks}");
         // get blocksizes
         let mut blocksize = Vec::<usize>::new();
-        for blocnum in 0..nb_blocks.min(10) {
+        for blocnum in 0..nb_blocks {
             let bsize = decomposition.get_nbpoints_in_block(blocnum).unwrap();
             blocksize.push(bsize);
             log::info!("density_miserables : points of block : {blocnum} , {bsize}");
         }
-        for blocnum in 0..nb_blocks.min(10) {
+        for blocnum in 0..nb_blocks {
             let block = decomposition.get_block_points(blocnum).unwrap();
             assert_eq!(block.len(), blocksize[blocnum]);
             log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);
