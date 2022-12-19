@@ -52,12 +52,17 @@ impl StableDecomposition {
         let mut current_block = 0;
         for i in 0..s.len() {
             log::debug!("i : {}, point : {}, current_block : {}", i, index[i], current_block);
-            if i == 0 || s[index[i]]  > current_block {
-                if s[index[i]] > 0 {
-                    log::info!("bloc : {} has size : {}", current_block, i - block_start[current_block as usize]);
-                }
+            if i == 0 {
+                assert_eq!(s[index[0]], 0);
+                block_start.push(i);
+            }
+            else if s[index[i]]  > current_block {
+                log::info!("bloc : {} has size : {}", current_block, i - block_start[current_block as usize]);
                 block_start.push(i);
                 current_block = s[index[i]];
+            }
+            else if i == s.len() - 1 {
+                log::info!("bloc : {} has size : {}", current_block, s.len() - block_start[current_block as usize]);
             }
         }
         //
@@ -73,12 +78,15 @@ impl StableDecomposition {
     /// get densest block for a node
     pub fn get_densest_block(&self, node: usize) -> usize { self.s[node] as usize}
 
-
+    pub fn get_nb_blocks(&self) -> usize { 
+        if self.index.len() > 0 { 1 + self.s[self.index[self.index.len()-1]] as usize } 
+        else {0usize} 
+    }
 
     /// returns the points in a given block
     pub fn get_block_points(&self, blocknum : usize) -> Result<Vec<usize>, anyhow::Error> {
         //
-        log::debug!(" in get_block_points, blocnum : {}", blocknum);
+        log::debug!("\n  in get_block_points, blocnum : {}", blocknum);
         //
         if blocknum > self.block_start.len() {
             return Err(anyhow!("too large num of block"));

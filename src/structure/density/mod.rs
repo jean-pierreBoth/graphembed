@@ -7,3 +7,6 @@
 pub  mod pava;
 
 pub mod algodens;
+
+/// Describe stable block results
+pub mod stable;

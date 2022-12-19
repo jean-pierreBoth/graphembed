@@ -259,6 +259,13 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             // reset r_test to last stable state
             (0..r_test.len()).into_iter().for_each(|i| r_test[i] = r[i]);
         }
+        // if we are in the last regression_blocks we treat points_waiting
+        if points_waiting.len() > 0 && numbloc == nb_reg_blocks - 1 {
+            log::debug! ("treating last block with waiting_points");
+            for p in &points_waiting {
+                stable_numblocks[*p] = block_waiting;
+            }
+        }
     }  // end of loop on initial_blocks
     // a check
     assert_eq!(points_waiting.len(),0);
@@ -270,6 +277,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
         }
     }
     // dump stable_numblocks
+    log::info!("dumping stable_numblocks");
     for p in 0..stable_numblocks.len() {
         log::info!("point : {},  bloc : {}", p , stable_numblocks[p]);
     }
@@ -414,12 +422,13 @@ mod tests {
             log::info!(" node : {}, degree : {}", node, degree);
         }
         let decomposition = check_stability(&graph, &alpha_r, &iso_regression);
-        let blocnum = 0;
-        let block = decomposition.get_block_points(blocnum).unwrap();
-        log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);
-        let blocnum = 1;
-        let block = decomposition.get_block_points(blocnum).unwrap();
-        log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);    }  // end of pava_miserables
+        let nb_blocks = decomposition.get_nb_blocks();
+        log::info!("pava_miserables got nb_block : {nb_blocks}");
+        for blocnum in 0..nb_blocks {
+            let block = decomposition.get_block_points(blocnum).unwrap();
+            log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);
+        }
+    }  // end of pava_miserables
 
 
 

@@ -16,3 +16,6 @@ pub use crate::validation::params::*;
 
 pub use crate::nodesketch::params::{NodeSketchParams};
 pub use crate::nodesketch::{nodesketchsym::NodeSketch, nodesketchasym::NodeSketchAsym};
+
+pub use crate::structure::density::{stable::StableDecomposition,algodens::approximate_decomposition};
+pub use crate::structure::density::pava::{IsotonicRegression, PointIterator};
