@@ -124,10 +124,6 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
     //
     // We dispatch alpha to r
     r_from_alpha(&r, &alpha);
-    // now do iterations
-    let delta_e : Vec<Arc<RwLock<WeightSplit>>> = (0..nb_edges).into_iter().map(
-        |_| Arc::new(RwLock::new(WeightSplit::default()))
-    ).collect();
     //
     for iter in 0..nbiter {
         let gamma = 2. / (2. + iter as f32);
@@ -137,8 +133,8 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
         }
         //
         (0..alpha.len()).into_par_iter().for_each(|i| {
-            let mut delta_i = delta_e[i].write();
-            let alpha_i = alpha[i].read();
+            let mut delta_i = WeightSplit::default();
+            let mut alpha_i = alpha[i].write();
             let source = alpha_i.edge.source();
             let target = alpha_i.edge.target();
             let r_source = r[source.index()].load(Ordering::Relaxed);
@@ -146,23 +142,17 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
             // get edge node with min r. The smaller gets the weight
             if r_source <  r_target  { 
                 delta_i.0 = alpha_i.edge.weight().to_f32().unwrap();
-                delta_i.1 = 0.;
+                // delta_i.1 = 0.;
+                alpha_i.wsplit.0 =  (1. - gamma) * alpha_i.wsplit.0 + gamma * delta_i.0;    
+                alpha_i.wsplit.1 =  (1. - gamma) * alpha_i.wsplit.1;  
             } else if r_target < r_source {
                 delta_i.1 = alpha_i.edge.weight().to_f32().unwrap();
-                delta_i.0 = 0.;
+                // delta_i.0 = 0.;
+                alpha_i.wsplit.0 =  (1. - gamma) * alpha_i.wsplit.0;    
+                alpha_i.wsplit.1 =  (1. - gamma) * alpha_i.wsplit.1 + gamma * delta_i.1;  
             }
-            else {
-                delta_i.0 = 0.5 * alpha_i.edge.weight().to_f32().unwrap();
-                delta_i.1 = delta_i.0;
-            };
+            // else e do nothing!
         }); // end of // computation of 
-        // update delta_e for evolution of alpha
-        (0..alpha.len()).into_par_iter().for_each(|i|  {
-            let delta_i = delta_e[i].read();
-            let mut alpha_i = alpha[i].write();
-            alpha_i.wsplit.0 =  (1. - gamma) * alpha_i.wsplit.0 + gamma * delta_i.0;    
-            alpha_i.wsplit.1 =  (1. - gamma) * alpha_i.wsplit.1 + gamma * delta_i.1;    
-        }); 
         // now we recompute r
         r_from_alpha(&r, &alpha);
     } // end of // loop on edges 
@@ -213,7 +203,8 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             // is neighbor in block
             while let Some((edge_idx,neighbor)) = neighbours.next(graph) {
                 let neighbor_u = neighbor.index();
-                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() >= numbloc+1 {
+                // TODO >= or == 
+                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() == numbloc+1 {
                     // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
                     let edge = graph.edge_endpoints(edge_idx).unwrap();
                     // we must check for order. We have the same order of of the 2-uple in wsplit and in edge

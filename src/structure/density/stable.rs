@@ -3,7 +3,12 @@
 use anyhow::{anyhow};
 use log::{log_enabled, Level};
 
+use std::fs::OpenOptions;
+use std::path::{Path};
+use std::io::{BufReader, BufWriter };
 
+use serde::{Deserialize, Serialize};
+use serde_json::{to_writer};
 
 
 use indxvec::Vecops;
@@ -27,6 +32,7 @@ use indxvec::Vecops;
 ///  - each block must be stable.    
 /// 
 ///  The blocks are defined by $B_{i} = B_{i-1} \cup S_{i}$
+#[derive(Serialize,Deserialize)]
 pub struct StableDecomposition {
     /// list of disjoint maximal densest subsets deduced from the isotonic regression.
     /// stable blocks filtered . Give for each point the $S_{i}$ to which the point belongs.
@@ -131,6 +137,47 @@ impl StableDecomposition {
         }
         Ok(pt_list)
     } // end of get_block_points
+
+    
+    /// dump in json format StableDecomposition structure
+    pub fn dump_json(&self, filepath: &Path) ->  Result<(), String> {
+        //
+        log::info!("dumping StableDecomposition in json file : {:?}", filepath);
+        //
+        let fileres = OpenOptions::new().write(true).create(true).truncate(true).open(&filepath);
+        if fileres.is_err() {
+            log::error!("StableDecomposition dump : dump could not open file {:?}", filepath.as_os_str());
+            println!("StableDecomposition dump: could not open file {:?}", filepath.as_os_str());
+            return Err("StableDecomposition dump failed".to_string());
+        }
+        // 
+        let mut writer = BufWriter::new(fileres.unwrap());
+        let _ = to_writer(&mut writer, &self).unwrap();
+        //
+        Ok(())
+    } // end of dump_json
+
+
+    /// returns a stable decomposiiton from a json dump
+    pub fn reload_json(dirpath : &Path) -> Result<Self, String> {
+        log::info!("in StableDecomposition::reload_json");
+        //
+        let filepath = dirpath.join("parameters.json");
+        let fileres = OpenOptions::new().read(true).open(&filepath);
+        if fileres.is_err() {
+            log::error!("StableDecomposition::reload_json : reload could not open file {:?}", filepath.as_os_str());
+            println!("StableDecomposition::reload_json: could not open file {:?}", filepath.as_os_str());
+            return Err("StableDecomposition::reload_json:  could not open file".to_string());            
+        }
+        //
+        let loadfile = fileres.unwrap();
+        let reader = BufReader::new(loadfile);
+        let stabledecomposition :Self = serde_json::from_reader(reader).unwrap();
+        //
+        log::info!("ProcessingParameters reload ");     
+        //
+        Ok(stabledecomposition)
+    } // end of reload_json
 } // end of impl StableDecomposition
 
 

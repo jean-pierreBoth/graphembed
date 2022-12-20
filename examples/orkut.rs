@@ -44,12 +44,20 @@ pub fn main() {
     let decomposition = approximate_decomposition(&orkut_graph , nb_iter);
     let nb_blocks = decomposition.get_nb_blocks();
     log::info!("orkut decomposition got nb_block : {nb_blocks}");
-    for blocnum in 0..nb_blocks.min(10) {
+    //
+    let dump_path = Path::new("orkut-decomposition.json");
+    let res = decomposition.dump_json(&dump_path);
+    match res {
+        Ok(_) => { log::info!("orkut decomposition dumped in {dump_path:?} : Ok") ; },
+        Err(_) => { log::info!("orkut decomposition dumped in {dump_path:?} : Err") ; },
+    };
+    //
+    for blocnum in 0..nb_blocks.min(50) {
         let block = decomposition.get_block_points(blocnum).unwrap();
         log::info!("orkhut : points of block : {} , {:?}", blocnum, block.len());
     }
     //
-    for blocnum in 0..nb_blocks.min(10) {
+    for blocnum in 0..nb_blocks.min(50) {
         let bsize = decomposition.get_nbpoints_in_block(blocnum).unwrap();
         log::info!("orkhut : points of block : {blocnum} , {bsize}");
     }
