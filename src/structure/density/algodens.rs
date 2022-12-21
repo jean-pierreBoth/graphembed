@@ -101,23 +101,21 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
         alpha.push(Arc::new(RwLock::new(split)));
     }
     // now we initialize r to 0
-    let r :  Vec<Arc<Atomic<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(Atomic::<F>::new(F::zero()))).collect();
+    let r :  Vec<Arc<RwLock<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(RwLock::<F>::new(F::zero()))).collect();
     //
     // a function that computes r from alpha after each iteration
     //
-    let r_from_alpha = | r :  &Vec<Arc<Atomic<F>>> , alpha : &Vec<Arc<RwLock<EdgeSplit<'a, F>>>>|  {
+    let r_from_alpha = | r :  &Vec<Arc<RwLock<F>>> , alpha : &Vec<Arc<RwLock<EdgeSplit<'a, F>>>>|  {
             // reset r to 0
         (0..nb_nodes).into_par_iter().for_each(|i| {
-                r[i].store(F::zero(), Ordering::Relaxed);
+                *r[i].write() = F::zero();
         });
             // alpha's load transferred to r
         (0..alpha.len()).into_par_iter().for_each(|i| {
                 let alpha_i = alpha[i].read();
-                let old_value = r[alpha_i.edge.source().index()].load(Ordering::Relaxed);
-                r[alpha_i.edge.source().index()].store(old_value + F::from(alpha_i.wsplit.0).unwrap(), Ordering::Relaxed);
+                *r[alpha_i.edge.source().index()].write() += F::from(alpha_i.wsplit.0).unwrap();
                 // process target
-                let old_value = r[alpha_i.edge.target().index()].load(Ordering::Relaxed);
-                r[alpha_i.edge.target().index()].store(old_value + F::from(alpha_i.wsplit.1).unwrap(), Ordering::Relaxed);
+                *r[alpha_i.edge.target().index()].write() += F::from(alpha_i.wsplit.1).unwrap();
             }
         );
     };
@@ -137,8 +135,8 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
             let mut alpha_i = alpha[i].write();
             let source = alpha_i.edge.source();
             let target = alpha_i.edge.target();
-            let r_source = r[source.index()].load(Ordering::Relaxed);
-            let r_target = r[target.index()].load(Ordering::Relaxed);
+            let r_source = *r[source.index()].read();
+            let r_target = *r[target.index()].read();
             // get edge node with min r. The smaller gets the weight
             if r_source <  r_target  { 
                 delta_i.0 = alpha_i.edge.weight().to_f32().unwrap();
@@ -157,7 +155,7 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
         r_from_alpha(&r, &alpha);
     } // end of // loop on edges 
     // We do not need locks any more, simplify
-    let r_s: Vec<F> = r.iter().map( |v| v.load(Ordering::Relaxed)).collect();
+    let r_s: Vec<F> = r.iter().map( |v| *v.read()).collect();
     let alpha_s: Vec<EdgeSplit<'a,F>> = alpha.iter().map(|a| a.read().clone()).collect();
     //
     log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
