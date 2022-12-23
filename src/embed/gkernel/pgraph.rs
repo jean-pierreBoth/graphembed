@@ -103,7 +103,7 @@ impl <Elabel> Eweight<Elabel>
 
 }  // end of Eweight
 
-/// Data associated to an edge should satisfy Default and so  Eweight<Elabel> should satisfy Default.
+/// Data associated to an edge should satisfy Default and so  Eweight\<Elabel\> should satisfy Default.
 impl <Elabel> Default for Eweight<Elabel> 
     where Elabel : LabelT {
     fn default() -> Self {

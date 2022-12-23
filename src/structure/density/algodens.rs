@@ -174,6 +174,15 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
 } // end of get_alpha_r
 
 
+/// returns the dgree of a node
+pub fn get_degree_undirected<N,F>(graph : &Graph<N, F, Undirected>, rank : usize) -> Result<usize, anyhow::Error> {
+    let nb_nodes = graph.node_count();
+    if rank >= nb_nodes {
+        return Err(anyhow::anyhow!("bad index, nb_nodes : {nb_nodes}"));
+    }
+    let neighbours = graph.neighbors(NodeIndex::new(rank));
+    Ok(neighbours.count())
+}  // end of get_degree_undirected
 
 
 

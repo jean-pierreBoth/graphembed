@@ -22,7 +22,7 @@ use indxvec::Vecops;
 /// Increasing the size of a block would decrease its density. The decomposition is thus naturally defined.   
 /// 
 /// The blocks of vertices are of decreasing density. The exact decomposition is unique.
-/// We provide here the approximate decomposition, which is the result of the function [approximate_decomposition](approximate_decomposition)
+/// We provide here the approximate decomposition, which is the result of the function [approximate_decomposition](super::algodens::approximate_decomposition)
 /// 
 /// First we search maximal densest subsets $S_{i}$. There are deduced from the isotonic regression by a stability check.  
 /// Then we get a diminishingly dense decomposition of the graph in blocks $B_{i}$.  
@@ -159,10 +159,9 @@ impl StableDecomposition {
 
 
     /// returns a stable decomposiiton from a json dump
-    pub fn reload_json(dirpath : &Path) -> Result<Self, String> {
+    pub fn reload_json(filepath : &Path) -> Result<Self, String> {
         log::info!("in StableDecomposition::reload_json");
         //
-        let filepath = dirpath.join("parameters.json");
         let fileres = OpenOptions::new().read(true).open(&filepath);
         if fileres.is_err() {
             log::error!("StableDecomposition::reload_json : reload could not open file {:?}", filepath.as_os_str());

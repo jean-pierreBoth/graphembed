@@ -1,6 +1,6 @@
 //! Describes the Embedded vectors. 
 //! 
-//! Basic symetric embedded vectors are described by an Array2<F>
+//! Basic symetric embedded vectors are described by an Array2\<F\>
 //! 
 //! for Hope embedding F can be a floating point type f32 or f64. So the type F is described by the constraints :  
 //!   F : Float + Lapack + Scalar  + ndarray::ScalarOperand + sprs::MulAcc....   
@@ -24,8 +24,8 @@
 use ndarray::{Array2, ArrayView1};
 use indexmap::IndexSet;
 
-use crate::tools::edge::{IN,OUT};
-use crate::tools::degrees::*;
+use crate::embed::tools::edge::{IN,OUT};
+use crate::embed::tools::degrees::*;
 
 /// to represent the distance in embedded space between 2 vectors
 type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
@@ -66,7 +66,7 @@ pub trait EmbeddedT<F> {
 pub struct Embedded<F> {
     /// array (n,d) with n number of data, d dimension of Embedded
     data: Array2<F>,
-    /// distance between vectors in embedded space. helps to implement trait EmbeddedT<F>
+    /// distance between vectors in embedded space. helps to implement trait [EmbeddedT\<F\>]
     distance : fn(&ArrayView1<F>, &ArrayView1<F>) -> f64,
 } // end of Embedded
 
@@ -254,8 +254,8 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
 //====================================================================================
 
 
-/// The trait Embedder is something that has as output :  
-/// something satisfying the trait EmbeddedT<F>, for example  EmbeddedAsym<usize> for nodesketch embedding.  
+/// The trait EmbedderT is something whose method embed has as output something satisfying the trait EmbeddedT\<F\>.  
+/// For example the nodesketchasym module embedding method produces [`EmbeddedAsym<usize>`] .    
 /// F is the type contained in embedded vectors , mostly f64, f32, usize.  
 /// Useful just to make cross validation generic.
 pub trait EmbedderT<F>  {
@@ -277,7 +277,7 @@ pub trait EmbedderT<F>  {
 ///                      given a node id we get its rank in Array using IndexSet::get_index_of
 ///                      given a rank we get original node id by using IndexSet::get_index. 
 /// 
-/// - embbeded : the embedded data of type EmbeddedData. At present time Embedded<F> or EmbeddedAsym<F>
+/// - embbeded : the embedded data of type EmbeddedData. At present time Embedded\<F\> or EmbeddedAsym\<F\>
 pub struct Embedding<F, NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> >  {
     /// association of nodeid to a rank. To be made generic to not restrict node id to usize
     nodeindexation : IndexSet<NodeId>,

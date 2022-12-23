@@ -26,17 +26,14 @@ fn init_log() -> u64 {
 
 pub mod io;
 
-pub mod atp;
+pub mod embed;
 
-pub mod nodesketch;
 
 pub mod embedding;
 
-pub mod tools;
 
 pub mod validation;
 
-pub mod gkernel;
 
 pub mod prelude;
 //

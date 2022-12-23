@@ -34,13 +34,12 @@ use petgraph::{EdgeType,Directed, Direction};
 use std::collections::HashMap;
 use probminhash::probminhasher::*;
 
-use crate::tools::edge::{EdgeDir};
-use crate::tools::edge;
+use crate::embed::tools::edge::{EdgeDir};
+use crate::embed::tools::{edge, jaccard};
 
 use super::pgraph::*;
 use super::params::*;
 use crate::embedding::*;
-use crate::tools::jaccard;
 
 /// To sketch/store the node sketching result
 /// Exploring nodes around a node we skecth the Node labels encountered 
@@ -785,7 +784,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         }
         // TODO must clean the degree stuff!!
         let embedded = EmbeddedAsym::<Nlabel>::new(embedded_source, embedded_target, None, 
-                    crate::tools::jaccard::jaccard_distance);
+                    crate::embed::tools::jaccard::jaccard_distance);
         return Some(embedded);
     } // end of get_asymetric_n_embedding
 
@@ -829,7 +828,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketcher<'a, Nlabel, 
         }
        // TODO must clean the degree stuff!!
        let embedded = EmbeddedAsym::<NElabel<Nlabel,Elabel>>::new(embedded_source, embedded_target, None, 
-                crate::tools::jaccard::jaccard_distance);
+                crate::embed::tools::jaccard::jaccard_distance);
         return Some(embedded);
     } // end of get_symetric_n_embedding
 
@@ -881,7 +880,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
 
     // TODO &mut is required only beccause of loop augmentation on graph!
     /// Must collect at the end of computation the embedding built on NLabel.  
-    /// If Graph has Edge labels, an embedding is built on couples (NLabel, ELabel), We get 2 structures Embedded<F>
+    /// If Graph has Edge labels, an embedding is built on couples (NLabel, ELabel), We get 2 structures [`Embedded<F>`]
     pub fn compute_embedded(&mut self) -> Result<usize,anyhow::Error> {
         log::debug!("in MgraphSketch::compute_Embedded");
         //
@@ -938,7 +937,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
         let nbnodes = n_embedded.get_nb_nodes();
         let dim = n_embedded.get_dimension();
         for i in 0..nbnodes {
-            let label_v = n_embedded.get_embedded_node(i, crate::tools::edge::INOUT);
+            let label_v = n_embedded.get_embedded_node(i, crate::embed::tools::edge::INOUT);
             for j in 0..dim {
                 match hash_label.get_mut(&label_v[j]) {
                     Some(val) => {
@@ -972,7 +971,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketch<'a, Nlabel, El
     let nbnodes = ne_embedded.get_nb_nodes();
     let dim = ne_embedded.get_dimension();
     for i in 0..nbnodes {
-        let label_v = ne_embedded.get_embedded_node(i, crate::tools::edge::INOUT);
+        let label_v = ne_embedded.get_embedded_node(i, crate::embed::tools::edge::INOUT);
         for j in 0..dim {
             match hash_label.get_mut(&label_v[j]) {
                 Some(val) => {
@@ -1040,7 +1039,7 @@ impl<'a, Nlabel, Elabel, NodeData, EdgeData, Ty, Ix> MgraphSketchAsym<'a, Nlabel
 
     // TODO &mut is required only beccause of loop augmentation on graph!
     /// Must collect at the end of computation the embedding built on NLabel.  
-    /// If Graph has Edge labels, an embedding is built on couples (NLabel, ELabel), We get 2 structures Embedded<F>
+    /// If Graph has Edge labels, an embedding is built on couples (NLabel, ELabel), We get 2 structures [`Embedded<F>`]
     pub fn compute_embedded(&mut self) -> Result<usize,anyhow::Error> {
         log::debug!("in MgraphSketchAsym::compute_Embedded");
         //
@@ -1182,9 +1181,9 @@ mod tests {
 
 use super::*;
 
-use crate::gkernel::idmap::*;
+use crate::embed::gkernel::idmap::*;
 
-use crate::gkernel::exio::{maileu::*, ppisapiens::*};
+use crate::embed::gkernel::exio::{maileu::*, ppisapiens::*};
 
 const MAILEU_DIR:&str = "/home/jpboth/Data/Graphs/Mail-EU";
 const PPI_DIR:&str = "/home/jpboth/Data/Graphs/PPI";

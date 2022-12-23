@@ -13,8 +13,8 @@ use petgraph::graph::{Graph, NodeIndex};
 use petgraph::stable_graph::{DefaultIx};
 
 
-use crate::gkernel::pgraph::*;
-use crate::gkernel::idmap::*;
+use crate::embed::gkernel::pgraph::*;
+use crate::embed::gkernel::idmap::*;
 
 
 /// A node is a num as we want to keep track of origin id and a label consisting in a vector of length 1 as we have only one label

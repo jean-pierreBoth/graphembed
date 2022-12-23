@@ -15,7 +15,7 @@ const ORKUT_DATA_DIR : &'static str = "/home/jpboth/Data/Graphs/Orkut/";
 
 
 /// Read graph (given as csv) and ground truth communities
-fn read_orkutdir(dirpath : &Path) -> Result<Graph<u32, f64 , Undirected, u32>, anyhow::Error> {
+pub fn read_orkutdir(dirpath : &Path) -> Result<Graph<u32, f64 , Undirected, u32>, anyhow::Error> {
     let fpath = dirpath.clone().join("com-orkut.ungraph.txt");
     // use csv to unweighted graph_map
     log::info!("read_orkutdir : reading {fpath:?}");

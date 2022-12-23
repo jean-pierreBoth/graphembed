@@ -3,7 +3,7 @@
 //!    D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux. 
 //! 
 //! It provides embedding for simple graphs without data attached to nodes or labels. To do embeddings with discrete data
-//! attached to graph entities see the module gkernel [crate::gkernel].  
+//! attached to graph entities see the module gkernel [crate::embed::gkernel].  
 //! The hashing strategy is based on Ertl's probminhash. (see the probminhash crate).  
 //! It provides an extension for directed graph
 

@@ -39,7 +39,7 @@ impl  <F:PartialOrd+PartialEq> Eq for IndexedValue<F> {}
 
 
 /// implement an order on IndexedValue.
-/// To be used with Vec<IndexedValue<F>>::unstable_sort
+/// To be used with Vec\<IndexedValue\<F\>\>::unstable_sort
 impl <F:PartialOrd+PartialEq>  PartialOrd for IndexedValue<F> {
     fn partial_cmp(&self , other: &Self) -> Option<cmp::Ordering> {
         self.1.partial_cmp(&other.1)

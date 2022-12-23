@@ -48,7 +48,7 @@ use ndarray::{Array2, ArrayView1};
 use indexmap::IndexSet;
 
 use crate::embedding::*;
-use crate::tools::edge::{IN,OUT};
+use crate::embed::tools::edge::{IN,OUT};
 use crate::io;
 
 
@@ -162,7 +162,7 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
 
 
 /// returns the bson header of an embedding.  
-/// This can be useful to retrieve the type of the embedding (dumped via a call to std::any::type_name::<F>()).
+/// This can be useful to retrieve the type of the embedding (dumped via a call to std::any::type_name::\<F\>()).
 /// The type will be "f64", "f32" or "i64" as Bson imposes the conversion of usize to i64
 pub fn get_bson_header(fname : &String) -> Result<EmbeddedBsonHeader, anyhow::Error> {
     let path = Path::new(fname);

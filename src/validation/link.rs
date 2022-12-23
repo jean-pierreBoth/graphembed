@@ -26,7 +26,7 @@ use sprs::{TriMatI, CsMatI};
 use rayon::prelude::*;
 
 use crate::embedding::{EmbeddedT};
-use crate::tools::{degrees::*, edge::Edge, edge::IN, edge::OUT};
+use crate::embed::tools::{degrees::*, edge::Edge, edge::IN, edge::OUT};
 
 pub enum ValidationMode {
     NODELABEL,
@@ -354,7 +354,7 @@ fn one_auc_iteration<F, G, E>(csmat : &CsMatI<F, usize>, delete_proba : f64, sym
 /// estimate AUC as described in Link Prediction in complex Networks : A survey
 ///             Lü, Zhou. Physica 2011
 /// 
-/// type G is necessary beccause we embed in a possibly different type than F. (for example in Array<usize> with nodesketch)
+/// type G is necessary beccause we embed in a possibly different type than F. (for example in Array\<usize\> with nodesketch)
 
 pub fn estimate_auc<F, G, E>(csmat : &CsMatI<F, usize>, nbiter : usize, delete_proba : f64, symetric : bool, 
             embedder : &(dyn Fn(TriMatI<F, usize>) -> E + Sync)) -> Vec<f64>
@@ -414,7 +414,7 @@ mod tests {
 
     use sprs::{TriMatI};
 
-    use crate::nodesketch::{nodesketchsym::*};
+    use crate::embed::nodesketch::{nodesketchsym::*};
 
     
     fn log_init_test() {

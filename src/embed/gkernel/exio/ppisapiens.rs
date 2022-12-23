@@ -20,8 +20,7 @@ use petgraph::graph::{Graph, NodeIndex};
 use petgraph::stable_graph::{DefaultIx};
 
 
-use crate::gkernel::pgraph::*;
-use crate::gkernel::idmap::*;
+use crate::embed::gkernel::{pgraph::*, idmap::*};
 
 
 // TODO in fact it is same as EuNode, do we provide basic Node of our own?

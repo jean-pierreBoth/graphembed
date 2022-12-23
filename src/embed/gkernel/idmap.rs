@@ -36,7 +36,7 @@ pub struct IdMap<ToLabel, Label>
 /// 
 /// When a node has no input edge or no output edge, if we want to get an Array2 are embedding result we must define a specific label
 /// to fill the corresponding In or Out sketching vector. This is the Default label! 
-/// (An alternative woud have been to return an Option<Vec> for each node, but still we would have to relabel to fit into our labels)
+/// (An alternative woud have been to return an Option\<Vec\> for each node, but still we would have to relabel to fit into our labels)
 /// Moreover we may need to map labels in datafile to out implemented labels. So there is a specific relabelling pass in reading data
 /// Typically the default label 0 must be remapped to someting else (max label used + 1) 
 

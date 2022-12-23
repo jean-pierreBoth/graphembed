@@ -25,7 +25,7 @@ use num_traits::float::*;
 //use sprs::prod;
 use sprs::{CsMat, TriMatI, TriMatBase};
 
-use crate::tools::{degrees::*};
+use crate::embed::tools::{renormalize, degrees::*};
 
 use annembed::tools::svdapprox::{MatRepr, MatMode, RangeApproxMode, SvdApprox, SvdResult};
 
@@ -201,7 +201,7 @@ impl <F> Hope<F>  where
         //
         log::debug!("hope::make_rooted_pagerank_problem approx_mode : {:?}, factor : {:?}", approx_mode, factor);
         //
-        crate::tools::renormalize::matrepr_row_normalization(& mut self.mat);
+        renormalize::matrepr_row_normalization(& mut self.mat);
         // Mg is I - alfa * P where P is the normalized adjacency matrix to a probability matrix
         let mat_g = compute_1_minus_beta_mat(&self.mat, factor, true);
         // compute Ml = (1-alfa) I
@@ -228,7 +228,7 @@ impl <F> Hope<F>  where
         //
         log::debug!("hope::embed_rpr_simple : {:?}, factor : {:?}", approx_mode, factor);
         //
-        crate::tools::renormalize::matrepr_row_normalization(& mut self.mat);
+        crate::embed::tools::renormalize::matrepr_row_normalization(& mut self.mat);
         // Mg is I - alfa * P where P is the normalized adjacency matrix to a probability matrix
         let t_mat_g = compute_1_minus_beta_mat(&self.mat, factor, true);
         // compute svd approx of transpose(mat_g) which U and V as inverse of Mg                 
@@ -299,7 +299,7 @@ impl <F> Hope<F>  where
         //
 
         log::debug!("hope::make_adamicadar_problem");
-        crate::tools::renormalize::matrepr_adamic_adar_normalization(& mut self.mat);
+        crate::embed::tools::renormalize::matrepr_adamic_adar_normalization(& mut self.mat);
         // Mg is I, so in fact it is useless we have a simple SVD to approximate
         let mat_l = &self.mat;
         let svd_approx = SvdApprox::new(mat_l);
@@ -510,7 +510,7 @@ impl <F> Hope<F>  where
 //====================================================================================
 
 
-/// implement EmbedderT trait for Hope<F> where F is f64 or f32
+/// implement EmbedderT trait for Hope\<F\> where F is f64 or f32
 impl <F> EmbedderT<F> for Hope<F>  
     where F : Float + Scalar + Lapack + ndarray::ScalarOperand + sprs::MulAcc + for<'r> std::ops::MulAssign<&'r F> + num_traits::MulAdd + 
         Default + Send + Sync {

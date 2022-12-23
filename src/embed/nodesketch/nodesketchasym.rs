@@ -28,7 +28,7 @@ use cpu_time::ProcessTime;
 
 
 use super::{sla::*, params::NodeSketchParams};
-use crate::tools::degrees::*;
+use crate::embed::tools::degrees::*;
 use crate::embedding::{EmbeddedAsym, EmbedderT};
 
 
@@ -384,7 +384,7 @@ impl NodeSketchAsym {
             }
         }
         let embedded = EmbeddedAsym::<usize>::new(embedded_source, embedded_target, Some(self.degrees.clone()), 
-                crate::tools::jaccard::jaccard_distance);
+                crate::embed::tools::jaccard::jaccard_distance);
         //
         Ok(embedded)
     } // end of compute_Embedded
