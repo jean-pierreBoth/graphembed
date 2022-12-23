@@ -26,7 +26,7 @@ impl Degree {
 /// fist component is in, second component is out!
 /// Self loops are not taken into account as the objective of this function 
 /// to be able to delete edge in AUC link prediction and avoiding making disconnected nodes
-pub(crate) fn get_degrees<F>(csmat : &CsMatI<F, usize>) -> Vec<Degree> 
+pub(crate) fn get_csmat_degrees<F>(csmat : &CsMatI<F, usize>) -> Vec<Degree> 
     where F : Copy + Default {
     //
     assert!(csmat.is_csr());

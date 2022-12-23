@@ -69,7 +69,7 @@ impl NodeSketchAsym {
         let mut previous_sketches_in = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches_out = Vec::<RowSketch>::with_capacity(csrmat.rows());
-        let degrees = get_degrees(&csrmat);
+        let degrees = get_csmat_degrees(&csrmat);
         let sketch_size = params.get_sketch_size();
         for _ in 0..csrmat.rows() {
             // incoming edges

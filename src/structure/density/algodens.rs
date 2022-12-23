@@ -24,7 +24,6 @@ use num_traits::{float::*, FromPrimitive};
 // synchronization primitive
 use std::sync::{Arc};
 use parking_lot::{RwLock};
-use atomic::{Atomic, Ordering};
 use rayon::prelude::*;
 
 
@@ -82,7 +81,7 @@ impl <'a, F> AlphaR<'a, F> {
 /// initialize alpha and r (as defined in paper) by Frank-Wolfe algorithm
 /// returns (alpha, r) alpha is dimensioned to number of edges, r is dimensioned to number of vertex
 fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) -> AlphaR<'a,F>
-    where F : Float + FromPrimitive + std::ops::AddAssign<F> + Sync + Send + std::fmt::Debug {
+    where F : Float + FromPrimitive + std::ops::AddAssign<F> + std::ops::SubAssign<F> + Sync + Send + std::fmt::Debug {
     //
     log::info!("entering Frank-Wolfe iterations");
     let cpu_start = ProcessTime::now();
@@ -93,6 +92,8 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
     // we will need to update r with // loops on edges.
     // We bet on low degree versus number of edges so low contention (See hogwild)
     let mut alpha : Vec<Arc<RwLock<EdgeSplit<'a, F>>>> = Vec::with_capacity(nb_edges);
+    // asynchronuous is really faster! old code is kept for memory
+    let asynchronuous = true;
     //
     let edges = graph.edge_references();
     for e in edges {
@@ -101,21 +102,21 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
         alpha.push(Arc::new(RwLock::new(split)));
     }
     // now we initialize r to 0
-    let r :  Vec<Arc<RwLock<F>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(RwLock::<F>::new(F::zero()))).collect();
+    let r :  Vec<Arc<RwLock<f32>>> = (0..nb_nodes).into_iter().map(|_| Arc::new(RwLock::<f32>::new(0.))).collect();
     //
     // a function that computes r from alpha after each iteration
     //
-    let r_from_alpha = | r :  &Vec<Arc<RwLock<F>>> , alpha : &Vec<Arc<RwLock<EdgeSplit<'a, F>>>>|  {
+    let r_from_alpha = | r :  &Vec<Arc<RwLock<f32>>> , alpha : &Vec<Arc<RwLock<EdgeSplit<'a, F>>>>|  {
             // reset r to 0
         (0..nb_nodes).into_par_iter().for_each(|i| {
-                *r[i].write() = F::zero();
+                *r[i].write() = 0.;
         });
             // alpha's load transferred to r
         (0..alpha.len()).into_par_iter().for_each(|i| {
                 let alpha_i = alpha[i].read();
-                *r[alpha_i.edge.source().index()].write() += F::from(alpha_i.wsplit.0).unwrap();
+                *r[alpha_i.edge.source().index()].write() += alpha_i.wsplit.0;
                 // process target
-                *r[alpha_i.edge.target().index()].write() += F::from(alpha_i.wsplit.1).unwrap();
+                *r[alpha_i.edge.target().index()].write() += alpha_i.wsplit.1;
             }
         );
     };
@@ -139,23 +140,31 @@ fn get_alpha_r<'a, N, F>(graph : &'a Graph<N, F, Undirected>, nbiter : usize) ->
             let r_target = *r[target.index()].read();
             // get edge node with min r. The smaller gets the weight
             if r_source <  r_target  { 
-                delta_i.0 = alpha_i.edge.weight().to_f32().unwrap();
-                // delta_i.1 = 0.;
+                delta_i.0 = alpha_i.edge.weight().to_f32().unwrap();  // andd delta_i.1 = 0.;
                 alpha_i.wsplit.0 =  (1. - gamma) * alpha_i.wsplit.0 + gamma * delta_i.0;    
-                alpha_i.wsplit.1 =  (1. - gamma) * alpha_i.wsplit.1;  
+                alpha_i.wsplit.1 =  (1. - gamma) * alpha_i.wsplit.1;
+                if asynchronuous {
+                    *r[source.index()].write() += (delta_i.0 - alpha_i.wsplit.0) * gamma;
+                    *r[target.index()].write() += (0. - alpha_i.wsplit.1) * gamma;
+                }
             } else if r_target < r_source {
-                delta_i.1 = alpha_i.edge.weight().to_f32().unwrap();
-                // delta_i.0 = 0.;
+                delta_i.1 = alpha_i.edge.weight().to_f32().unwrap();   // and delta_i.0 = 0.
                 alpha_i.wsplit.0 =  (1. - gamma) * alpha_i.wsplit.0;    
                 alpha_i.wsplit.1 =  (1. - gamma) * alpha_i.wsplit.1 + gamma * delta_i.1;  
+                if asynchronuous {
+                    *r[source.index()].write() += (0. - alpha_i.wsplit.0) * gamma;
+                    *r[target.index()].write() += (delta_i.1 - alpha_i.wsplit.1) * gamma;
+                }
             }
             // else e do nothing!
         }); // end of // computation of 
         // now we recompute r
-        r_from_alpha(&r, &alpha);
+        if !asynchronuous {
+            r_from_alpha(&r, &alpha);
+        }
     } // end of // loop on edges 
     // We do not need locks any more, simplify
-    let r_s: Vec<F> = r.iter().map( |v| *v.read()).collect();
+    let r_s: Vec<F> = r.iter().map( |v| F::from(*v.read()).unwrap()).collect();
     let alpha_s: Vec<EdgeSplit<'a,F>> = alpha.iter().map(|a| a.read().clone()).collect();
     //
     log::info!("frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}", 
@@ -180,6 +189,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     let nb_reg_blocks = iso_regression.get_nb_block();
     let pointblocklocator = PointBlockLocator::new(&iso_regression);
     //
+    //
     let alfa_tmp = alphar.get_alpha().clone();
     let mut r = alphar.get_r().clone();
     let mut r_test = alphar.get_r().clone();
@@ -202,7 +212,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             while let Some((edge_idx,neighbor)) = neighbours.next(graph) {
                 let neighbor_u = neighbor.index();
                 // TODO >= or == 
-                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() == numbloc+1 {
+                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() >= numbloc+1 {
                     // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
                     let edge = graph.edge_endpoints(edge_idx).unwrap();
                     // we must check for order. We have the same order of of the 2-uple in wsplit and in edge
@@ -211,8 +221,8 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
                         r_test[edge.1.index()] += F::from(alfa_tmp[edge_idx.index()].wsplit.0).unwrap();
                     }
                     else if edge.0 == neighbor && edge.1 == pt_idx {
-                        r_test[edge.1.index()] -= F::from(alfa_tmp[edge_idx.index()].wsplit.0).unwrap();
-                        r_test[edge.0.index()] += F::from(alfa_tmp[edge_idx.index()].wsplit.0).unwrap();                                            
+                        r_test[edge.1.index()] -= F::from(alfa_tmp[edge_idx.index()].wsplit.1).unwrap();
+                        r_test[edge.0.index()] += F::from(alfa_tmp[edge_idx.index()].wsplit.1).unwrap();                                            
                     }
                     else {
                         panic!("should not happen");
@@ -225,7 +235,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
         let mut max_not_in_block = F::zero();
         (0..r_test.len()).into_iter().for_each(|i| {
             let b = pointblocklocator.get_point_block_num(i).unwrap();
-            if b == numbloc {
+            if b <= numbloc {
                 min_in_block = min_in_block.min(r_test[i]);
             }
             else if b > numbloc {
@@ -418,7 +428,7 @@ mod tests {
         log::info!("dump degrees , nb_nodes : {}", nb_nodes);
         for node in 0..nb_nodes {
             let degree = graph.neighbors(NodeIndex::new(node)).count();
-            log::info!(" node : {}, degree : {}", node, degree);
+            log::info!(" node : {}, degree : {} r : {}", node, degree, r[node]);
         }
         let decomposition = check_stability(&graph, &alpha_r, &iso_regression);
         let nb_blocks = decomposition.get_nb_blocks();
@@ -451,6 +461,13 @@ mod tests {
         let decomposition = approximate_decomposition(&graph, nb_iter);
         let nb_blocks = decomposition.get_nb_blocks();
         log::info!("pava_miserables got nb_block : {nb_blocks}");
+        // dump degrees of each nodes
+        let nb_nodes = graph.node_count();
+        log::info!("dump degrees , nb_nodes : {}", nb_nodes);
+        for node in 0..nb_nodes {
+            let degree = graph.neighbors(NodeIndex::new(node)).count();
+            log::info!(" node : {}, degree : {}", node, degree);
+        }
         // get blocksizes
         let mut blocksize = Vec::<usize>::new();
         for blocnum in 0..nb_blocks {

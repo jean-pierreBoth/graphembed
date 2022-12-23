@@ -52,12 +52,12 @@ pub fn main() {
         Err(_) => { log::info!("orkut decomposition dumped in {dump_path:?} : Err") ; },
     };
     //
-    for blocnum in 0..nb_blocks.min(50) {
+    for blocnum in 0..nb_blocks.min(300) {
         let block = decomposition.get_block_points(blocnum).unwrap();
         log::info!("orkhut : points of block : {} , {:?}", blocnum, block.len());
     }
     //
-    for blocnum in 0..nb_blocks.min(50) {
+    for blocnum in 0..nb_blocks.min(300) {
         let bsize = decomposition.get_nbpoints_in_block(blocnum).unwrap();
         log::info!("orkhut : points of block : {blocnum} , {bsize}");
     }

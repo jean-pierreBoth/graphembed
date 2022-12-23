@@ -56,9 +56,7 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     let mut values = Vec::<F>::with_capacity(nb_nodes);
     // we need degrees as we cannot delete edges if they are the last 
     // as we cannot train anything if nodes is disconnected
-    let mut degrees = get_degrees::<F>(csrmat);
-    // let mut degrees_out = csrmat.degrees();
-    // let mut degrees_in = csrmat.transpose_view().to_csr().degrees();
+    let mut degrees = get_csmat_degrees::<F>(csrmat);
     //
     log::info!("mean in degree : {:.3e}", degrees.iter().map(|degree| degree.d_in).sum::<u32>() as f64/ nb_nodes as f64);
     //

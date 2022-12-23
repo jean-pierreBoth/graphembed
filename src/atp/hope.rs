@@ -127,7 +127,7 @@ impl <F> Hope<F>  where
 
     pub fn new(params : HopeParams, trimat : TriMatI<F, usize>) -> Self {
         let csrmat = trimat.to_csr();
-        let degrees = get_degrees(&csrmat);
+        let degrees = get_csmat_degrees(&csrmat);
         Hope::<F>{params, mat : MatRepr::from_csrmat(trimat.to_csr()), _degrees : Some(degrees), sigma_q : None}
     }
 
