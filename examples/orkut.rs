@@ -1,6 +1,6 @@
 //! example of density decompositon for Orkut graph [https://snap.stanford.edu/data/com-Orkut.html]
 //! The graph is undirected with 3072441 nodes and 117 185 083 edges
-//! Ground truth communities are provided 
+//! The output is the ordered list of densest stable sets
 
 
 use std::path::{Path};
@@ -8,6 +8,7 @@ use std::path::{Path};
 use petgraph::prelude::*;
 
 use graphembed::prelude::*;
+
 
 /// Directory containing the 2 data files 
 /// TODO use clap in main
@@ -61,4 +62,5 @@ pub fn main() {
         let bsize = decomposition.get_nbpoints_in_block(blocnum).unwrap();
         log::info!("orkhut : points of block : {blocnum} , {bsize}");
     }
+    //
 } // end of main

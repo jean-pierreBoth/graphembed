@@ -12,4 +12,8 @@ pub mod params;
 pub mod nodesketchsym;
 pub mod nodesketchasym;
 
+pub use params::{NodeSketchParams};
+pub use {nodesketchsym::NodeSketch, nodesketchasym::NodeSketchAsym};
+
+
 pub mod sla;

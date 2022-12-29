@@ -12,10 +12,8 @@ pub use crate::embedding::*;
 
 pub use annembed::tools::svdapprox::*;
 pub use crate::validation::link;
-pub use crate::validation::params::*;
+pub use crate::validation::linkparams::*;
 
-pub use crate::embed::nodesketch::params::{NodeSketchParams};
-pub use crate::embed::nodesketch::{nodesketchsym::NodeSketch, nodesketchasym::NodeSketchAsym};
 
-pub use crate::structure::density::{stable::*,algodens::approximate_decomposition};
+pub use crate::structure::density::*;
 pub use crate::structure::density::pava::{IsotonicRegression, PointIterator};

@@ -3,17 +3,21 @@
 The purpose of this crate is to provide embedding of directed or undirected graphs with positively weighted edges
 and possibly discrete labels attached to nodes.
 
-- For simple graphs, without data attached to nodes/labels, we provide 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
+- embedding methods
+  
+  - For simple graphs, without data attached to nodes/labels, we provide 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
 
-- The module **gkernel** is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
+  - The module **gkernel** is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
     The algorithm is based on an extension of the hashing strategy used in the module **nodesketch**.  
     In the undirected case, this module also computes a global embedding vector for the whole graph. **It is still in an early version**.
 
+- To complement the embeddings we provide also core decomposition of graphs. See the module **structure**
+
 ## Methods
 
-### The strategies used in this crate are based on the following papers
+### The embedding algorithms used in this crate are based on the following papers
 
-1. **nodesketch**
+- **nodesketch**
 
 *NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  [https://dl.acm.org/doi/10.1145/3292500.3330951]  
     D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux.
@@ -21,13 +25,17 @@ and possibly discrete labels attached to nodes.
 It is based on multi hop neighbourhood identification via sensitive hashing.
 Instead of using **ICWS** for hashing we use the more recent algorithm **probminhash**. See [probminhash](https://arxiv.org/abs/1911.00675).
 The algorithm associates a probability distribution on neighbours of each point depending on edge weights and distance to the point.
-Then this distribution is hashed to build an embedding vector.  
+Then this distribution is hashed to build a (discrete) embedding vector consisting in nodes identifiers.  
 The distance between embedded vectors is the Jaccard distance so we get
-a real distance on the embedding space, at least for the symetric embedding.  
+a real distance on the embedding space for the symetric embedding.  
 
 An extension of the paper is also implemented to get asymetric embedding for directed graph. The similarity is also based on the hash of sets (nodes going to or from) a given node but then the dissimilarity is no more a distance (no symetry and some discrepancy with the triangular inequality).
 
-2. **atp**
+- **gkernel**
+
+  We use the same scheme as in **nodesketch** but we hash the nodes labels so the embedding vectors are computed as the summary of node id's or labels attached to nodes flowing through the edges going into or from a node.
+
+- **atp**
 
 *Asymetric Transitivity Preserving Graph Embedding 2016*  
     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
@@ -40,12 +48,10 @@ Source node are related to left singular vectors and target nodes to the right o
 The similarity measure is the dot product, so it is not a norm.  
 The svd is approximated by randomization as described in Halko-Tropp 2011 as implemented in the [annembed crate](https://crates.io/crates/annembed).
 
-### Implementation
+### The core decomposition algorithms
 
-Asymetric embeddings compute 2 vectors for each node, once considered as a source, once considered as a target.
-
- These vectors are computed either as left and right singular vectors of a proximity matrix in the case of the **atp** module. For the **nodesketch** and **gkernel** the embedding vectors are computed as the summary of node id's or labels attached to nodes flowing through the edges going into or from a node.
-
+- Density-friendly decomposition
+  
 ## Some data sets
 
 ### Without labels
@@ -55,19 +61,19 @@ Larger datasets can be downloaded from the SNAP data collections <https://snap.s
 
 #### Some small test graphs are provided in a Data subdirectory
 
-1. Symetric graphs
+- Symetric graphs
 
-- Les miserables  <http://konect.cc/networks/moreno_lesmis>
-    les miserables  co occurence of characters in Victor Hugo's novel 'Les Misérables'.
+  - Les miserables  <http://konect.cc/networks/moreno_lesmis>.  
+    This is the graph of co-occurence of characters in Victor Hugo's novel 'Les Misérables'.
 
-- p2p-Gnutella08.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella08.html>
+  - p2p-Gnutella08.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella08.html>
 
-2. Asymetric graphs
+- Asymetric graphs
 
-- wiki-vote               <https://snap.stanford.edu/data/wiki-Vote.html>
-        7115 nodes 103689 edges
+  - wiki-vote <https://snap.stanford.edu/data/wiki-Vote.html>
+         7115 nodes 103689 edges
 
-- Cora : <http://konect.cc/networks/subelj_cora>
+  - Cora : <http://konect.cc/networks/subelj_cora>
         citation network 23166 nodes 91500 edges
 
 #### Some larger data tests for user to download
@@ -77,13 +83,13 @@ These graphs were used in results see below.
 Beware of the possible need to convert from Windows to Linux End Of Line, see the dos2unix utility.  
 Possibly some data can need to be converted from Tsv format to Csv, before being read by the program.
 
-1. Symetric
+- Symetric
 
-- youtube.  Nodes: 1134890 Edges: 2987624 <https://snap.stanford.edu/data/com-Youtube.html>
+  - youtube.  Nodes: 1134890 Edges: 2987624 <https://snap.stanford.edu/data/com-Youtube.html>
 
-2. Asymetric
+- Asymetric
 
-- twitter as tested in Hope  <http://konect.cc/networks/munmun_twitter_social>
+  - twitter as tested in Hope  <http://konect.cc/networks/munmun_twitter_social>
         465017 nodes 834797 edges
 
 ## Some results
@@ -114,11 +120,12 @@ The choice of one feature is mandatory to provide required linear algebra librar
 ### Usage
 
 - The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
-It is intrinsically asymetric in nature. It nevertheless gives access to the spectrum of Adamic Adar representing the graph and
+It is intrinsically asymetric in nature. It nevertheless gives access to the spectrum of Adamic Adar matrix representing the graph and
 so to the required dimension to get a valid embedding in $R^{n}$.  
-The Sketching embedding is much faster for large graphs but embeds in a space consisting in sequences of node id equipped with the Jaccard distance.
 
-- The *embed* module takes embedding and possibly validation commands in one directive.  
+- The Sketching embedding is much faster for large graphs but embeds in a space consisting in sequences of node id equipped with the Jaccard distance.
+
+- The *embed* module takes embedding and possibly validation commands (link prediction task) in one directive.  
 The general syntax is :
 
     embed file_description [validation_command --validation_arguments] embedding_command --embedding_arguments

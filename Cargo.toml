@@ -69,6 +69,7 @@ rand_distr = {version = "0.4"}
 ## sorting, indexing
 ordered-float = {version = "3.4"}
 indxvec = {version = "1.4"}
+hdrhistogram =  {version = "7.5"}
 
 annembed = {version = "0.0.8", default = false}
 #annembed ={ path = "../annembed", default = false}

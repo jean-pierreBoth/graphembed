@@ -26,6 +26,7 @@ use std::sync::{Arc};
 use parking_lot::{RwLock};
 use rayon::prelude::*;
 
+use hdrhistogram::Histogram;
 
 use petgraph::graph::{Graph, EdgeReference, NodeIndex};
 use petgraph::{Undirected, visit::*};
@@ -363,6 +364,39 @@ pub fn approximate_decomposition<'a, N, F>(graph : &'a Graph<N, F, Undirected>, 
     s
 } // end of approximate_decomposition
 
+
+/// log::info histograms of degrees of incremental blocks S_i whose union make B_i
+#[allow(unused)]
+pub fn get_degree_statistics<'a, N, F>(graph : &'a Graph<N, F, Undirected>, stable : &StableDecomposition) {
+    //
+    let quantiles = vec![0.05, 0.25, 0.5, 0.75, 0.95];
+    log::info!("quantiles used : {:?}", quantiles);
+    let nb_blocks = stable.get_nb_blocks();
+    for i in 0..nb_blocks {
+        get_block_degree_statistics(graph, stable, &quantiles, i).unwrap();
+    }
+} // end of get_degree_statistics
+
+
+/// log::info hsitograms of degree in block of StableDecomposition
+pub fn get_block_degree_statistics<'a, N, F>(graph : &'a Graph<N, F, Undirected>, stable : &StableDecomposition, 
+        quantiles: &Vec<f64>, blocknum : usize) -> Result<(),()> {
+    //
+    let nb_blocks = stable.get_nb_blocks();
+    if blocknum >= nb_blocks {
+        return Err(());
+    }
+    let block = stable.get_block_points(blocknum).unwrap();
+    let mut histo = Histogram::<u64>::new(2).unwrap();
+    for p in &block {
+        histo += get_degree_undirected(graph, *p).unwrap() as u64;
+    }
+    let degrees = quantiles.iter().map(|f| histo.value_at_quantile(*f)).collect::<Vec<u64>>();
+    log::info!(" block degrees: {blocknum}, degrees : {:?} ", degrees);  
+    //
+    return Ok(());
+} // end of get_block_degree_statistics
+
 //==========================================================================================================
 
 
@@ -446,6 +480,8 @@ mod tests {
             let block = decomposition.get_block_points(blocnum).unwrap();
             log::info!("pava_miserables : points of block : {} , {:?}", blocnum, block);
         }
+        //
+        get_degree_statistics(&graph, &decomposition);
     }  // end of pava_miserables
 
 
