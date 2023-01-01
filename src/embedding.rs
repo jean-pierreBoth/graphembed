@@ -28,7 +28,7 @@ use crate::embed::tools::edge::{IN,OUT};
 use crate::embed::tools::degrees::*;
 
 /// to represent the distance in embedded space between 2 vectors
-type Distance<F> = fn(&ArrayView1<F>, &ArrayView1<F>) -> f64;
+type Distance<F> = fn(&[F], &[F]) -> f64;
 
 #[derive(Debug)]
 pub enum EmbeddingMode {
@@ -36,7 +36,14 @@ pub enum EmbeddingMode {
     NodeSketch,
 }
 
+/// tag to specify we ask information on a node as a source in asymetric embedding
+pub const TAG_OUT : u8 = 0;
 
+/// tag to specify we ask information on a node as a target in asymetric embedding
+pub const TAG_IN : u8 = 1;
+
+/// tag to specify we ask information on a node in symetric embedding
+pub const TAG_IN_OUT : u8 = 1;
 
 /// The Embedded trait. It defines the interface satisfied by embedded data.  
 /// In our implementations the embedded data are stored in Array2 and embedded node
@@ -51,7 +58,7 @@ pub trait EmbeddedT<F> {
     /// Nodes are identified by their their rank in embedded space
     fn get_noderank_distance(&self, node_rank1: usize, node_rank2 : usize) -> f64;
     /// the trait provides a function distance between embedded items
-    fn get_vec_distance(&self, v1 : &ArrayView1<F>, v2: &ArrayView1<F>) -> f64;
+    fn get_vec_distance(&self, v1 : &[F], v2: &[F]) -> f64;
     /// get number of nodes
     fn get_nb_nodes(&self) -> usize;
     /// get embedding of node of rank rank, and with tag.
@@ -67,7 +74,7 @@ pub struct Embedded<F> {
     /// array (n,d) with n number of data, d dimension of Embedded
     data: Array2<F>,
     /// distance between vectors in embedded space. helps to implement trait [EmbeddedT\<F\>]
-    distance : fn(&ArrayView1<F>, &ArrayView1<F>) -> f64,
+    distance : fn(&[F], &[F]) -> f64,
 } // end of Embedded
 
 
@@ -83,9 +90,13 @@ impl<F> Embedded<F> {
         &self.data
     }
 
-    pub fn get_distance(&self) ->  &fn(&ArrayView1<F>, &ArrayView1<F>) -> f64 {
+    pub fn get_distance_ref(&self) ->  &fn(&[F], &[F]) -> f64 {
         &self.distance
     }
+
+    pub fn get_distance(&self) ->  fn(&[F], &[F]) -> f64 {
+        self.distance.clone()
+    }    
 
     /// get embedding of node of rank rank, and with tag.
     /// For a basic symetric embedding , tag is not taken into account.
@@ -111,7 +122,7 @@ impl<F> EmbeddedT<F> for Embedded<F> {
 
     /// computes the distance in embedded space between 2 vectors
     /// dimensions must be equal to Embedded dimension
-    fn get_vec_distance(&self, data1 : &ArrayView1<F>, data2: &ArrayView1<F>) -> f64 {
+    fn get_vec_distance(&self, data1 : &[F], data2: &[F]) -> f64 {
         assert_eq!(data1.len(), self.get_dimension());
         (self.distance)(data1, data2)
     }
@@ -119,7 +130,7 @@ impl<F> EmbeddedT<F> for Embedded<F> {
     /// get distance between nodes identified by their rank!
     /// get distance from node1 to node2 (different from distance between node2 to node1 if Graph is asymetric)
     fn get_noderank_distance(&self, node1: usize, node2 : usize) -> f64 {
-        (self.distance)(&self.data.row(node1), &self.data.row(node2))
+        (self.distance)(&self.data.row(node1).as_slice().unwrap(), &self.data.row(node2).as_slice().unwrap())
     }
 
     ///
@@ -186,7 +197,7 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     }
 
     /// get distance from data1 to data2
-    fn get_vec_distance(&self, data1 : &ArrayView1<F>, data2: &ArrayView1<F>) -> f64 {
+    fn get_vec_distance(&self, data1 : &[F], data2: &[F]) -> f64 {
         (self.distance)(data1, data2)
     }
 
@@ -197,13 +208,13 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
     fn get_noderank_distance(&self, node_rank1 : usize, node_rank2 : usize) -> f64 {
         let mut distances = Vec::<f64>::with_capacity(3);
         //
-        let dist_s = (self.distance)(&self.source.row(node_rank1), &self.source.row(node_rank2));
+        let dist_s = (self.distance)(&self.source.row(node_rank1).as_slice().unwrap(), &self.source.row(node_rank2).as_slice().unwrap());
         distances.push(dist_s);
 
-        let dist_t = (self.distance)(&self.target.row(node_rank1), &self.target.row(node_rank2));
+        let dist_t = (self.distance)(&self.target.row(node_rank1).as_slice().unwrap(), &self.target.row(node_rank2).as_slice().unwrap());
         distances.push(dist_t);
         //
-        let dist_t = (self.distance)(&self.source.row(node_rank1), &self.target.row(node_rank2));
+        let dist_t = (self.distance)(&self.source.row(node_rank1).as_slice().unwrap(), &self.target.row(node_rank2).as_slice().unwrap());
         distances.push(dist_t);
         if distances.len() > 0 {
             let dist = distances.iter().sum::<f64>() / distances.len() as f64;
