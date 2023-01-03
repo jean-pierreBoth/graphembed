@@ -1298,11 +1298,11 @@ fn test_pgraph_ppi_directed() {
     log::info!("node rank : {:?}, source vector : {:?}", node_index, source.row(node_index as usize));
     log::info!("node rank : {}, target vector : {:?}", node_index, target.row(node_index as usize));
     // compute Jaccard distance between source and target. Must be small due to symetry!
-    let dist = n_embedded.get_vec_distance(&node_source, &node_target);
+    let dist = n_embedded.get_vec_distance(&node_source.as_slice().unwrap(), &node_target.as_slice().unwrap());
     log::info!("\n jaccard dist between IN and OUT for node : {}, dist : {:.2e}", node_id, dist);
     assert!(dist < 0.05);
     // get distance from undirected embedding
-    let dist = n_embedded.get_vec_distance(&undirected_node_1.view(),  &node_target);
+    let dist = n_embedded.get_vec_distance(&undirected_node_1.as_slice().unwrap(),  &node_target.as_slice().unwrap());
     log::info!("\n jaccard dist between undirected and OUT for node : {}, dist : {:.2e}", node_id, dist);
 
     // compute global embedding vector

@@ -69,7 +69,8 @@ pub trait EmbeddedT<F> {
 
 
 
-/// represent symetric Embedded data
+/// represent symetric Embedded data without information on the node indexation  
+/// To get also the node indexation information use the [Embedding] structure
 pub struct Embedded<F> {
     /// array (n,d) with n number of data, d dimension of Embedded
     data: Array2<F>,
@@ -90,10 +91,12 @@ impl<F> Embedded<F> {
         &self.data
     }
 
+    /// get reference to distance function
     pub fn get_distance_ref(&self) ->  &fn(&[F], &[F]) -> f64 {
         &self.distance
     }
 
+    /// get a clone of distance function
     pub fn get_distance(&self) ->  fn(&[F], &[F]) -> f64 {
         self.distance.clone()
     }    
@@ -133,7 +136,7 @@ impl<F> EmbeddedT<F> for Embedded<F> {
         (self.distance)(&self.data.row(node1).as_slice().unwrap(), &self.data.row(node2).as_slice().unwrap())
     }
 
-    ///
+    /// return number of nodes
     fn get_nb_nodes(&self) -> usize {
         self.data.dim().0
     }

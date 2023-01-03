@@ -8,7 +8,7 @@
 use anyhow::{anyhow};
 
 use log::log_enabled;
-use ndarray::{Array2, Array1, ArrayView1};
+use ndarray::{Array2, Array1};
 use sprs::{TriMatI, CsMatI};
 
 use ahash::{AHasher};
@@ -30,7 +30,7 @@ use super::{sla::*, params::NodeSketchParams};
 /// The distance corresponding to nodesketch embedding
 /// similarity is obtained by 1. - jaccard
 // The hash signature is initialized in our use of Probminhash by a usize::MAX a rank of node clearly which cannot be encountered
-pub(crate) fn jaccard_distance(v1:&ArrayView1<usize>, v2 : &ArrayView1<usize>) -> f64 {
+pub(crate) fn jaccard_distance(v1:&[usize], v2 : &[usize]) -> f64 {
     assert_eq!(v1.len(), v2.len());
     let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1 { acc + 1 } else {acc});
     1.- (common as f64)/(v1.len() as f64)
@@ -330,9 +330,9 @@ fn test_nodesketch_lesmiserables() {
         assert_eq!(1, 0);
     }
     let (trimat, node_index) = res.unwrap();
-    let sketch_size = 15;
-    let decay = 0.1;
-    let nb_iter = 2;
+    let sketch_size = 20;
+    let decay = 0.25;
+    let nb_iter = 4;
     let parallel = false;
     let symetric = true;
     let params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
@@ -367,7 +367,7 @@ fn test_nodesketch_lesmiserables() {
     log::trace!("\n\n row {:?} , node_id {:?}, sketch {:?} ", rank, embed_res.get_node_id(rank) ,embedded.get_embedded().row(rank));
     let rank = 50;
     log::trace!("\n\n row {:?},  node_id {:?}, sketch {:?} ", rank, embed_res.get_node_id(rank) ,embedded.get_embedded().row(rank));
-    // check for rank 26 27 nodes (35,36) same neighborhood, same weights , must have dist <= 0.05
+    // check for rank 26 27 nodes (35,36) same neighborhood, same weights , must have small dist most often ~ 0.1
     let node_of_rank_26 = *embed_res.get_node_id(26).unwrap();
     let node_of_rank_27 = *embed_res.get_node_id(27).unwrap();
     let dist = embed_res.get_node_distance(node_of_rank_26,node_of_rank_27);

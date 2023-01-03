@@ -56,7 +56,7 @@ cpu-time = {version = "1.0"}
 clap = { version = "3.1", features = ["derive"] }
 
 ##
-indexmap = {version = "1.8"}
+indexmap = {version = "1.9"}
 ahash = {version = "0.7"}
 probminhash = {version = "0.1.6"}
 #probminhash = {path = "../probminhash"}
@@ -71,8 +71,11 @@ ordered-float = {version = "3.4"}
 indxvec = {version = "1.4"}
 hdrhistogram =  {version = "7.5"}
 
-annembed = {version = "0.0.8", default = false}
-#annembed ={ path = "../annembed", default = false}
+hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
+#hnsw_rs = {version = "0.1.17", features = ["simdeez_f"]}
+
+#annembed = {version = "0.0.8", default = false}
+annembed ={ path = "../annembed", default = false}
 
 #  
 lazy_static = { version = "1.4"}
@@ -81,7 +84,7 @@ lazy_static = { version = "1.4"}
 # decreasing order of log for release build (release_max_level_)  .. idem
 #log = { version = "0.4", features = ["max_level_trace", "release_max_level_debug"] }
 log = { version = "0.4"}
-env_logger = { version = "0.9"}
+env_logger = { version = "0.10"}
 
 # hack to avoid interaction bug with intel-mkl
 anyhow = { version = "1.0.58" }

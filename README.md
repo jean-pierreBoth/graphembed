@@ -50,8 +50,13 @@ The svd is approximated by randomization as described in Halko-Tropp 2011 as imp
 
 ### The core decomposition algorithms
 
-- Density-friendly decomposition
-  
+- **Density-friendly decomposition**
+
+*Large Scale decomposition via convex programming  2017*  
+    M.Danisch T.H Hubert Chan and M.Sozio
+
+The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation*
+
 ## Some data sets
 
 ### Without labels

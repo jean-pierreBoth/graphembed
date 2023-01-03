@@ -20,7 +20,6 @@ use std::time::{SystemTime};
 use cpu_time::ProcessTime;
 
 use num_traits::float::*; 
-// use num_traits::cast::FromPrimitive;
 
 //use sprs::prod;
 use sprs::{CsMat, TriMatI, TriMatBase};
@@ -35,7 +34,7 @@ use crate::embedding::{EmbeddedAsym, EmbedderT};
 
 /// The dissimilarity corresponding to hope. Note that it is not a distance, nor is it guaranteed to be positive.
 /// Basically it is the opposite of the similarity estimated (and constructed in the Hope matrix)
-pub fn hope_distance<F>(v1:&ArrayView1<F>, v2 : &ArrayView1<F>) -> f64 
+pub fn hope_distance<F>(v1:&[F], v2 : &[F]) -> f64 
     where F : Float + Scalar + Lapack {
     assert_eq!(v1.len(), v2.len());
     let dist2 = v1.iter().zip(v2.iter()).fold(F::zero(), |acc, v| acc + (*v.0 * *v.1));
