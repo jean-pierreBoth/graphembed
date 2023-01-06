@@ -38,10 +38,10 @@ pub struct StableDecomposition {
     /// stable blocks filtered . Give for each point the $S_{i}$ to which the point belongs.
     /// Alternativeley s`[i`] contains the densest stable block to which node i belongs
     s : Vec<u32>,
-    /// list of numblocks as given in s but sorted in increasing num
+    /// list of numblocks as given in s but sorted in increasing num :  s[index[0]] <= s[index[1]] <= ...
     index : Vec<usize>,
     /// for each block give its beginning position in index. 
-    /// block\[0\] begins at 0, block\[1\] begins at index\[block_start\[1\]\]
+    /// block\[0\] begins at 0, block\[1\] begins at index\[block_start\[1\]\] so we get easily nodes of a block
     block_start : Vec<usize>,
 } // end of struct StabeDecomposition
 
@@ -98,6 +98,15 @@ impl StableDecomposition {
     } // end of get_nbpoints_in_block
 
 
+    /// return mean of block size
+    pub fn get_mean_block_size(&self) -> usize {
+        if self.get_nb_blocks() > 0 {
+            self.s.len() / self.get_nb_blocks()
+        }
+        else { 0 }
+    } // get_mean_block_size
+
+
 
     /// get densest block num for a node
     pub fn get_densest_block(&self, node: usize) -> Result<usize,()> { 
@@ -108,6 +117,13 @@ impl StableDecomposition {
             Err(())
         }
     }  // end of get_densest_block
+
+
+    /// get the list of blocks of a given vector of nodes
+    pub fn get_blocks(&self, nodelist: &Vec<usize>) -> Vec<usize> {
+        nodelist.iter().map(|n| self.get_densest_block(*n).unwrap()).collect()
+    } // end of get_blocks
+
 
     /// returns the number of blocks of the decomposition
     pub fn get_nb_blocks(&self) -> usize { 
