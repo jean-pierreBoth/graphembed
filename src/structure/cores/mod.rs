@@ -2,3 +2,5 @@
 //! 
 
 pub mod pfunctions;
+
+pub mod pcore;

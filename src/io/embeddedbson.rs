@@ -223,7 +223,7 @@ impl <F, NodeId> EmbeddedBsonReload<F, NodeId> {
 /// reloads embedded data from a previous bson dump and returns a EmbeddedBsonReload structure.  
 /// The structure  Embedded or EmbeddedAsym can be reconstituted from it (or with a graph reload to get nodeindexation)
 ///
-pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &String) -> Result<EmbeddedBsonReload<F, NodeId>, anyhow::Error>
+pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBsonReload<F, NodeId>, anyhow::Error>
     where   NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> ,
             F : num_traits::Zero + Clone + serde::de::DeserializeOwned,
             NodeId : ToString + FromStr {
