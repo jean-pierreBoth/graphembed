@@ -81,6 +81,8 @@ fn embeddedtohnsw<F, D>(embedded : &Embedded<F>, max_nb_connection : usize, ef_c
 
 // Caution : Must check coherence of node indexation between graph loading and csr matrix loading 
 // but we use the same loading methods in crate::io::csv
+/// TODO have many/better density 
+
 fn compare_block_density<F>(hnsw : &Hnsw<F, DistPtr<F, f64>>, stable : &StableDecomposition, blocnum : usize) -> Vec<usize>
     where F : Copy+Clone+Send+Sync {
     //
@@ -227,9 +229,6 @@ mod tests {
         }
         let embedding = embedding_res.unwrap();
         let embedded = embedding.get_embedded_data();
-        // we transform into hnsw
-        let max_nb_connection = 24usize;
-        let ef_construction = 48usize;
 
         // we compute stable decomposition of les miserables
         // TODO get a conversion from trimat to GraphMap to avoid rereading!!
@@ -246,6 +245,10 @@ mod tests {
             log::error!("block_analysis failed");
         }
         //
+        // we transform into hnsw
+        let _max_nb_connection = 24usize;
+        let _ef_construction = 48usize;
+        
     } // end of ann_check_density_miserables
 
 }  // end of mod test

@@ -196,11 +196,11 @@ pub fn get_bson_header(fname : &String) -> Result<EmbeddedBsonHeader, anyhow::Er
 /// The structure returned by bson_load.
 pub struct EmbeddedBsonReload<F, NodeId> {
     /// The minimal embedded data when graph is symetric
-    out_embedded: Array2<F>,
+    pub(crate) out_embedded: Array2<F>,
     /// If grap is asymetric we get embedding of nodes as targets (or destinations) in_embedded
-    in_embedded : Option<Array2<F>>,
+    pub(crate) in_embedded : Option<Array2<F>>,
     /// If nodeindexation was dumped in bson
-    node_indexation : Option< IndexSet<NodeId>>
+    pub(crate) node_indexation : Option< IndexSet<NodeId>>
 }  // end of EmbeddedBsonReload
 
 

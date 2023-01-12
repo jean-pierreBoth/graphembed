@@ -1,13 +1,11 @@
 //! density decomposition algorithm driver
 
-//#![allow(unused)]
 
 
 
 /// We use Graph representation from petgraph.
 /// 
 /// For Frank-Wolfe iterations, we need // access to edges.
-///      We use sprs graph representation and // access to rows.
 /// 
 
 

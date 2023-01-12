@@ -30,7 +30,7 @@ use super::{sla::*, params::NodeSketchParams};
 /// The distance corresponding to nodesketch embedding
 /// similarity is obtained by 1. - jaccard
 // The hash signature is initialized in our use of Probminhash by a usize::MAX a rank of node clearly which cannot be encountered
-pub(crate) fn jaccard_distance(v1:&[usize], v2 : &[usize]) -> f64 {
+pub(crate) fn jaccard_distance_usize(v1:&[usize], v2 : &[usize]) -> f64 {
     assert_eq!(v1.len(), v2.len());
     let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1 { acc + 1 } else {acc});
     1.- (common as f64)/(v1.len() as f64)
@@ -174,7 +174,7 @@ impl  NodeSketch {
                 embedded.row_mut(i)[j] = self.sketches[i].read()[j];
             }
         }
-        let embedded = Embedded::<usize>::new(embedded, jaccard_distance);
+        let embedded = Embedded::<usize>::new(embedded, jaccard_distance_usize);
         //
         Ok(embedded)
     }  // end of compute_embedded

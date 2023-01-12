@@ -166,8 +166,8 @@ pub fn main() {
         if reloaded.is_err() {
             log::error!("reloading of bson from {:?} failed", &orkut_bson_path);
         }
-        let _reloaded = reloaded.unwrap();
-        // TODO conversion from EmbeddedBsonReload to Embedding
+        let bson_reloaded = reloaded.unwrap();
+        let embedding = from_bson_with_jaccard(bson_reloaded);
     }
 
     //

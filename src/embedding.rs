@@ -27,8 +27,12 @@ use indexmap::IndexSet;
 use crate::embed::tools::edge::{IN,OUT};
 use crate::embed::tools::degrees::*;
 
+use crate::io::embeddedbson::EmbeddedBsonReload;
+
+
 /// to represent the distance in embedded space between 2 vectors
 type Distance<F> = fn(&[F], &[F]) -> f64;
+
 
 #[derive(Debug)]
 pub enum EmbeddingMode {
@@ -349,3 +353,20 @@ impl <NodeId, EmbeddedData,F> Embedding<F, NodeId, EmbeddedData >  where  Embedd
     }
 
  } // end of impl Embedding
+
+
+     /// make an Embedded<F> structure from data reloaded from bson data
+    /// The Eq constraint is a garantee we avoid a distance working on Float vectors
+    pub fn from_bson_with_jaccard<F, NodeId>(bson_reload : EmbeddedBsonReload<F, NodeId>) -> Result<Embedding<F, NodeId,  Embedded<F> > , anyhow::Error> 
+        where      F : Eq ,
+              NodeId : std::hash::Hash + std::cmp::Eq {
+        // from_bson_with_jaccard
+        let embedded_data= Embedded::new(bson_reload.out_embedded, crate::embed::tools::jaccard::jaccard_distance::<F>);
+        if bson_reload.node_indexation.is_none() {
+            return Err(anyhow::anyhow!("no node indexation in bson dump"));
+        }
+        let embedding = Embedding::<F, NodeId, Embedded<F>>{nodeindexation: bson_reload.node_indexation.unwrap(), 
+                                            embedded : embedded_data,
+                                            mark : std::marker::PhantomData};
+        Ok(embedding)
+    }  // end of from_bson_with_jaccard
