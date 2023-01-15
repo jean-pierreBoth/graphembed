@@ -58,17 +58,23 @@ pub trait EmbeddedT<F> {
     fn is_symetric(&self) -> bool;
     /// get dimension of vectors of the Embedded
     fn get_dimension(&self) -> usize;
-    /// get distance in embedded space from node1 to node2 (same as distance from node2 to node1 if graph is symetric). 
+    /// get distance in embedded space **from node1** to **node2** (same as distance from node2 to node1 if graph is symetric). 
     /// Nodes are identified by their their rank in embedded space
     fn get_noderank_distance(&self, node_rank1: usize, node_rank2 : usize) -> f64;
-    /// the trait provides a function distance between embedded items
-    fn get_vec_distance(&self, v1 : &[F], v2: &[F]) -> f64;
+    /// the trait provides a function distance between embedded items.
+    /// The first as a source node, the second as a target node.
+    fn get_vec_distance(&self, from : &[F], to: &[F]) -> f64;
     /// get number of nodes
     fn get_nb_nodes(&self) -> usize;
     /// get embedding of node of rank rank, and with tag.
     /// For a basic symetric embedding , tag is not taken into account.
     /// For embedding that has multiple embedding by node (example asysmetric embedding , the tag is used)    
     fn get_embedded_node(&self, node_rank: usize, _tag : u8) -> ArrayView1<F>;
+    /// Returns the distance function f (a pointer to) used for computing distances the embedding.   
+    /// Note that for asymetric embedding the value of the distance returned by get_noderank_distance
+    /// is not directly the result of applying f to 2 slices representing 2 nodes as a node may have more than one
+    /// representation.
+    fn get_distance(&self) ->  fn(&[F], &[F]) -> f64;
 } // end of trait
 
 
@@ -99,11 +105,6 @@ impl<F> Embedded<F> {
     pub fn get_distance_ref(&self) ->  &fn(&[F], &[F]) -> f64 {
         &self.distance
     }
-
-    /// get a clone of distance function
-    pub fn get_distance(&self) ->  fn(&[F], &[F]) -> f64 {
-        self.distance.clone()
-    }    
 
     /// get embedding of node of rank rank, and with tag.
     /// For a basic symetric embedding , tag is not taken into account.
@@ -152,6 +153,10 @@ impl<F> EmbeddedT<F> for Embedded<F> {
         self.data.row(node_rank)
     }
 
+    /// get distance function
+    fn get_distance(&self) ->  fn(&[F], &[F]) -> f64 {
+        self.distance.clone()
+    }   
 } // end impl EmbeddedT<F>
 
 //===============================================================
@@ -266,6 +271,11 @@ impl<F>  EmbeddedT<F> for EmbeddedAsym<F> {
             }
         }
     }
+
+    /// get distance function
+    fn get_distance(&self) ->  fn(&[F], &[F]) -> f64 {
+        self.distance.clone()
+    }    
 } // end impl EmbeddedT<F>
 
 
@@ -355,18 +365,18 @@ impl <NodeId, EmbeddedData,F> Embedding<F, NodeId, EmbeddedData >  where  Embedd
  } // end of impl Embedding
 
 
-     /// make an Embedded<F> structure from data reloaded from bson data
-    /// The Eq constraint is a garantee we avoid a distance working on Float vectors
-    pub fn from_bson_with_jaccard<F, NodeId>(bson_reload : EmbeddedBsonReload<F, NodeId>) -> Result<Embedding<F, NodeId,  Embedded<F> > , anyhow::Error> 
-        where      F : Eq ,
-              NodeId : std::hash::Hash + std::cmp::Eq {
-        // from_bson_with_jaccard
-        let embedded_data= Embedded::new(bson_reload.out_embedded, crate::embed::tools::jaccard::jaccard_distance::<F>);
-        if bson_reload.node_indexation.is_none() {
-            return Err(anyhow::anyhow!("no node indexation in bson dump"));
-        }
-        let embedding = Embedding::<F, NodeId, Embedded<F>>{nodeindexation: bson_reload.node_indexation.unwrap(), 
-                                            embedded : embedded_data,
-                                            mark : std::marker::PhantomData};
-        Ok(embedding)
-    }  // end of from_bson_with_jaccard
+/// make an Embedded<F> structure from data reloaded from bson data
+/// The Eq constraint is a garantee we avoid a distance working on Float vectors
+pub fn from_bson_with_jaccard<F, NodeId>(bson_reload : EmbeddedBsonReload<F, NodeId>) -> Result<Embedding<F, NodeId,  Embedded<F> > , anyhow::Error> 
+    where      F : Eq ,
+            NodeId : std::hash::Hash + std::cmp::Eq {
+    // from_bson_with_jaccard
+    let embedded_data= Embedded::new(bson_reload.out_embedded, crate::embed::tools::jaccard::jaccard_distance::<F>);
+    if bson_reload.node_indexation.is_none() {
+        return Err(anyhow::anyhow!("no node indexation in bson dump"));
+    }
+    let embedding = Embedding::<F, NodeId, Embedded<F>>{nodeindexation: bson_reload.node_indexation.unwrap(), 
+                                        embedded : embedded_data,
+                                        mark : std::marker::PhantomData};
+    Ok(embedding)
+}  // end of from_bson_with_jaccard

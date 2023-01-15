@@ -29,7 +29,7 @@ use crate::structure::density::stable::*;
 
 
 /// builds the Hnsw from the embedded data
-fn embeddedtohnsw<F, D>(embedded : &Embedded<F>, max_nb_connection : usize, ef_c : usize) -> Result<Hnsw<F, DistPtr<F, f64>>, anyhow::Error>
+pub fn embeddedtohnsw<F, D>(embedded : & dyn EmbeddedT<F>, max_nb_connection : usize, ef_c : usize) -> Result<Hnsw<F, DistPtr<F, f64>>, anyhow::Error>
     where F : Copy+Clone+Send+Sync ,
           D : Distance<F> {
     //
@@ -152,7 +152,7 @@ pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &
         Some(hnsw) => {hnsw},
         None => {
             // TODO : adapt parameters to decomposition result
-            let max_nb_connection : usize = decomposition.get_mean_block_size();
+            let max_nb_connection : usize = decomposition.get_mean_block_size().min(64);
             log::info!("density_analysis : using max_nb_onnection : {max_nb_connection}");
             let ef_construction : usize = 48;
             let hnsw_res  = embeddedtohnsw::<F,D>(embedded, max_nb_connection, ef_construction);

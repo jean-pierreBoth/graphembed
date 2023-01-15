@@ -1,6 +1,8 @@
 //! implements p-core determination for p-functions (see associated file)
 //! We implement algo 4 of Batagelj-Zaversnik paper
 
+#![allow(unused)]
+
 use std::collections::BinaryHeap;
 
 use anyhow::{anyhow};
