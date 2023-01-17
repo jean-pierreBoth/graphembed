@@ -10,22 +10,23 @@
 
 
 use anyhow::{anyhow};
-use graphembed::embed::tools::jaccard;
 
 use std::path::{Path};
-use std::io::{BufReader};
 use std::fs::{OpenOptions};
 use std::io::prelude::*;
 use std::str::FromStr;
 
+use std::io::{BufReader, BufWriter };
+
 use petgraph::prelude::*;
+use petgraph::stable_graph::DefaultIx;
 
 use graphembed::prelude::*;
-
-use graphembed::validation::anndensity::embeddedtohnsw;
+use graphembed::validation::anndensity::*;
 
 use hnsw_rs::prelude::*;
 use hnsw_rs::hnswio::*;
+
 use hnsw_rs::prelude::DistPtr;
 
 /// Directory containing the 2 data files 
@@ -82,12 +83,74 @@ fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<usize>>> {
 
 
 
+
 fn jaccard_distance<T:Eq>(v1:&[T], v2 : &[T]) -> f64 {
     assert_eq!(v1.len(), v2.len());
     let common = v1.iter().zip(v2.iter()).fold(0usize, |acc, v| if v.0 == v.1 { acc + 1 } else {acc});
     1.- (common as f64)/(v1.len() as f64)
 } // end of jaccard
 
+
+// receive base name of dump. Files to reload are made by concatenating "hnsw.data" and "hnsw.graph" to path
+fn reload_orkut_hnsw(path : String) -> Hnsw<usize, DistPtr<usize,f64> > {
+    // 
+    let mut graphfname = path.clone();
+    graphfname.push_str(".hnsw.graph");
+    let graphpath = Path::new(&graphfname);
+    let graphfileres = OpenOptions::new().read(true).open(graphpath);
+    if graphfileres.is_err() {
+        println!("test_dump_reload: could not open file {:?}", graphpath.as_os_str());
+        std::panic::panic_any("test_dump_reload: could not open file".to_string());            
+    }
+    let graphfile = graphfileres.unwrap();
+    //  
+    let mut datafname = path.clone();
+    datafname.push_str(".hnsw.data");
+    let datapath = Path::new(&datafname);
+    let datafileres = OpenOptions::new().read(true).open(&datapath);
+    if datafileres.is_err() {
+        println!("test_dump_reload : could not open file {:?}", datapath.as_os_str());
+        std::panic::panic_any("test_dump_reload : could not open file".to_string());            
+    }
+    let datafile = datafileres.unwrap();
+    //
+    let mut graph_in = BufReader::new(graphfile);
+    let mut data_in = BufReader::new(datafile);
+    // we need to call load_description first to get distance name
+    let hnsw_description = load_description(&mut graph_in).unwrap();
+    let mydist = DistPtr::<usize,f64>::new(jaccard_distance::<usize>);
+
+    let hnsw_loaded : Hnsw<usize, DistPtr<usize,f64> >= load_hnsw_with_dist(&mut graph_in, &hnsw_description,  mydist, &mut data_in).unwrap();
+    //
+    hnsw_loaded
+}  // end of reload_orkut_hnsw
+
+
+fn block_dump_json(block_path : &Path, block_array : &ndarray::Array2<f32>) {
+    let fileres = OpenOptions::new().write(true).create(true).truncate(true).open(&block_path);
+    if fileres.is_err() {
+        log::error!("block_matrix dump : dump could not open file {:?}", block_path.as_os_str());
+        println!("block matix dump: could not open file {:?}", block_path.as_os_str());
+    }
+    // 
+    let mut writer = BufWriter::new(fileres.unwrap());
+    let _ = serde_json::to_writer(&mut writer, &block_array).unwrap();
+}  // end of block_dump_json
+
+
+
+
+fn block_load_json(block_path : &Path) -> ndarray::Array2<f32> {
+    let fileres = OpenOptions::new().read(true).create(true).truncate(true).open(&block_path);
+    if fileres.is_err() {
+        log::error!("block_matrix dump : dump could not open file {:?}", block_path.as_os_str());
+        println!("block matix dump: could not open file {:?}", block_path.as_os_str());
+    }
+    let loadfile = fileres.unwrap();
+    let reader = BufReader::new(loadfile);
+    let block_transition : ndarray::Array2<f32> = serde_json::from_reader(reader).unwrap();
+    block_transition
+} // end of block_load_json
 
 
 pub fn main() {
@@ -101,7 +164,6 @@ pub fn main() {
     log::info!("orkut graph read");
     //
     let orkut_graph = orkut_graph.unwrap();
-    let decomposition : StableDecomposition;
     //
     // check if we have a stored decomposition 
     //
@@ -120,7 +182,7 @@ pub fn main() {
         log::info!("could not reload json decompositon");
         panic!("found orkut decompositon but could not reload it")
     }
-    decomposition = res.unwrap();
+    let decomposition = res.unwrap();
 
     let nb_blocks = decomposition.get_nb_blocks();
     log::info!("orkut decomposition got nb_block : {nb_blocks}");
@@ -135,17 +197,17 @@ pub fn main() {
     // now we reload the embedding
     //
     
-/*  // if we really need the explicitly the embedding
+  // if we really need the explicitly the embedding
     let orkut_embedding : Embedding<usize, usize, Embedded<usize>>;
     let orkut_bson_path= Path::new("/home/jpboth/Rust/graphembed/orkut_embedded.bson");
     let fileres = OpenOptions::new().read(true).open(&orkut_bson_path);
     if fileres.is_err() {
         log::info!("cannot reoad orkut embedding, did not find file : {:?}", orkut_bson_path);
-        std::panic!("cannot reoad orkut embedding, did not find file : {:?}", orkut_bson_path);
+        std::panic!("cannot reload orkut embedding, did not find file : {:?}", orkut_bson_path);
     }
     else {
         log::info!("found bson file, reloading embedding, trying to reload from {:?}", &orkut_bson_path);
-        let reloaded = embeddedbson::bson_load::<usize, usize, Embedded<usize>>(orkut_bson_path.to_str().unwrap());
+        let reloaded = bson_load::<usize, usize, Embedded<usize>>(orkut_bson_path.to_str().unwrap());
         if reloaded.is_err() {
             log::error!("reloading of bson from {:?} failed", &orkut_bson_path);
             log::error!("error is : {:?}", reloaded.err());
@@ -154,36 +216,30 @@ pub fn main() {
         let bson_reloaded = reloaded.unwrap();
         let embedding = from_bson_with_jaccard(bson_reloaded);
         orkut_embedding = embedding.unwrap();
-    } */
+    }
 
     //
     // we reload the hnsw dumped by example orkut_hnsw
     //
-    let graphfname = String::from("dumpreloadtestgraph.hnsw.graph");
-    let graphpath = Path::new(&graphfname);
-    let graphfileres = OpenOptions::new().read(true).open(graphpath);
-    if graphfileres.is_err() {
-        println!("test_dump_reload: could not open file {:?}", graphpath.as_os_str());
-        std::panic::panic_any("test_dump_reload: could not open file".to_string());            
-    }
-    let graphfile = graphfileres.unwrap();
-    //  
-    let datafname = String::from("dumpreloadtestgraph.hnsw.data");
-    let datapath = Path::new(&datafname);
-    let datafileres = OpenOptions::new().read(true).open(&datapath);
-    if datafileres.is_err() {
-        println!("test_dump_reload : could not open file {:?}", datapath.as_os_str());
-        std::panic::panic_any("test_dump_reload : could not open file".to_string());            
-    }
-    let datafile = datafileres.unwrap();
-    //
-    let mut graph_in = BufReader::new(graphfile);
-    let mut data_in = BufReader::new(datafile);
-    // we need to call load_description first to get distance name
-    let hnsw_description = load_description(&mut graph_in).unwrap();
-    let mydist = DistPtr::<usize,f64>::new(jaccard_distance::<usize>);
+    let hnsw_loaded : Hnsw<usize, DistPtr<usize,f64> >= reload_orkut_hnsw(String::from("orkuthnsw"));
 
-    let hnsw_loaded : Hnsw<usize, DistPtr<usize,f64> >= load_hnsw_with_dist(&mut graph_in, &hnsw_description,  mydist, &mut data_in).unwrap();
+
+    
+    let d_res = density_analysis::<usize, DistPtr<usize,f64>, DefaultIx>(&orkut_graph,
+                                    orkut_embedding.get_embedded_data(), 
+                                    Some(hnsw_loaded), Some(decomposition));
+    if d_res.is_err() {
+        log::error!("density analysis failed with error: {:?}", d_res.as_ref().err());
+        std::process::exit(1);
+    }
+ 
+    log::info!("\n\n dumping block array");
+    let block_array = d_res.unwrap();
+    log::info!(" block_array : {:?}", &block_array);
+    let block_path= Path::new("orkut_block_mat.json");
+    block_dump_json(block_path, &block_array);
+    //
+    log::info!("exiting from orkut_check");
 
     // now we can check how are embedded blocks and communities we examined in Notebook
 } // end of main
