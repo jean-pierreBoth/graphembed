@@ -24,6 +24,8 @@ use petgraph::stable_graph::DefaultIx;
 use graphembed::prelude::*;
 use graphembed::validation::anndensity::*;
 
+use rand::{Rng};
+
 use hnsw_rs::prelude::*;
 use hnsw_rs::hnswio::*;
 
@@ -153,6 +155,39 @@ fn block_load_json(block_path : &Path) -> ndarray::Array2<f32> {
 } // end of block_load_json
 
 
+
+// try to examine what happens to community through the embedding
+// check mean distance between couples inside the community? versus outside?
+// possibly check also mean distance between neighbours
+fn analyze_community(community : &Vec<usize>, orkut_embedding : &Embedding<usize, usize, Embedded<usize>>, nb_sample : usize) -> f64 {
+    // loop , sample couple, compute distance
+    let mut dist_in_com = Vec::<f64>::with_capacity(nb_sample);
+    //
+    let mut rng = rand::thread_rng();
+    let com_size = community.len();
+    
+    for _ in 0..nb_sample {
+        let idx1 = rng.gen_range(0..com_size);
+        let idx2 = loop {
+            let idx2 = rng.gen_range(0..com_size);
+            if idx1 != idx2 {
+                break idx2;
+            }
+        };
+        // compute dist between the 2 nodes
+        let dist = orkut_embedding.get_node_distance(community[idx1], community[idx2]);
+        dist_in_com.push(dist);
+    }
+    //
+    let mean_dist = dist_in_com.iter().sum::<f64>()/ dist_in_com.len() as f64;
+    //
+    log::info!("mean distance between couples : {:.3e}", mean_dist);
+    //
+    mean_dist
+} // end of analyze_community
+
+
+
 pub fn main() {
     // TODO clap ...
     let _ = env_logger::Builder::from_default_env().init();
@@ -197,7 +232,7 @@ pub fn main() {
     // now we reload the embedding
     //
     
-  // if we really need the explicitly the embedding
+    // if we really need the explicitly the embedding
     let orkut_embedding : Embedding<usize, usize, Embedded<usize>>;
     let orkut_bson_path= Path::new("/home/jpboth/Rust/graphembed/orkut_embedded.bson");
     let fileres = OpenOptions::new().read(true).open(&orkut_bson_path);
@@ -222,9 +257,7 @@ pub fn main() {
     // we reload the hnsw dumped by example orkut_hnsw
     //
     let hnsw_loaded : Hnsw<usize, DistPtr<usize,f64> >= reload_orkut_hnsw(String::from("orkuthnsw"));
-
-
-    
+    //
     let d_res = density_analysis::<usize, DistPtr<usize,f64>, DefaultIx>(&orkut_graph,
                                     orkut_embedding.get_embedded_data(), 
                                     Some(hnsw_loaded), Some(decomposition));
@@ -240,6 +273,8 @@ pub fn main() {
     block_dump_json(block_path, &block_array);
     //
     log::info!("exiting from orkut_check");
-
+    //
     // now we can check how are embedded blocks and communities we examined in Notebook
+    //
+
 } // end of main
