@@ -32,6 +32,8 @@ use sprs::{TriMatI, CsMat};
 use indexmap::IndexSet;
 //use petgraph::graph::{Graph, NodeIndex, IndexType};
 use petgraph::graphmap::{GraphMap, NodeTrait};
+use petgraph::graph::{Graph, IndexType};
+
 #[allow(unused)]
 use petgraph::{Directed,EdgeType};
 
@@ -86,7 +88,10 @@ pub(crate) fn get_header_size(filepath : &Path) -> anyhow::Result<usize> {
 /// Ty is Directed (default) or UnDirected
 /// Ix is the node and edge index type , default u32. 
 /// N and E in Grap<N,E,Ty,Ix are data (weights) associated to node and edge respectively>
-/// instantiate with UnDirected for undirected graph
+/// instantiate with UnDirected for undirected graph.
+/// 
+/// Note: a GraphMap\<N,E, Ty\> is easily converted into a Graph\<N, E, Ty,Ix\> by calling GraphMap.into_graph::\<Ix\>
+///       The NodeIndexation associated to the graph can be obtained by calling [fn get_graph_indexation]
 /// 
 pub fn unweighted_csv_to_graphmap<N, Ty>(filepath : &Path, delim : u8) -> anyhow::Result<GraphMap<N, (), Ty>> 
     where   N : NodeTrait + std::hash::Hash + std::cmp::Eq + FromStr + std::fmt::Display ,
@@ -297,8 +302,24 @@ pub fn weighted_csv_to_graphmap<N, W, Ty>(filepath : &Path, delim : u8) -> anyho
 } // end of weighted_csv_to_graphmap
 
 
-
-
+/// retrieve the NodeIndexation associated to a given petgraph::graph::Graph
+pub fn get_graph_indexation<N,E,Ty,Ix>(graph : &Graph<N, E, Ty, Ix>) -> NodeIndexation<N> 
+    where N : std::hash::Hash + std::cmp::Eq + Clone + core::fmt::Debug,
+          Ty : EdgeType,
+          Ix : IndexType {
+    //
+    let mut indexset = IndexSet::<N>::with_capacity(graph.node_count());
+    //
+    let mut i_node = 0;
+    let mut nodes_weights = graph.node_weights();
+    while let Some(n) = nodes_weights.next() {
+        if !indexset.insert(n.clone()) {
+            log::error!("could not insert node : {:?}, node rank : {:?}", n, i_node);
+        }
+        i_node += 1;
+    };
+    indexset
+} // end of get_graph_indexation
 
 
 /// load a directed/undirected  weighted/unweighted graph in csv format into a MatRepr representation.  
@@ -571,7 +592,8 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 
 
 /// Loads a csv file and returning a matrix representation in triplets form and a reindexation of nodes to ensure that internally nodes are identified by 
-/// a rank in 0..nb_nodes
+/// a rank in 0..nb_nodes.
+/// In most csv files the identifiyer attached to a node is a usize so we return a NodeIndexation<usize> but it could (for example) a String in more general context.
 ///  
 /// This function tests for the following delimiters [b'\t', b',', b' '] in the csv file.
 /// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  

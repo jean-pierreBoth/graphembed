@@ -365,7 +365,7 @@ impl <NodeId, EmbeddedData,F> Embedding<F, NodeId, EmbeddedData >  where  Embedd
  } // end of impl Embedding
 
 
-/// make an Embedded<F> structure from data reloaded from bson data
+/// make an Embedded\<F\> structure from data reloaded from bson data
 /// The Eq constraint is a garantee we avoid a distance working on Float vectors
 pub fn from_bson_with_jaccard<F, NodeId>(bson_reload : EmbeddedBsonReload<F, NodeId>) -> Result<Embedding<F, NodeId,  Embedded<F> > , anyhow::Error> 
     where      F : Eq ,

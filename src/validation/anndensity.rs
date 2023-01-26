@@ -138,7 +138,7 @@ fn compare_block_density(flathnsw : &FlatNeighborhood, stable : &StableDecomposi
     for node in &highest {
         // get neighbours of node
         let neighbours = flathnsw.get_neighbours(*node).unwrap();
-        for neighbour in &neighbours[0..neighbours.len().min(100)] {
+        for neighbour in &neighbours[0..neighbours.len().min(64)] {
             // search which block is neighbour
             let dist = neighbour.get_distance();
             let neighbour_blocknum = stable.get_densest_block(neighbour.get_origin_id()).unwrap();
@@ -184,9 +184,10 @@ fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
 
 
 
-/// tentative assesment of embedding by density comparison before and after embedding
+/// A tentative assesment of embedding by density comparison before and after embedding
 /// For each block *b* of density decomposition we analyze in which  blocks are the neigbours of points in b.
-/// For a block *b* of high density we expect its neighbours to be significantly also in *b*
+/// For a block *b* of high density we expect its neighbours to be significantly also in *b*.
+/// This can be assessed by computing transition probability between blocks along edges.
 pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &Embedded<F>, 
             hnsw_opt : Option<Hnsw<F,DistPtr<F,f64>>>, 
             decomposition_opt : Option<StableDecomposition>) -> Result<Array2<f32>, anyhow::Error>

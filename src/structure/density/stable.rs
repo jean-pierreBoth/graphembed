@@ -38,7 +38,7 @@ pub struct StableDecomposition {
     /// stable blocks filtered . Give for each point the $S_{i}$ to which the point belongs.
     /// Alternativeley s`[i`] contains the densest stable block to which node i belongs
     s : Vec<u32>,
-    /// list of numblocks as given in s but sorted in increasing num :  s[index[0]] <= s[index[1]] <= ...
+    /// list of numblocks as given in s but sorted in increasing num :  s\[index\[0\]\] <= s\[index\[1\]\] <= ...
     index : Vec<usize>,
     /// for each block give its beginning position in index. 
     /// block\[0\] begins at 0, block\[1\] begins at index\[block_start\[1\]\] so we get easily nodes of a block

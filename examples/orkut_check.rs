@@ -24,7 +24,7 @@ use petgraph::stable_graph::DefaultIx;
 use graphembed::prelude::*;
 use graphembed::validation::anndensity::*;
 
-use rand::{Rng};
+use rand::distributions::{Distribution, Uniform};
 
 use hnsw_rs::prelude::*;
 use hnsw_rs::hnswio::*;
@@ -53,7 +53,7 @@ fn read_orkut_graph(dirpath : &Path) -> Result<Graph<u32, f64 , Undirected, u32>
 
 
 
-fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<usize>>> {
+fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<u32>>> {
     let fpath = dirpath.clone().join("com-orkut.top5000.cmty.txt");
     log::info!("read_orkut_com : reading {fpath:?}");
     let fileres = OpenOptions::new().read(true).open(&fpath);
@@ -66,7 +66,7 @@ fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<usize>>> {
     let bufreader = BufReader::new(file);
     let lines = bufreader.lines();
     let mut numline = 0;
-    let mut communities = Vec::<Vec<usize>>::with_capacity(5000);
+    let mut communities = Vec::<Vec<u32>>::with_capacity(5000);
     for line in lines {
         if line.is_err() {
             log::error!("error reading file : {:?} at line : {}",fpath.as_os_str(),numline);
@@ -75,8 +75,10 @@ fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<usize>>> {
         // split and decode line. line consists in usize separated by a tab
         let line = line.unwrap();
         let splitted : Vec<&str>= line.split('\t').collect();
-        let communitiy : Vec<usize> = splitted.iter().map(|s| usize::from_str(*s).unwrap()).collect();
-        communities.push(communitiy);
+        let mut community : Vec<u32> = splitted.iter().map(|s| u32::from_str(*s).unwrap()).collect();
+        community.sort_unstable();
+        assert!(community[0] != 0);
+        communities.push(community);
         numline += 1;
     }
     //
@@ -157,33 +159,60 @@ fn block_load_json(block_path : &Path) -> ndarray::Array2<f32> {
 
 
 // try to examine what happens to community through the embedding
-// check mean distance between couples inside the community? versus outside?
-// possibly check also mean distance between neighbours
-fn analyze_community(community : &Vec<usize>, orkut_embedding : &Embedding<usize, usize, Embedded<usize>>, nb_sample : usize) -> f64 {
+// compares edges inside community with edges going out of community
+// possibly : which edges in are matched in hnsw?
+fn analyze_community(community : &Vec<u32>, graph : &Graph<u32, f64, Undirected>, 
+            orkut_embedding : &Embedding<usize, usize, Embedded<usize>>, nb_sample : usize) -> (f64, f64) {
+    // is_sorted is unstable
+    // assert!(community.is_sorted());
     // loop , sample couple, compute distance
     let mut dist_in_com = Vec::<f64>::with_capacity(nb_sample);
+    let mut dist_out_com = Vec::<f64>::with_capacity(nb_sample);
     //
+    let _node_indexation = get_graph_indexation(graph);
+    //
+    let uniform = Uniform::<f64>::new(0., 1.);
     let mut rng = rand::thread_rng();
+    // loop with acceptance rejection on nodes.
     let com_size = community.len();
-    
-    for _ in 0..nb_sample {
-        let idx1 = rng.gen_range(0..com_size);
-        let idx2 = loop {
-            let idx2 = rng.gen_range(0..com_size);
-            if idx1 != idx2 {
-                break idx2;
-            }
-        };
-        // compute dist between the 2 nodes
-        let dist = orkut_embedding.get_node_distance(community[idx1], community[idx2]);
-        dist_in_com.push(dist);
+    let ratio = nb_sample as f64 / com_size as f64;
+    log::info!("acceptance ratio is : {:.3e}", ratio);
+
+    for i in 0..com_size {
+        // recall that community contains nodes names (type N in Graph<N,   >) and note indices!
+        let node = community[i];
+        assert!(node != 0);
+        // iterate over neighbours of each node
+        let mut neighbours = graph.neighbors_undirected(NodeIndex::new(node as usize));
+        while let Some(nidx) = neighbours.next() {
+            let xsi = uniform.sample(&mut rng);
+            if xsi < ratio {
+                // now  nidx is a NodeInddex is neighbour n in community we must get its name
+                let n_name = graph[nidx];
+                if n_name == 0 {
+                    log::info!("n : {:?}", nidx);
+                    assert!(n_name != 0);
+                }
+                let is_in = community.contains(&n_name);
+                log::trace!("dist node1 : {:?} node2 : {:?}", node, n_name);
+                let dist = orkut_embedding.get_node_distance(node as usize, n_name as usize);
+                if is_in {
+                    dist_in_com.push(dist);
+                }
+                else {
+                    dist_out_com.push(dist);
+                }  
+            }   
+        }
     }
     //
-    let mean_dist = dist_in_com.iter().sum::<f64>()/ dist_in_com.len() as f64;
+    let mean_in_dist = dist_in_com.iter().sum::<f64>()/ dist_in_com.len() as f64;
+    let mean_out_dist = dist_out_com.iter().sum::<f64>()/ dist_out_com.len() as f64;
     //
-    log::info!("mean distance between couples : {:.3e}", mean_dist);
+    log::info!("mean distance between neighbours, in : {:.3e} len : {:?}, out : {:.3e} len : {:?}", mean_in_dist, dist_in_com.len(), 
+                                mean_out_dist, dist_out_com.len());
     //
-    mean_dist
+    (mean_in_dist, mean_out_dist)
 } // end of analyze_community
 
 
@@ -227,7 +256,7 @@ pub fn main() {
         log::info!("orkhut : points of block : {blocnum} , {bsize}");
     }
     //
-    let _communities = read_orkut_com(Path::new(ORKUT_DATA_DIR)).unwrap();
+    let communities = read_orkut_com(Path::new(ORKUT_DATA_DIR)).unwrap();
     //
     // now we reload the embedding
     //
@@ -276,5 +305,20 @@ pub fn main() {
     //
     // now we can check how are embedded blocks and communities we examined in Notebook
     //
+    let num = 0usize;
+    log::info!("analyze_community num : {num}");
+    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
+
+    let num: usize  = 1;
+    log::info!("analyze_community num : {num}");    
+    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
+
+    let num: usize  = 4;
+    log::info!("analyze_community num : {num}");     
+    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
+
+    let num: usize  = 22;
+    log::info!("analyze_community num : {num}");   
+    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
 
 } // end of main

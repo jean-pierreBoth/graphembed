@@ -26,6 +26,8 @@ use rayon::prelude::*;
 
 use hdrhistogram::Histogram;
 
+use ndarray::Array2;
+
 use petgraph::graph::{Graph, EdgeReference, NodeIndex};
 use petgraph::{Undirected, visit::*};
 
@@ -197,6 +199,8 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     let nb_reg_blocks = iso_regression.get_nb_block();
     let pointblocklocator = PointBlockLocator::new(&iso_regression);
     //
+    let mut block_transition = Array2::<f32>::zeros((nb_reg_blocks,nb_reg_blocks));
+    let mut block_size = (0..nb_reg_blocks).into_iter().map(|_| 0usize).collect::<Vec<usize>>();
     //
     let alfa_tmp = alphar.get_alpha().clone();
     let mut r = alphar.get_r().clone();
@@ -209,6 +213,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     for numbloc in 0..nb_reg_blocks {
         log::debug!("\n stability check for block : {}", numbloc);
         let block = iso_regression.get_block(numbloc).unwrap().clone();
+        block_size[numbloc] = block.get_nb_points();
         // TODO this iteration can be made // if necessary
         let mut ptiter = block.get_point_iter();
         while let Some((&_pt, rank_pt)) = ptiter.next() {
@@ -220,7 +225,9 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             while let Some((edge_idx,neighbor)) = neighbours.next(graph) {
                 let neighbor_u = neighbor.index();
                 // TODO >= or == 
-                if pointblocklocator.get_point_block_num(neighbor_u).unwrap() >= numbloc+1 {
+                let neighbour_block = pointblocklocator.get_point_block_num(neighbor_u).unwrap();
+                block_transition[(numbloc, neighbour_block)] += 1.;
+                if neighbour_block >= numbloc+1 {
                     // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
                     let edge = graph.edge_endpoints(edge_idx).unwrap();
                     // we must check for order. We have the same order of of the 2-uple in wsplit and in edge
@@ -298,6 +305,20 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             log::debug!("point : {},  bloc : {}", p , stable_numblocks[p]);
         }
     }
+    //
+    // process matrix of block_transition
+    // for each block i get fraction of edge out. i.e going to j  and renormalization by block sizes.
+    //
+    let mut fraction_out  = (0..nb_reg_blocks).into_iter().map(|_| 0f32).collect::<Vec<f32>>();
+    let mean_block_size = block_size.iter().sum::<usize>() as f32 / nb_reg_blocks as f32;
+    for i in 0..nb_reg_blocks {
+        let block_degree = block_transition.row(i).iter().sum::<f32>();
+        fraction_out[i] = (i+1..nb_reg_blocks).into_iter().fold(0., |acc: f32, j| acc + block_transition[(i,j)]) as f32 / block_degree;
+        log::info!(" block {i}, fraction out : {:.3e}", fraction_out[i]);
+        block_transition.row_mut(i).iter_mut().zip(0usize..).for_each(|v| *v.0 = *v.0 * (mean_block_size as f32) / ((block_size[i] * block_size[v.1]) as f32));
+    }
+    log::info!(" block_transition : {:?}", &block_transition);
+
     // now we can return stable_numblocks
     StableDecomposition::new(stable_numblocks)
 }  // end check_stability
