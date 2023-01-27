@@ -3,10 +3,47 @@
 //! The graph is undirected with 3072441 nodes and 117 185 083 edges
 //! 
 //! 
-//! The purpose of this example is to test coherence between embedded orkut wit communities.
-//! We reload embedding , block decomposition dumped by orkut_hnsw example
+//! The purpose of this example is to test coherence of okut embedding
+//! We analyze : 
+//!   - embedded distances inside communities and at community frontiers
+//!   - embedded distance inside blocks of stable decomposition and at their frontier
+//! 
+//! We reload embedding and  block decomposition dumped by orkut_hnsw example
+
+/* 
+
+## community embedding ef_construction : usize = 64
+
+### distances between nodes inside each community and their neighbours of which some can be outside community
+ 
+for each community we compute the mean distance between 2 embedded neigbours inside community 
+and the mean distance between 2 neigbours when one is inside and the other out the community and 
+collect the statistics on the ratio
+
+Histogram of ratio inside edge length / frontier crossing edge length :
+
+[2023-01-27T14:46:31Z INFO  orkut_check] quantiles used : [0.05, 0.25, 0.5, 0.75, 0.95]
+[2023-01-27T14:46:31Z INFO  orkut_check] value at q : 5.000e-2 = 2.010e2/500 = 0.4
+[2023-01-27T14:46:31Z INFO  orkut_check] value at q : 2.500e-1 = 2.650e2/500 = 0.53
+[2023-01-27T14:46:31Z INFO  orkut_check] value at q : 5.000e-1 = 3.130e2/500 = 0.626
+[2023-01-27T14:46:31Z INFO  orkut_check] value at q : 7.500e-1 = 3.770e2/500 = 0.754
+[2023-01-27T14:46:31Z INFO  orkut_check] value at q : 9.500e-1 = 5.470e2/500 = 1.094
+
+We see that globally internal edges are embedded with smaller distances than edges crossing the community boundaries.
+The ratio of the 2 mean length has the following properties:
+- median at 0.62.
+- for 5% of communities the ratio is greater than 1.1
+- The mean ratio is 0.669
+- The mean ratio, when weighted by community size is 0.697. This shows that there is no degradation of distances
+  inside smaller communities, crossing community boundary is more penalized for small communities than large ones.
+
+  But : 
+  Some very small communities for example 1493, 3719 and 4760 of respective sizes (3, 4 and 3) 
+  have internal edges more 2.5 larger than edges crossing boundary. 433 (among 5000) communities have mean internal edge greater than 
+  frontier crossing edges.
 
 
+*/
 
 
 use anyhow::{anyhow};
@@ -24,12 +61,13 @@ use petgraph::stable_graph::DefaultIx;
 use graphembed::prelude::*;
 use graphembed::validation::anndensity::*;
 
-use rand::distributions::{Distribution, Uniform};
 
 use hnsw_rs::prelude::*;
 use hnsw_rs::hnswio::*;
 
 use hnsw_rs::prelude::DistPtr;
+
+use hdrhistogram::Histogram;
 
 /// Directory containing the 2 data files 
 /// TODO use clap in main
@@ -162,51 +200,46 @@ fn block_load_json(block_path : &Path) -> ndarray::Array2<f32> {
 // compares edges inside community with edges going out of community
 // possibly : which edges in are matched in hnsw?
 fn analyze_community(community : &Vec<u32>, graph : &Graph<u32, f64, Undirected>, 
-            orkut_embedding : &Embedding<usize, usize, Embedded<usize>>, nb_sample : usize) -> (f64, f64) {
+            orkut_embedding : &Embedding<usize, usize, Embedded<usize>>) -> (f64, f64) {
     // is_sorted is unstable
     // assert!(community.is_sorted());
     // loop , sample couple, compute distance
-    let mut dist_in_com = Vec::<f64>::with_capacity(nb_sample);
-    let mut dist_out_com = Vec::<f64>::with_capacity(nb_sample);
+    let mut dist_in_com = Vec::<f64>::with_capacity(1000);
+    let mut dist_out_com = Vec::<f64>::with_capacity(1000);
     //
-    let _node_indexation = get_graph_indexation(graph);
+    let node_indexation = get_graph_indexation(graph);
     //
-    let uniform = Uniform::<f64>::new(0., 1.);
-    let mut rng = rand::thread_rng();
     // loop with acceptance rejection on nodes.
     let com_size = community.len();
-    let ratio = nb_sample as f64 / com_size as f64;
-    log::info!("acceptance ratio is : {:.3e}", ratio);
 
     for i in 0..com_size {
         // recall that community contains nodes names (type N in Graph<N,   >) and note indices!
-        let node = community[i];
-        assert!(node != 0);
+        let node1 = community[i];
+        assert!(node1 != 0);   // beccause we know there is no node with name 0 in csv file!!
+        // must get the index corresponding to node which the node weight in petgraph terminology
+        let n1_idx = node_indexation.get_index_of(&node1).unwrap();
         // iterate over neighbours of each node
-        let mut neighbours = graph.neighbors_undirected(NodeIndex::new(node as usize));
-        while let Some(nidx) = neighbours.next() {
-            let xsi = uniform.sample(&mut rng);
-            if xsi < ratio {
-                // now  nidx is a NodeInddex is neighbour n in community we must get its name
-                let n_name = graph[nidx];
-                if n_name == 0 {
-                    log::info!("n : {:?}", nidx);
-                    assert!(n_name != 0);
-                }
-                let is_in = community.contains(&n_name);
-                log::trace!("dist node1 : {:?} node2 : {:?}", node, n_name);
-                let dist = orkut_embedding.get_node_distance(node as usize, n_name as usize);
-                if is_in {
-                    dist_in_com.push(dist);
-                }
-                else {
-                    dist_out_com.push(dist);
-                }  
-            }   
+        let mut neighbours = graph.neighbors_undirected(NodeIndex::new(n1_idx as usize));
+        while let Some(n2_idx) = neighbours.next() {
+            // now  n2_idx is a NodeInddex is neighbour n in community we must get its name
+            let n2_name = graph[n2_idx];
+            if n2_name == 0 {
+                log::info!("n : {:?}", n2_idx);
+                assert!(n2_name != 0);
+            }
+            let is_in = community.contains(&n2_name);
+            log::trace!("dist node1 : {:?} node2 : {:?}", node1, n2_name);
+            let dist = orkut_embedding.get_node_distance(node1 as usize, n2_name as usize);
+            if is_in {
+                dist_in_com.push(dist);
+            }
+            else {
+                dist_out_com.push(dist);
+            }  
         }
     }
     //
-    let mean_in_dist = dist_in_com.iter().sum::<f64>()/ dist_in_com.len() as f64;
+    let mean_in_dist = if dist_in_com.len() > 0 { dist_in_com.iter().sum::<f64>()/ dist_in_com.len() as f64 } else { 0.};
     let mean_out_dist = dist_out_com.iter().sum::<f64>()/ dist_out_com.len() as f64;
     //
     log::info!("mean distance between neighbours, in : {:.3e} len : {:?}, out : {:.3e} len : {:?}", mean_in_dist, dist_in_com.len(), 
@@ -305,20 +338,44 @@ pub fn main() {
     //
     // now we can check how are embedded blocks and communities we examined in Notebook
     //
-    let num = 0usize;
-    log::info!("analyze_community num : {num}");
-    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
+    let ratios : Vec<f64> = (0..5000).into_iter().map(|num| {
+        log::info!("\n analyze_community num : {num}, size : {:?}", &communities[num].len());
+        let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding);
+        d_in/d_out
+    }).collect::<Vec<f64>>();
 
-    let num: usize  = 1;
-    log::info!("analyze_community num : {num}");    
-    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
+    let mut histo = Histogram::<u64>::new(2).unwrap();
+    let scale = 500.;
+    log::info!("scaling ratios at {scale}");
+    ratios.iter().for_each(|ratio|  histo += (*ratio * scale) as u64);
+    let quantiles = vec![0.05, 0.25, 0.5, 0.75, 0.95];
+    log::info!("quantiles used : {:?}", quantiles);
+    for q in quantiles {
+        log::info!("value at q : {:.3e} = {:.3e}", q, histo.value_at_quantile(q));
+    }
 
-    let num: usize  = 4;
-    log::info!("analyze_community num : {num}");     
-    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
-
-    let num: usize  = 22;
-    log::info!("analyze_community num : {num}");   
-    let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding, 5000);
+    // 
+    let mut nb_greater = 0;
+    let mut size_weighted_ratio : f64 = 0.;
+    let mut unweighted_ratio : f64 = 0.;
+    let mut size_weighted = 0usize;
+    let mut sum_size_bad = 0usize;
+    for i in 0..communities.len() {
+        unweighted_ratio += ratios[i];
+        size_weighted_ratio += ratios[i] * communities[i].len() as f64;
+        size_weighted += communities[i].len();
+        if ratios[i] >= 1. {
+            log::info!("community : {i}, size : {:?}, ratio : {:.3e}", communities[i].len(), ratios[i]);
+            sum_size_bad += communities[i].len();
+            nb_greater += 1;
+        }
+    }
+    size_weighted_ratio /= size_weighted as f64;
+    unweighted_ratio /= communities.len() as f64;
+    let mean_size_bad = sum_size_bad as f64 / nb_greater as f64;
+    log::info!("mean community size : {:.3e}", size_weighted as f64/communities.len() as f64);
+    log::info!("number of communites with greater in than out dist : {:?}, mean com size : {:.3e}", nb_greater, mean_size_bad);
+    log::info!("mean ratio dist_in/dist_out : {:.3e}", unweighted_ratio);
+    log::info!("mean ratio dist_in/dist_out weighted community size: {:.3e}", size_weighted_ratio);
 
 } // end of main
