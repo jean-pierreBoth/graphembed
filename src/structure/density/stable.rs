@@ -10,6 +10,7 @@ use std::io::{BufReader, BufWriter };
 use serde::{Deserialize, Serialize};
 use serde_json::{to_writer};
 
+use ndarray::Array2;
 
 use indxvec::Vecops;
 
@@ -43,11 +44,15 @@ pub struct StableDecomposition {
     /// for each block give its beginning position in index. 
     /// block\[0\] begins at 0, block\[1\] begins at index\[block_start\[1\]\] so we get easily nodes of a block
     block_start : Vec<usize>,
+    /// degrees of node by their index (as in graph)
+    degrees : Vec<u32>,
+    /// We count edges crossing from block i to block j.
+    block_transition : Array2<f32>
 } // end of struct StabeDecomposition
 
 
 impl StableDecomposition {
-    pub fn new(s : Vec<u32>) -> Self {
+    pub fn new(s : Vec<u32>, degrees: Vec<u32>, block_transition : Array2<f32>) -> Self {
         log::info!("StableDecomposition::new");
         let index = s.mergesort_indexed().rank(true);
         log::debug!("sorted s : {}, {}", s[index[0]], s[index[1]]);
@@ -77,7 +82,7 @@ impl StableDecomposition {
             log::debug!(" block start : {:?}", block_start);
         }
         //
-        StableDecomposition{s, index, block_start}
+        StableDecomposition{s, index, block_start, degrees, block_transition}
     }  // end of new StableDecomposition
 
 
@@ -155,6 +160,19 @@ impl StableDecomposition {
     } // end of get_block_points
 
     
+    /// get degree of a node. Node are identified by their index (see petgraph::NodeIndex)
+    pub fn get_node_degree(&self, idx : usize) -> usize {
+        self.degrees[idx] as usize
+    }
+    
+
+    /// get transition data between blocks
+    pub fn get_block_transition(&self) -> &Array2<f32> {
+        &self.block_transition
+    } // end of get_block_transition
+
+
+
     /// dump in json format StableDecomposition structure
     pub fn dump_json(&self, filepath: &Path) ->  Result<(), String> {
         //

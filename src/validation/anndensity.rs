@@ -1,10 +1,12 @@
 //!  The purpose of this module is to evalate the embedding with structural properties conservation
+//!  We analyze how distances inside communities behave after embedding.
+//! 
 //! Construct ann on embedding and compares with density decomposition of original graph
+
 
 // We construct an Hnsw structure on embedded data.
 // For each node of densest block we compute the fraction of its neighbour in the same block.
 // We can compute density of each block and check if they are in the stable decomposition order
-
 
 
 use std::time::{SystemTime};
@@ -14,10 +16,16 @@ use anyhow::*;
 
 use rayon::iter::{ParallelIterator, IntoParallelIterator};
 
+use std::fs::OpenOptions;
+use std::path::{Path};
+use std::io::{BufReader, BufWriter };
+
+use serde::{Deserialize, Serialize};
+use serde_json::{to_writer};
+
 use petgraph::graph::{Graph};
 use petgraph::Undirected;
 
-use ndarray::{Array2};
 
 use hnsw_rs::prelude::*;
 use hnsw_rs::flatten::FlatNeighborhood;
@@ -29,20 +37,37 @@ use crate::structure::density::*;
 use crate::structure::density::stable::*;
 
 
-/// gathers distance statistics from a point to its neighbours
-#[derive(Default, Debug, Copy,Clone)]
-pub struct DistStat {
+/// Gathers statistics for each block obtained from the Ann flathnsw representation for comparison with those obtained of the 
+/// original graph representation.   
+/// We collect mean distances inside a block and mean distance for edge crossing a block boundary.
+/// We also collect transition probabilities between blocks.  
+/// 
+/// The data collected depend on parameter ef_construction used in Hnsw creation.
+/// The higher ef_construction, the more representative are collected data, at the expense of cpu.  
+/// ef = 48 or 64 seem a good compromise, a rule of thumb is ef should be higher than mean graph degree.
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct BlockStat {
     /// block for which we collect stats
     blocnum : usize,
-    /// mean distance among all neighbours reference in flat neighborhood
+    /// mean distance among all neighbours reference in flat neighborhood.
     mean_dist : f64,
+    ///  mean distance inside block in ann flat neighbourhood
+    mean_dist_in : f32,
+    /// mean dist of edge crossing block boundary in ann flat neighbourhood
+    mean_dist_out : f32,
     /// minimal dist of a neighbour in same block as point
     min_dist_in_block : f64,
-}
+    /// transition probability
+    transition_proba : Vec<f32>,
+    /// kl divergence with original graph transitions
+    kl_divergence : f32
+} // end of BlockStat
 
-impl DistStat {
-    pub fn new(blocnum : usize, mean_dist : f64, min_dist_in_block : f64) -> Self {
-        DistStat{blocnum , mean_dist, min_dist_in_block}
+
+impl BlockStat {
+    pub fn new(blocnum : usize, mean_dist : f64, mean_dist_in : f32, mean_dist_out : f32, min_dist_in_block : f64, 
+                transition_proba : Vec<f32>, kl_divergence : f32) -> Self {
+        BlockStat{blocnum , mean_dist, mean_dist_in, mean_dist_out, min_dist_in_block, transition_proba, kl_divergence}
     }
 
     /// returns num of block for hich the structure maintains statistics
@@ -55,20 +80,85 @@ impl DistStat {
         self.mean_dist
     }
 
+    /// returns mean of distance between embedded pairs of point inside block
+    pub fn get_mean_dist_in(&self) -> f32 {
+        self.mean_dist_in
+    }
+
+    /// returns mean of distance between embedded pairs of point one inside , the other outside block
+    pub fn get_mean_dist_out(&self) -> f32 {
+        self.mean_dist_out
+    }    
+
     /// minimal dist among neighbour in same block as point
     pub fn get_min_dist_in_block(&self) -> f64 {
         self.min_dist_in_block
     }
 
-} // end of DistStat
+    /// returns fraction of transition going out of block (i.e going into block of highrer index)
+    pub fn get_fraction_out(&self) -> f32 {
+        self.transition_proba[1+self.blocnum..].iter().sum::<f32>()
+    }
+} // end of BlockStat
 
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BlockCheck {
+    blocks : Vec<BlockStat>,
+} // end of BlockCheck
 
 
+impl BlockCheck {
 
+    /// get blocks of statistics
+    pub fn get_blockstat(&self) -> &Vec<BlockStat> {
+        &self.blocks
+    }
+    /// dump in json format StableDecomposition structure
+    pub fn dump_json(&self, filepath: &Path) ->  Result<()> {
+        //
+        log::info!("dumping BlockCheck in json file : {:?}", filepath);
+        //
+        let fileres = OpenOptions::new().write(true).create(true).truncate(true).open(&filepath);
+        if fileres.is_err() {
+            log::error!("BlockCheck dump : dump could not open file {:?}", filepath.as_os_str());
+            println!("BlockCheck dump: could not open file {:?}", filepath.as_os_str());
+            return Err(anyhow!("BlockCheck dump failed".to_string()));
+        }
+        // 
+        let mut writer = BufWriter::new(fileres.unwrap());
+        let _ = to_writer(&mut writer, &self).unwrap();
+        //
+        Ok(())
+    } // end of dump_json
+
+
+    /// returns a stable decomposiiton from a json dump
+    pub fn reload_json(filepath : &Path) -> Result<Self> {
+        log::info!("in BlockCheck::reload_json");
+        //
+        let fileres = OpenOptions::new().read(true).open(&filepath);
+        if fileres.is_err() {
+            log::error!("BlockCheck::reload_json : reload could not open file {:?}", filepath.as_os_str());
+            println!("BlockCheck::reload_json: could not open file {:?}", filepath.as_os_str());
+            return Err(anyhow!("BlockCheck::reload_json:  could not open file".to_string()));            
+        }
+        //
+        let loadfile = fileres.unwrap();
+        let reader = BufReader::new(loadfile);
+        let blockcheck :Self = serde_json::from_reader(reader).unwrap();
+        //
+        log::info!("end of BlockCheck reload ");     
+        //
+        Ok(blockcheck)
+    } // end of reload_json
+
+} // end of impl BlockCheck
 //====================================================================================================
 
-/// builds the Hnsw from the embedded data
+/// Builds the Hnsw structure from the embedded data
+/// In the Hnsw structure original nodes of the graph are identified by their NodeIndex or rank in embedded structure.  
+/// (The N type of the graph structure is not used anymore at this step)
 pub fn embeddedtohnsw<F, D>(embedded : & dyn EmbeddedT<F>, max_nb_connection : usize, ef_c : usize) -> Result<Hnsw<F, DistPtr<F, f64>>, anyhow::Error>
     where F : Copy+Clone+Send+Sync ,
           D : Distance<F> {
@@ -118,15 +208,16 @@ pub fn embeddedtohnsw<F, D>(embedded : & dyn EmbeddedT<F>, max_nb_connection : u
 } // end of embedtohnsw
 
 
-// Caution : Must check coherence of node indexation between graph loading and csr matrix loading 
-// but we use the same loading methods in crate::io::csv
+
+
+// We compute transition probabilities between blocks after embedding and compare it with data
+// before embedding by computing K.L divergence between distributions for corresponding block
 /// TODO have many/better density 
-fn compare_block_density(flathnsw : &FlatNeighborhood, stable : &StableDecomposition, blocnum : usize) -> (DistStat, Vec<f32>) {
+fn compare_block_density(flathnsw : &FlatNeighborhood, stable : &StableDecomposition, blocnum : usize) -> BlockStat {
     //
-    log::info!("compare_block_density for block : {blocnum})");
+    log::info!("compare_block_density for block : {blocnum}");
     //
     let highest = stable.get_block_points(blocnum).unwrap();
-    let mean_block_size = stable.get_mean_block_size();
     let block_size_out = highest.len();
     let nb_blocks = stable.get_nb_blocks();
     let mut block_counts = (0..nb_blocks).into_iter().map(|_| 0.).collect::<Vec<f32>>();
@@ -134,39 +225,79 @@ fn compare_block_density(flathnsw : &FlatNeighborhood, stable : &StableDecomposi
     let mut min_dist_in_block = f64::INFINITY;
     // loop on points of highest block
     let mut density = 0.;
-    let mut nb_non_zero_dist : usize = 0;
+    let mut _nb_non_zero_dist : usize = 0;
+    let mut nb_dist = 0;
+    // to compare mean dist in block and crossing blck frontier
+    let mut nb_dist_in = 0;
+    let mut nb_dist_out = 0;
+    let mut mean_dist_in = 0.;
+    let mut mean_dist_out = 0.;
     for node in &highest {
-        // get neighbours of node
+        // get neighbours of node. The variable node here refers to the original NodeIndex.
+        // No more N (weight in petgraph terminology)
         let neighbours = flathnsw.get_neighbours(*node).unwrap();
-        for neighbour in &neighbours[0..neighbours.len().min(64)] {
+        let max_nb_nbg = stable.get_node_degree(*node);
+        assert!(max_nb_nbg > 0);
+        // we use as many neighbour we have in flathnsw but no more than degree of node in original graph.
+        // Keeping track of degree is necessary to get a good profile of leakage out of blocks
+        for neighbour in &neighbours[0..neighbours.len().min(max_nb_nbg)] {
             // search which block is neighbour
             let dist = neighbour.get_distance();
             let neighbour_blocknum = stable.get_densest_block(neighbour.get_origin_id()).unwrap();
-            let block_size_in = stable.get_nbpoints_in_block(neighbour_blocknum).unwrap();
             if dist > 0. {
-                nb_non_zero_dist += 1;
+                _nb_non_zero_dist += 1;
                 if neighbour_blocknum == blocnum {
                     min_dist_in_block = min_dist_in_block.min(dist as f64);
                 }
-                density += dist;
+            }
+            density += dist;
+            nb_dist += 1;
+            if neighbour_blocknum <= blocnum {
+                nb_dist_in += 1;
+                mean_dist_in += dist;
+            }
+            else {
+                nb_dist_out += 1;
+                mean_dist_out += dist;
             }
             // estimated density around node
-            block_counts[neighbour_blocknum] += mean_block_size as f32/ ((block_size_in * block_size_out) as f32);
+            block_counts[neighbour_blocknum] += 1.0/ (block_size_out  as f32);
         }
     } // end of loop on node
+    // renormalize
+    if nb_dist_in > 0 {
+        mean_dist_in /= nb_dist_in as f32;
+    }
+    if nb_dist_out > 0 {
+        mean_dist_out /= nb_dist_out as f32;
+    }    
+    let sum = block_counts.iter().sum::<f32>();
+    block_counts.iter_mut().for_each(|v| *v = *v / sum);
     //
-    let global_density = density as f64 / (nb_non_zero_dist as f64);
-    log::info!("mean distance of neigbours in bloc {blocnum}: {:.3e}", global_density);
-    let diststat = DistStat::new(blocnum, global_density, min_dist_in_block);
+    let global_density = density as f64 / (nb_dist as f64);
+ 
+    // we can compute divergence between block_counts and corresponding measure in stable distribution
+    let divergence = kl_divergence(&block_counts, stable.get_block_transition().row(blocnum).as_slice().unwrap());
+    log::info!("mean distance of neigbours in bloc {blocnum}: {:.3e}, block divergence : {:.3e}", global_density, divergence);
     //
-    return (diststat,block_counts);
+    let diststat = BlockStat::new(blocnum, global_density,  mean_dist_in , mean_dist_out, 
+        min_dist_in_block, block_counts, divergence);
+    //
+    return diststat;
 }  // end of compare_block_density
 
 
 
+// computes kl divergence between 2 row of block transition. Array are normalized to 1.
+fn kl_divergence(p1 : &[f32], p2 : &[f32]) -> f32 {
+    let div = p1.iter().zip(p2.iter()).fold(0., | acc , v| if v.0 > &0. { acc + v.0 * (v.1/v.0).ln() } 
+            else { acc});
+    return -div;
+} // end of kl_divergence
+
 
 /// get fraction of edge out of block. recall That B_{i} = \cup S_{j} for j <= i
-fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
+pub fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
 
     let mut out = 0.;
     let mut nb_edges = 0.;
@@ -190,7 +321,7 @@ fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
 /// This can be assessed by computing transition probability between blocks along edges.
 pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &Embedded<F>, 
             hnsw_opt : Option<Hnsw<F,DistPtr<F,f64>>>, 
-            decomposition_opt : Option<StableDecomposition>) -> Result<Array2<f32>, anyhow::Error>
+            decomposition_opt : Option<StableDecomposition>) -> Result<BlockCheck, anyhow::Error>
     where F : Copy+Clone+Send+Sync ,
           D : Distance<F> , 
           N : std::marker::Copy  {
@@ -223,24 +354,17 @@ pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &
     let nb_blocks = decomposition.get_nb_blocks();
     // now we can loop ( //) on densest blocks and more populated blocks.
     let nb_dense_blocks = nb_blocks.min(250);
-    let res_analysis : Vec<(DistStat, Vec<f32>)> = (0..nb_dense_blocks).into_par_iter().
+    let res_analysis : Vec<BlockStat> = (0..nb_dense_blocks).into_par_iter().
             map(|i| compare_block_density(&flathnsw, &decomposition, i)).collect();
     //
-    // make a matrix of transitions between blocks
-    //
-    let block_transition = Array2::<f32>::from_shape_fn((nb_blocks, nb_blocks),
-                    |(i,j)| res_analysis[i].1[j]
-                );
-    //
     log::info!("\n\n nb neighbours by blocks");
-    for (d, v) in &res_analysis {
-        log::info!("\n\n density_analysis for densest block : {:#?}, block size : {:#?}", d, decomposition.get_nbpoints_in_block(d.get_blocnum()).unwrap());
-        let frac_out = get_block_stats(d.get_blocnum(), v);
-        log::info!(" fraction out : {:.2e}", frac_out);
-        log::info!("block : {:?}", v);
+    for d in &res_analysis {
+        log::info!("\n\n density_analysis for densest block : {:?}, block size : {:#?}", d, decomposition.get_nbpoints_in_block(d.get_blocnum()).unwrap());
+        let frac_out = d.get_fraction_out();
+        log::info!(" block : {:?}, fraction out : {:.2e}", d.get_blocnum(), frac_out);
     } 
     //
-    return Ok(block_transition);
+    return Ok(BlockCheck{blocks:res_analysis});
 } // end of density_analysis
 
 //========================================================================================================

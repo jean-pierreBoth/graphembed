@@ -197,6 +197,8 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     let sys_start = SystemTime::now();
     //
     let nb_reg_blocks = iso_regression.get_nb_block();
+    let nb_nodes = graph.node_count();
+    let mut degrees = (0..nb_nodes).into_iter().map(|_| 0).collect::<Vec<u32>>();
     let pointblocklocator = PointBlockLocator::new(&iso_regression);
     //
     let mut block_transition = Array2::<f32>::zeros((nb_reg_blocks,nb_reg_blocks));
@@ -220,9 +222,11 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
             let pt_idx = NodeIndex::new(rank_pt);
             points_waiting.push(pt_idx.index());
             // rank guve us the index in graph
+            let mut degree = 0;
             let mut neighbours = graph.neighbors(pt_idx).detach();
             // is neighbor in block
             while let Some((edge_idx,neighbor)) = neighbours.next(graph) {
+                degree += 1;
                 let neighbor_u = neighbor.index();
                 // TODO >= or == 
                 let neighbour_block = pointblocklocator.get_point_block_num(neighbor_u).unwrap();
@@ -243,7 +247,10 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
                         panic!("should not happen");
                     }
                 }
-            }
+            } // end while on neighbours
+            // affect degree for this node
+            assert_eq!(degrees[pt_idx.index()], 0);  // consistency check...
+            degrees[pt_idx.index()] = degree;
         } // end while on point in blocks
         // we must check that r is greater on block than outside
         let mut min_in_block = F::max_value();
@@ -307,7 +314,7 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
     }
     //
     // process matrix of block_transition
-    // for each block i get fraction of edge out. i.e going to j  and renormalization by block sizes.
+    // for each block i get fraction of edge out. i.e going to j. We get a transition probability for each block
     //
     let mut fraction_out  = (0..nb_reg_blocks).into_iter().map(|_| 0f32).collect::<Vec<f32>>();
     let mean_block_size = block_size.iter().sum::<usize>() as f32 / nb_reg_blocks as f32;
@@ -315,12 +322,13 @@ fn check_stability<'a, F:Float + std::fmt::Debug, N>(graph : &'a Graph<N, F, Und
         let block_degree = block_transition.row(i).iter().sum::<f32>();
         fraction_out[i] = (i+1..nb_reg_blocks).into_iter().fold(0., |acc: f32, j| acc + block_transition[(i,j)]) as f32 / block_degree;
         log::info!(" block {i}, fraction out : {:.3e}", fraction_out[i]);
-        block_transition.row_mut(i).iter_mut().zip(0usize..).for_each(|v| *v.0 = *v.0 * (mean_block_size as f32) / ((block_size[i] * block_size[v.1]) as f32));
+        block_transition.row_mut(i).iter_mut().zip(0usize..).for_each(|v| *v.0 = *v.0  / (block_degree));
     }
-    log::info!(" block_transition : {:?}", &block_transition);
+    log::info!(" mean block size : {:?}", mean_block_size);
+    log::info!("\n block_transition : {:?}", &block_transition);
 
     // now we can return stable_numblocks
-    StableDecomposition::new(stable_numblocks)
+    StableDecomposition::new(stable_numblocks, degrees, block_transition)
 }  // end check_stability
 
 

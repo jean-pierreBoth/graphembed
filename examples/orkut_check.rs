@@ -12,7 +12,7 @@
 
 /* 
 
-## community embedding ef_construction : usize = 64
+## community embedding ef_construction : usize = 48
 
 ### distances between nodes inside each community and their neighbours of which some can be outside community
  
@@ -42,6 +42,23 @@ The ratio of the 2 mean length has the following properties:
   have internal edges more 2.5 larger than edges crossing boundary. 433 (among 5000) communities have mean internal edge greater than 
   frontier crossing edges.
 
+  ###  comparison of flow probability between blocks in the original graph and the ann graph (via Hnsw) computed from the embedding
+
+  fraction out in original graph is 0.63 at first block ; increase up to 0.71 until block 40 then decrease to 0 
+  fraction out in embedded is 0.71 at first block increase up to 0.821 until block 40 then decrease
+
+  KL divergence between original and embedded probability transitions between blocks begins at 0.029 originating from block 0 , 
+  increase up to 0.82 for initial block 40, then decrease down to 0.058 
+  until block ~170 and then go up to 1. around last block last block.
+
+  distances inside blocks are consistenty lower than distance crossing block boundary. 0.5 for first blocks up to 0.9 for lasts blocks.
+
+  globally : embedded leaks out block a bit too much compared to original graph but follow the same pattern depending on blocks.
+
+  TODO : 
+   - graphics, ef 64  and link prediction comparison
+  #### 
+
 
 */
 
@@ -53,7 +70,7 @@ use std::fs::{OpenOptions};
 use std::io::prelude::*;
 use std::str::FromStr;
 
-use std::io::{BufReader, BufWriter };
+use std::io::{BufReader};
 
 use petgraph::prelude::*;
 use petgraph::stable_graph::DefaultIx;
@@ -166,33 +183,6 @@ fn reload_orkut_hnsw(path : String) -> Hnsw<usize, DistPtr<usize,f64> > {
     //
     hnsw_loaded
 }  // end of reload_orkut_hnsw
-
-
-fn block_dump_json(block_path : &Path, block_array : &ndarray::Array2<f32>) {
-    let fileres = OpenOptions::new().write(true).create(true).truncate(true).open(&block_path);
-    if fileres.is_err() {
-        log::error!("block_matrix dump : dump could not open file {:?}", block_path.as_os_str());
-        println!("block matix dump: could not open file {:?}", block_path.as_os_str());
-    }
-    // 
-    let mut writer = BufWriter::new(fileres.unwrap());
-    let _ = serde_json::to_writer(&mut writer, &block_array).unwrap();
-}  // end of block_dump_json
-
-
-
-
-fn block_load_json(block_path : &Path) -> ndarray::Array2<f32> {
-    let fileres = OpenOptions::new().read(true).create(true).truncate(true).open(&block_path);
-    if fileres.is_err() {
-        log::error!("block_matrix dump : dump could not open file {:?}", block_path.as_os_str());
-        println!("block matix dump: could not open file {:?}", block_path.as_os_str());
-    }
-    let loadfile = fileres.unwrap();
-    let reader = BufReader::new(loadfile);
-    let block_transition : ndarray::Array2<f32> = serde_json::from_reader(reader).unwrap();
-    block_transition
-} // end of block_load_json
 
 
 
@@ -320,6 +310,8 @@ pub fn main() {
     //
     let hnsw_loaded : Hnsw<usize, DistPtr<usize,f64> >= reload_orkut_hnsw(String::from("orkuthnsw"));
     //
+    //  now we can check how are embedded blocks 
+    //
     let d_res = density_analysis::<usize, DistPtr<usize,f64>, DefaultIx>(&orkut_graph,
                                     orkut_embedding.get_embedded_data(), 
                                     Some(hnsw_loaded), Some(decomposition));
@@ -328,15 +320,14 @@ pub fn main() {
         std::process::exit(1);
     }
  
-    log::info!("\n\n dumping block array");
-    let block_array = d_res.unwrap();
-    log::info!(" block_array : {:?}", &block_array);
-    let block_path= Path::new("orkut_block_mat.json");
-    block_dump_json(block_path, &block_array);
+    log::info!("\n\n dumping density analysis result");
+    let block_check = d_res.unwrap();
+    let block_check_path= Path::new("orkut_block_check.json");
+    block_check.dump_json(block_check_path).unwrap();
     //
     log::info!("exiting from orkut_check");
     //
-    // now we can check how are embedded blocks and communities we examined in Notebook
+    // now we can check how  communities are embedded we examined in Notebook
     //
     let ratios : Vec<f64> = (0..5000).into_iter().map(|num| {
         log::info!("\n analyze_community num : {num}, size : {:?}", &communities[num].len());
