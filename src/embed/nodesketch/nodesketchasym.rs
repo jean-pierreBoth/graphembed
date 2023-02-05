@@ -3,6 +3,8 @@
 //! 
 //! The iterations consists in iteratively constructing new weighted list of neighbours of each node considered 
 //! once as a source and once as a target.  
+//! An embedded node is represented by 2 vectors, one for the node considered as a source, one as a target.
+//! 
 //! The final dissimilarity between 2 nodes is a mix of the distances between nodes considered as sources, as target and as linked
 //! by a weighted edge if any.
 

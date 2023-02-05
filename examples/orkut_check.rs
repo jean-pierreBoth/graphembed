@@ -56,7 +56,7 @@ The ratio of the 2 mean length has the following properties:
   globally : embedded leaks out block a bit too much compared to original graph but follow the same pattern depending on blocks.
 
   TODO : 
-   - graphics, ef 64  and link prediction comparison
+   - graphics, ef 64
   #### 
 
 
@@ -131,6 +131,7 @@ fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<u32>>> {
         let line = line.unwrap();
         let splitted : Vec<&str>= line.split('\t').collect();
         let mut community : Vec<u32> = splitted.iter().map(|s| u32::from_str(*s).unwrap()).collect();
+        // we need to sort to use binary_search
         community.sort_unstable();
         assert!(community[0] != 0);
         communities.push(community);
@@ -217,7 +218,7 @@ fn analyze_community(community : &Vec<u32>, graph : &Graph<u32, f64, Undirected>
                 log::info!("n : {:?}", n2_idx);
                 assert!(n2_name != 0);
             }
-            let is_in = community.contains(&n2_name);
+            let is_in = community.binary_search(&n2_name).is_ok();
             log::trace!("dist node1 : {:?} node2 : {:?}", node1, n2_name);
             let dist = orkut_embedding.get_node_distance(node1 as usize, n2_name as usize);
             if is_in {
@@ -232,7 +233,7 @@ fn analyze_community(community : &Vec<u32>, graph : &Graph<u32, f64, Undirected>
     let mean_in_dist = if dist_in_com.len() > 0 { dist_in_com.iter().sum::<f64>()/ dist_in_com.len() as f64 } else { 0.};
     let mean_out_dist = dist_out_com.iter().sum::<f64>()/ dist_out_com.len() as f64;
     //
-    log::info!("mean distance between neighbours, in : {:.3e} len : {:?}, out : {:.3e} len : {:?}", mean_in_dist, dist_in_com.len(), 
+    log::info!("mean embedded distance between neighbours, in : {:.3e} len : {:?}, out : {:.3e} len : {:?}", mean_in_dist, dist_in_com.len(), 
                                 mean_out_dist, dist_out_com.len());
     //
     (mean_in_dist, mean_out_dist)

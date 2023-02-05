@@ -593,7 +593,7 @@ pub fn csv_to_trimat<F:Float+FromStr>(filepath : &Path, directed : bool, delim :
 
 /// Loads a csv file and returning a matrix representation in triplets form and a reindexation of nodes to ensure that internally nodes are identified by 
 /// a rank in 0..nb_nodes.
-/// In most csv files the identifiyer attached to a node is a usize so we return a NodeIndexation<usize> but it could (for example) a String in more general context.
+/// In most csv files the identifiyer attached to a node is a usize so we return a NodeIndexation\<usize\> but it could (for example) a String in more general context.
 ///  
 /// This function tests for the following delimiters [b'\t', b',', b' '] in the csv file.
 /// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  

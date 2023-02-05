@@ -173,6 +173,20 @@ impl StableDecomposition {
 
 
 
+    /// returns sum of degrees of nodes in block bloknum
+    pub fn get_block_degree(&self, blocknum : usize) -> anyhow::Result<usize> {
+        let nb_block = self.block_start.len();
+        if blocknum >= self.get_nb_blocks() {
+            return Err(anyhow!("bad blocknum"));
+        }
+        let start = self.block_start[blocknum];
+        let end = if blocknum < nb_block - 1 { self.block_start[blocknum+1]} else { self.index.len() };
+        let total_degree = (start..end).into_iter().fold(0, |acc, p| acc + self.degrees[p] );
+        return Ok(total_degree as usize);
+    } // end of get_block_degree
+
+
+    
     /// dump in json format StableDecomposition structure
     pub fn dump_json(&self, filepath: &Path) ->  Result<(), String> {
         //

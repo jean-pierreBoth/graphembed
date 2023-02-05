@@ -22,14 +22,16 @@ and possibly discrete labels attached to nodes.
 *NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  [https://dl.acm.org/doi/10.1145/3292500.3330951]  
     D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux.
 
-It is based on multi hop neighbourhood identification via sensitive hashing.
-Instead of using **ICWS** for hashing we use the more recent algorithm **probminhash**. See [probminhash](https://arxiv.org/abs/1911.00675).
+It is based on multi hop neighbourhood identification via sensitive hashing based on the recent algorithm **probminhash**. See [arxiv](https://arxiv.org/abs/1911.00675) or  [ieee-2022](https://ieeexplore.ieee.org/document/9185081).
+
 The algorithm associates a probability distribution on neighbours of each point depending on edge weights and distance to the point.
 Then this distribution is hashed to build a (discrete) embedding vector consisting in nodes identifiers.  
 The distance between embedded vectors is the Jaccard distance so we get
 a real distance on the embedding space for the symetric embedding.  
 
 An extension of the paper is also implemented to get asymetric embedding for directed graph. The similarity is also based on the hash of sets (nodes going to or from) a given node but then the dissimilarity is no more a distance (no symetry and some discrepancy with the triangular inequality).
+
+**The orkut graph with 3 millions nodes and 100 millions of edge is embedded in less than 10' with a 8 core laptop with this algorithm**.
 
 - **gkernel**
 
@@ -55,7 +57,7 @@ The svd is approximated by randomization as described in Halko-Tropp 2011 as imp
 *Large Scale decomposition via convex programming  2017*  
     M.Danisch T.H Hubert Chan and M.Sozio
 
-The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation*
+The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation* and the comments on the embedding of the *Orkut* graph where we can use the community data provided with the graph.
 
 ## Some data sets
 
@@ -90,7 +92,8 @@ Possibly some data can need to be converted from Tsv format to Csv, before being
 
 - Symetric
 
-  - youtube.  Nodes: 1134890 Edges: 2987624 <https://snap.stanford.edu/data/com-Youtube.html>
+  - youtube.  Nodes: 1 134 890 Edges: 2 987 624 <https://snap.stanford.edu/data/com-Youtube.html>
+  - orkut.    Nodes: 3 072 441 Edges: 117 185 083 <https://snap.stanford.edu/data/com-Orkut.html>
 
 - Asymetric
 
@@ -102,6 +105,7 @@ Possibly some data can need to be converted from Tsv format to Csv, before being
 ### results for the *atp* and *nodesketch* modules
 
 Embedding and link prediction evaluation for the above data sets are given in file [resultats.md](./resultats.md)
+A more global analysis of the embedding with the nodesketch module is done for the orkut graph in file [orkut.md](./orkut.md)
 
 ### Some qualitative comments
 
@@ -119,7 +123,7 @@ An implementation of Generalized Svd comes as a by-product in module [gsvd](./sr
 
 The crate provides three features, required by the *annembed* dependency, to specify which version of lapack you want to use.  
 For example compilation is done by :
-*cargo build --release --features="openblas-static"* to link statically with openblas.
+*cargo build --release --features="openblas-system"* to  use a dynamic link with openblas.
 The choice of one feature is mandatory to provide required linear algebra library.
 
 ### Usage
@@ -133,7 +137,10 @@ so to the required dimension to get a valid embedding in $R^{n}$.
 - The *embed* module takes embedding and possibly validation commands (link prediction task) in one directive.  
 The general syntax is :
 
-    embed file_description [validation_command --validation_arguments] embedding_command --embedding_arguments
+    embed file_description [validation_command --validation_arguments] sketching mode  --embedding_arguments  
+    for example:  
+
+        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric "true" validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5
 
     It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
 

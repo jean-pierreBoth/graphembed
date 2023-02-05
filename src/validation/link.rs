@@ -80,7 +80,8 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
                 if degrees[row].d_out > 1 && degrees[col].d_in > 1 && row < col {
                     discard = true;
                 }
-                else {
+                else if row < col {
+                    // count not discarding just for degree reason (and not for above diag)
                     nb_isolation_not_discarded += 1; 
                 }
             }
@@ -128,7 +129,9 @@ fn filter_csmat<F>(csrmat : &CsMatI<F, usize>, delete_proba : f64, symetric : bo
     }  // end while
     //
     log::info!(" ratio discarded = {:.3e}", discarded as f64/ (nb_edge as f64));
-    log::info!(" ratio not discarded to avoid disconnected node = {:.3e}", nb_isolation_not_discarded as f64/ (nb_edge as f64));
+    if nb_isolation_not_discarded > 0 {
+        log::info!(" ratio not discarded to avoid disconnected node = {:.3e}", nb_isolation_not_discarded as f64/ (nb_edge as f64));
+    }
     //
     let trimat = TriMatI::<F, usize>::from_triplets((nb_nodes,nb_nodes), rows, cols, values);
     //

@@ -46,7 +46,7 @@
 //!     It determines the number of edges to delete in the validation pass. Recall that the real number of discarded edges
 //!     can be smaller as we must not make isolated points.
 //! 
-//!     It suffices to add the command : **validation --nbpass nbpass --skip fraction** before the embedding specification.
+//!     It suffices to add the command : **validation --nbpass nbpass --skip fraction** before and instead  the "embedding" command name.
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   

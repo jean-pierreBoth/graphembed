@@ -624,7 +624,7 @@ impl  <'a, F> GSvd<'a, F>
 
 //===============================================================================
 
-// Run with for example : RUST_LOG=DEBUG cargo test test_lapack_gsvd_array_2 -- --nocapture
+// Run with for example : RUST_LOG=DEBUG cargo test --fetures="openblas-system" test_lapack_gsvd_array_2 -- --nocapture
 
 #[cfg(test)]
 mod tests {

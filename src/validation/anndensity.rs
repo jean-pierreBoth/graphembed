@@ -26,6 +26,8 @@ use serde_json::{to_writer};
 use petgraph::graph::{Graph};
 use petgraph::Undirected;
 
+use hdrhistogram::Histogram;
+
 
 use hnsw_rs::prelude::*;
 use hnsw_rs::flatten::FlatNeighborhood;
@@ -49,6 +51,8 @@ use crate::structure::density::stable::*;
 pub struct BlockStat {
     /// block for which we collect stats
     blocnum : usize,
+    /// total number of edge involving a node in this block
+    block_degree : u32,
     /// mean distance among all neighbours reference in flat neighborhood.
     mean_dist : f64,
     ///  mean distance inside block in ann flat neighbourhood
@@ -65,15 +69,22 @@ pub struct BlockStat {
 
 
 impl BlockStat {
-    pub fn new(blocnum : usize, mean_dist : f64, mean_dist_in : f32, mean_dist_out : f32, min_dist_in_block : f64, 
+    pub fn new(blocnum : usize, block_degree : u32, mean_dist : f64, mean_dist_in : f32, mean_dist_out : f32, min_dist_in_block : f64, 
                 transition_proba : Vec<f32>, kl_divergence : f32) -> Self {
-        BlockStat{blocnum , mean_dist, mean_dist_in, mean_dist_out, min_dist_in_block, transition_proba, kl_divergence}
+        BlockStat{blocnum , block_degree, mean_dist, mean_dist_in, mean_dist_out, min_dist_in_block, transition_proba, kl_divergence}
     }
 
     /// returns num of block for hich the structure maintains statistics
     pub fn get_blocnum(&self) -> usize  {
         self.blocnum
     }
+
+
+    /// returns total number of edge involving a node in this block
+    pub fn get_block_degree(&self) -> u32 {
+        self.block_degree
+    }
+
 
     /// returns distance among all neighbours reference in flat neighborhood
     pub fn get_mean(&self) -> f64 {
@@ -102,6 +113,7 @@ impl BlockStat {
 } // end of BlockStat
 
 
+/// This sturcture collects BlockStat statistics for all blocks
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlockCheck {
     blocks : Vec<BlockStat>,
@@ -114,6 +126,17 @@ impl BlockCheck {
     pub fn get_blockstat(&self) -> &Vec<BlockStat> {
         &self.blocks
     }
+
+    pub fn get_block(&self, numblock : usize) -> Result<&BlockStat> {
+        if numblock >= self.blocks.len() {
+            return Err(anyhow!("BlockCheck get_block bzd block num arg"));
+        }
+        else {
+            return Ok(&self.blocks[numblock]);
+        }
+    } // end of get_block
+
+
     /// dump in json format StableDecomposition structure
     pub fn dump_json(&self, filepath: &Path) ->  Result<()> {
         //
@@ -153,7 +176,46 @@ impl BlockCheck {
         Ok(blockcheck)
     } // end of reload_json
 
+
+    /// get histogram of ratio dist_in / dist_out for blocks
+    /// The lower is the median, the better is the result
+    /// Dumps also the mean of ratio edge in / edge out weighted by block degree
+    pub fn get_in_out_distance_ratio(&self) -> Vec::<(f64, f64)> {
+        let mut histo = Histogram::<u64>::new(2).unwrap();
+        let scale: f32 = 500.;
+        log::info!("analyzing edge in/ edge out in blocks");
+        log::debug!("scaling ratios at {scale}");
+        //
+        self.blocks.iter().for_each(|b|  histo += (scale * b.get_mean_dist_in()/b.get_mean_dist_out()) as u64);
+        let quantiles = vec![0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
+        log::info!("quantiles used : {:?}", &quantiles);
+        for q in &quantiles {
+            log::info!("value at q : {:.3e} = {:.3e}", q, histo.value_at_quantile(*q) as f64 / scale as f64);
+        }
+        //
+        let mut nb_edges : usize = 0;
+        let mut weighted_mean_ratio : f32 = 0.;
+        for i in 0..self.blocks.len() -1 {
+            // we avoid last block as we know there is no edge out!
+            let b = &self.blocks[i];
+            nb_edges +=  b.get_block_degree() as usize;
+            weighted_mean_ratio += b.get_block_degree() as f32 * b.get_mean_dist_in()/b.get_mean_dist_out();
+        }
+        weighted_mean_ratio /= nb_edges as f32;
+        log::info!(" blocks mean ratio edge in / edge out weighted by block degree : {:.3e}", weighted_mean_ratio);
+        //
+        let quant_res = quantiles.into_iter().map(|q| (q, histo.value_at_quantile(q) as f64/ scale as f64)).collect::<Vec::<(f64, f64)>>();
+        for q in &quant_res {
+            log::info!(" blocks quantiles ratio (edge in/ edge out) at proba {:.3e} = {:.3e}", q.0, q.1);
+        }
+        quant_res
+    } // end of get_in_out_distance_ratio
+
+
 } // end of impl BlockCheck
+
+
+
 //====================================================================================================
 
 /// Builds the Hnsw structure from the embedded data
@@ -280,8 +342,9 @@ fn compare_block_density(flathnsw : &FlatNeighborhood, stable : &StableDecomposi
     let divergence = kl_divergence(&block_counts, stable.get_block_transition().row(blocnum).as_slice().unwrap());
     log::info!("mean distance of neigbours in bloc {blocnum}: {:.3e}, block divergence : {:.3e}", global_density, divergence);
     //
-    let diststat = BlockStat::new(blocnum, global_density,  mean_dist_in , mean_dist_out, 
-        min_dist_in_block, block_counts, divergence);
+    let diststat = BlockStat::new(blocnum, nb_dist_in +nb_dist_out, 
+        global_density,  mean_dist_in , mean_dist_out, min_dist_in_block, 
+        block_counts, divergence);
     //
     return diststat;
 }  // end of compare_block_density
@@ -315,10 +378,17 @@ pub fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
 
 
 
-/// A tentative assesment of embedding by density comparison before and after embedding
-/// For each block *b* of density decomposition we analyze in which  blocks are the neigbours of points in b.
-/// For a block *b* of high density we expect its neighbours to be significantly also in *b*.
+/// A tentative assesment of embedding by density comparison edges length after embedding.  
+/// 
+/// The function computes an embedding and a decomposition in stable blocks. Then we compare
+/// edge length of embedded data and check that distances betwwen nodes inside a same block and related by an edge
+/// are smaller than distances between nodes related by an edge crossing a block frontier.
+/// 
+/// The user can provide the embedding and the stable decomposition or let the function compute them
+/// by passing None args.
+/// 
 /// This can be assessed by computing transition probability between blocks along edges.
+///
 pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &Embedded<F>, 
             hnsw_opt : Option<Hnsw<F,DistPtr<F,f64>>>, 
             decomposition_opt : Option<StableDecomposition>) -> Result<BlockCheck, anyhow::Error>
@@ -330,6 +400,7 @@ pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &
         Some(decomposition) => {decomposition},
         None => {
             let nb_iter = 500;
+            log::info!("doing approximate_decomposition");
             approximate_decomposition(&graph, nb_iter)  
         }
     };
@@ -339,7 +410,7 @@ pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &
         None => {
             // TODO : adapt parameters to decomposition result
             let max_nb_connection : usize = decomposition.get_mean_block_size().min(64);
-            log::info!("density_analysis : using max_nb_onnection : {max_nb_connection}");
+            log::info!("density_analysis : construction hnsw using max_nb_onnection : {max_nb_connection}");
             let ef_construction : usize = 48;
             let hnsw_res  = embeddedtohnsw::<F,D>(embedded, max_nb_connection, ef_construction);
             if hnsw_res.is_err() {
@@ -364,7 +435,11 @@ pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &
         log::info!(" block : {:?}, fraction out : {:.2e}", d.get_blocnum(), frac_out);
     } 
     //
-    return Ok(BlockCheck{blocks:res_analysis});
+    let blockcheck = BlockCheck{blocks:res_analysis};
+    log::info!("\n\n computing in out ratio for blocks");
+    blockcheck.get_in_out_distance_ratio();
+    //
+    return Ok(blockcheck);
 } // end of density_analysis
 
 //========================================================================================================
@@ -432,10 +507,8 @@ mod tests {
             log::error!("block_analysis failed");
         }
         //
-        // we transform into hnsw
-        let _max_nb_connection = 24usize;
-        let _ef_construction = 48usize;
-        
+        let block_check = block_analysis.unwrap();
+        let _ratio_quants = block_check.get_in_out_distance_ratio();
     } // end of ann_check_density_miserables
 
 }  // end of mod test

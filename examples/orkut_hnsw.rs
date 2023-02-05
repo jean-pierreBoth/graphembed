@@ -50,6 +50,7 @@ fn read_orkut_graph(dirpath : &Path) -> Result<Graph<u32, f64 , Undirected, u32>
 
 
 
+/// returns a Vector of community. Each community is sorted
 fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<usize>>> {
     let fpath = dirpath.clone().join("com-orkut.top5000.cmty.txt");
     log::info!("read_orkut_com : reading {fpath:?}");
@@ -72,7 +73,10 @@ fn read_orkut_com(dirpath : &Path) -> anyhow::Result<Vec<Vec<usize>>> {
         // split and decode line. line consists in usize separated by a tab
         let line = line.unwrap();
         let splitted : Vec<&str>= line.split('\t').collect();
-        let communitiy : Vec<usize> = splitted.iter().map(|s| usize::from_str(*s).unwrap()).collect();
+        let mut communitiy : Vec<usize> = splitted.iter().map(|s| usize::from_str(*s).unwrap()).collect();
+        // we need to sort indexes
+        communitiy.sort_unstable();
+        // 
         communities.push(communitiy);
         numline += 1;
     }
@@ -184,7 +188,8 @@ pub fn main() {
         let embedding = from_bson_with_jaccard(bson_reloaded);
         orkut_embedding = embedding.unwrap();
     }
-
+    //
+//    std::process::exit(1);
     //
     // we compute hnsw on embedding
     //
