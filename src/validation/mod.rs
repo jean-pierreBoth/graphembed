@@ -1,5 +1,5 @@
 //! This module implements some validation tools
-//! - link prediction based  on Adamic-Adar, Resource Allocator,  and Local Path Index
+//! - We use the standard link prediction based and a stable block decomposition
 
 /// references
 /// - The Link-Prediction Problem for Social Networks 

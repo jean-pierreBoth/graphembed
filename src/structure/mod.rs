@@ -11,9 +11,10 @@
 //!     - _Tatti Gionis Density-friendly graph decomposition_ [2015](https://dl.acm.org/doi/10.1145/2736277.2741119)  
 //!     - _Tatti Density-friendly graph decomposition_ [2019](https://arxiv.org/abs/1904.03467)
 //! 
-//! - for directed graph:
-//!     - Giatsidis Thilikos Vazirgiannis D_cores: Measuring Collaboration in Directed graphs based on degeneracy 2013.
-//! 
+
+/// - for directed graph:
+///     - Giatsidis Thilikos Vazirgiannis D_cores: Measuring Collaboration in Directed graphs based on degeneracy 2013.
+///
 
 // implements generalized core decomposition according to Batagelj Zaversnik paper
 // pub mod kcore;

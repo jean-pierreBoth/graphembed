@@ -72,6 +72,8 @@ use std::str::FromStr;
 
 use std::io::{BufReader};
 
+use rayon::iter::{ParallelIterator, IntoParallelIterator};
+
 use petgraph::prelude::*;
 use petgraph::stable_graph::DefaultIx;
 
@@ -330,7 +332,7 @@ pub fn main() {
     //
     // now we can check how  communities are embedded we examined in Notebook
     //
-    let ratios : Vec<f64> = (0..5000).into_iter().map(|num| {
+    let ratios : Vec<f64> = (0..5000).into_par_iter().map(|num| {
         log::info!("\n analyze_community num : {num}, size : {:?}", &communities[num].len());
         let (d_in, d_out) = analyze_community(&communities[num], &orkut_graph, &orkut_embedding);
         d_in/d_out
@@ -340,10 +342,10 @@ pub fn main() {
     let scale = 500.;
     log::info!("scaling ratios at {scale}");
     ratios.iter().for_each(|ratio|  histo += (*ratio * scale) as u64);
-    let quantiles = vec![0.05, 0.25, 0.5, 0.75, 0.95];
+    let quantiles = vec![0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
     log::info!("quantiles used : {:?}", quantiles);
     for q in quantiles {
-        log::info!("value at q : {:.3e} = {:.3e}", q, histo.value_at_quantile(q));
+        log::info!("value at q : {:.3e} = {:.3e}", q, histo.value_at_quantile(q) as f64/scale);
     }
 
     // 

@@ -1,7 +1,14 @@
-//!  The purpose of this module is to evalate the embedding with structural properties conservation
-//!  We analyze how distances inside communities behave after embedding.
+//!  The purpose of this module is to evalate the embedding with structural properties conservation.  
+//!  We analyze how distances inside blocks of the stable decomposiiton behave after embedding.
 //! 
-//! Construct ann on embedding and compares with density decomposition of original graph
+//! We construct ann neighbour graph on embedded data and analyze the distance between neighbours.
+//! In particular for each node we consider its *nbmax* neighbours where *nbmax* is the min of its degree in the original graph
+//! and the number of neighbours the ann has.  
+//!  
+//! We then compute the mean distance between the nodes when neighbour is inside the same block
+//! and outside the block.
+//! We also compute the distribution of blocks of neighbours and compare it with the distribution in the original graph with
+//! Kullbach-Leibler divergence.
 
 
 // We construct an Hnsw structure on embedded data.

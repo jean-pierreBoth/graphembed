@@ -1,9 +1,13 @@
-//! a simple link prediction to test Embeddeds
+//! a simple link prediction to test Embeddeding
+//! 
+//! We implement precision measure as described in :  
+//!       - Link Prediction in complex Networks : A survey.  
+//!            Lü, Zhou. Physica 2011.  
+//! 
+//! The scoring function for similarity is based upon the distance relative to the Embedded being tested
+//! Jaccard for nodesketch and L2 for Atp
 
 
-
-/// The scoring function for similarity is based upon the distance relative to the Embedded being tested
-/// Jaccard for nodesketch and L2 for Atp
 /// We first implement precision measure as described in 
 ///       - Link Prediction in complex Networks : A survey
 ///             Lü, Zhou. Physica 2011
