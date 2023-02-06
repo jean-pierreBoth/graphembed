@@ -24,7 +24,7 @@ The eigenvalue range give the range between higher and lower extracted singular 
 
 The column *svd* specify how the randomized approximation of the svd was done.
 
-AUC is run with 5 successive runs and 5000 edges deleted by run
+AUC is run with 5 successive runs.
 
 #### Symetric Graphs
 
@@ -39,7 +39,7 @@ AUC is run with 5 successive runs and 5000 edges deleted by run
 
 #### Asymetric Graphs
 
-AUC is estimated on 10 passes. 10000 edges deleted at each run.
+AUC is estimated on 10 passes.
 
 |  graph     | nb nodes | nb edges   |  svd(rank/epsil)       | ratio discarded | eigenvalue range | AUC (link)|  time(s)  |
 |  :------:  |  :-----: | :-------:  |    :-------:           |   :-------:     |   :------:       |  ----     | :-----:   |

@@ -30,7 +30,7 @@ use indxvec::Vecops;
 /// The blocks satisfy:
 ///  - $B_{i} \subset B_{i+1}$ 
 ///  - $B_{0}=\emptyset , B_{max}=V$ where $V$ is the set of vertices of G.
-///  - each block must be stable.    
+///  - each block must be stable (i.e cannot being increased by swapping a part of it with some other part of the graph without decreasing its density).    
 /// 
 ///  The blocks are defined by $B_{i} = B_{i-1} \cup S_{i}$
 #[derive(Serialize,Deserialize)]

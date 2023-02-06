@@ -1,7 +1,7 @@
 //!
-//! Adapted from pav_regression crate (See crates.io)
+//! Adapted from pav_regression crate (See crates.io) with some added functionality
+//! (see comments in source file)
 
-//#![allow(unused)]
 
 
 // This file is modified from the crate pav_regression

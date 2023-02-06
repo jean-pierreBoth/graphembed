@@ -1,7 +1,8 @@
+//!   
+//! Danisch Chan Sozio _Large Scale decomposition via convex programming_  [2017](https://dl.acm.org/doi/10.1145/3038912.3052619)
 //!
-//! module dedicated to density-friendly decomposition according to Danisch Chan Sozio _Large Scale decomposition via convex programming  2017
-//!
-//! It computes a decomposition of graph in blocks of vertices of decreasing density. 
+//! It computes a decomposition of graph in blocks of vertices of decreasing density.   
+//! The PAVA algorithm is a build block of stable decomposition but could be of interest by itself
 
 /// Implements PAVA algorithm for isotonic regression.
 pub  mod pava;

@@ -9,7 +9,9 @@
 //! and outside the block.
 //! We also compute the distribution of blocks of neighbours and compare it with the distribution in the original graph with
 //! Kullbach-Leibler divergence.
-
+//!
+//! The interface to the validation is the function [density_analysis] that takes as arguments the original graph and the embedded data.
+//! Optional arguments can be specified to gain control over the Ann and densitiy decomposition.
 
 // We construct an Hnsw structure on embedded data.
 // For each node of densest block we compute the fraction of its neighbour in the same block.
@@ -367,7 +369,8 @@ fn kl_divergence(p1 : &[f32], p2 : &[f32]) -> f32 {
 
 
 /// get fraction of edge out of block. recall That B_{i} = \cup S_{j} for j <= i
-pub fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
+#[allow(unused)]
+fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
 
     let mut out = 0.;
     let mut nb_edges = 0.;
@@ -392,9 +395,9 @@ pub fn get_block_stats(blocnum : usize, blockout : &Vec<f32>) -> f64 {
 /// are smaller than distances between nodes related by an edge crossing a block frontier.
 /// 
 /// The user can provide the embedding and the stable decomposition or let the function compute them
-/// by passing None args.
+/// by passing None args. (See function [embeddedtohnsw] to gain control over the ann computations)
 /// 
-/// This can be assessed by computing transition probability between blocks along edges.
+/// Computing transition probabilities between blocks along edges and compared with the original graph.
 ///
 pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &Embedded<F>, 
             hnsw_opt : Option<Hnsw<F,DistPtr<F,f64>>>, 
@@ -431,7 +434,9 @@ pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &
     //
     let nb_blocks = decomposition.get_nb_blocks();
     // now we can loop ( //) on densest blocks and more populated blocks.
-    let nb_dense_blocks = nb_blocks.min(250);
+    let nb_max_blocks = 500;
+    log::info!("keeping max {nb_max_blocks}");
+    let nb_dense_blocks = nb_blocks.min(nb_max_blocks);
     let res_analysis : Vec<BlockStat> = (0..nb_dense_blocks).into_par_iter().
             map(|i| compare_block_density(&flathnsw, &decomposition, i)).collect();
     //

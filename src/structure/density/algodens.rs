@@ -1,4 +1,7 @@
-//! density decomposition algorithm driver
+//! density decomposition algorithm.
+//! 
+//! The graph representation relies on petgraph.
+//! The function doing the work is [approximate_decomposition]. The result is returned in the structure [StableDecomposition]
 
 
 

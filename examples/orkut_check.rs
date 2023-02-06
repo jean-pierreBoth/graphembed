@@ -235,7 +235,7 @@ fn analyze_community(community : &Vec<u32>, graph : &Graph<u32, f64, Undirected>
     let mean_in_dist = if dist_in_com.len() > 0 { dist_in_com.iter().sum::<f64>()/ dist_in_com.len() as f64 } else { 0.};
     let mean_out_dist = dist_out_com.iter().sum::<f64>()/ dist_out_com.len() as f64;
     //
-    log::info!("mean embedded distance between neighbours, in : {:.3e} len : {:?}, out : {:.3e} len : {:?}", mean_in_dist, dist_in_com.len(), 
+    log::debug!("mean embedded distance between neighbours, in : {:.3e} len : {:?}, out : {:.3e} len : {:?}", mean_in_dist, dist_in_com.len(), 
                                 mean_out_dist, dist_out_com.len());
     //
     (mean_in_dist, mean_out_dist)
