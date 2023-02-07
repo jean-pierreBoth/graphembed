@@ -119,6 +119,12 @@ impl BlockStat {
     pub fn get_fraction_out(&self) -> f32 {
         self.transition_proba[1+self.blocnum..].iter().sum::<f32>()
     }
+
+    /// for a given block, edges going out of block have an block arrival distribution.
+    /// This function return kl_divergene the transition observed in the original graph and the embedded graph. 
+    pub fn get_kl_divergence(&self) -> f32 {
+        self.kl_divergence
+    }
 } // end of BlockStat
 
 
@@ -220,6 +226,28 @@ impl BlockCheck {
         quant_res
     } // end of get_in_out_distance_ratio
 
+    /// For a given block, edges having one node in a block have a neighbour in some arrival block (possibly the same block).
+    /// We record this arrival distribution for each block and compute the kl_divergene between transitions 
+    /// observed in the original graph and the embedded graph.  
+    /// This function returns histogram of kl_divergene between transitions observed when varying the departure block.
+    pub fn get_divergence_histogram(&self) -> Vec::<(f64, f64)> {
+        log::info!("analyzing edge block transitions");
+
+        let mut histo = Histogram::<u64>::new(2).unwrap();
+        let scale: f32 = 500.;
+        self.blocks.iter().for_each(|b|  histo += (scale * b.get_kl_divergence()) as u64);
+        let quantiles = vec![0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
+        log::info!("quantiles used : {:?}", &quantiles);
+        for q in &quantiles {
+            log::info!("value at q : {:.3e} = {:.3e}", q, histo.value_at_quantile(*q) as f64 / scale as f64);
+        }
+        //
+        let quant_res = quantiles.into_iter().map(|q| (q, histo.value_at_quantile(q) as f64/ scale as f64)).collect::<Vec::<(f64, f64)>>();
+        for q in &quant_res {
+            log::info!(" kl_divergence quantiles ratio between block transition law at proba {:.3e} = {:.3e}", q.0, q.1);
+        }
+        quant_res
+    } // end of get_kl_divergence_histogram
 
 } // end of impl BlockCheck
 
@@ -450,6 +478,8 @@ pub fn density_analysis<F,D, N>(graph : &Graph<N, f64, Undirected>, embedded : &
     let blockcheck = BlockCheck{blocks:res_analysis};
     log::info!("\n\n computing in out ratio for blocks");
     blockcheck.get_in_out_distance_ratio();
+    //
+    blockcheck.get_divergence_histogram();
     //
     return Ok(blockcheck);
 } // end of density_analysis
