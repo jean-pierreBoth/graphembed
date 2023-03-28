@@ -87,7 +87,9 @@ standard deviation on AUC is around 8.E-4 with 20 AUC pass
 
 The munmun_twitter graph has characteristics,known in the litterature dedicated to large sparse directed graphs, that make it difficult:
 
-- very asymetric nodes having for example in degree of 2 but an out degree more than 450- low mean degree.
+- very asymetric nodes having for example in degree of 2 but an out degree more than 450
+
+- low mean degree.
 
 - huge imbalance between a small number of existing directed edges (less than $10^{6}$ ) and a much larger set of potential edges (here more than $4 \cdot 10^{11}$).  
 

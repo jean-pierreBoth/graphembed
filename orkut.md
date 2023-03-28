@@ -45,7 +45,7 @@ We used the 5000 first communities.
 
 For a given block, edges having one node in a block have a neighbour in some arrival block (possibly the same block).
 We record this arrival distribution for each block and compute the kl_divergene between transitions
-observed in the original graph and the embedded graph.  
+observed in the original graph and the approximate neighbourhood graph (which is asymetric) deduced from the embedded data.  
 
 Statistics are gathered on the 208 blocks.
 
