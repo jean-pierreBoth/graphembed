@@ -118,7 +118,7 @@ impl  NodeSketch {
                 let j = self.csrmat.indices()[k];
                 let w = self.csrmat.data()[k];
         //        log::trace!("sketch_slamatrix row : {}, k  : {}, col {}, w {}", row, k, j ,w);
-                probminhash3.hash_item(j,w);
+                probminhash3.hash_item(j,&w);
             }
             let sketch = probminhash3.get_signature();
             log::trace!(" sketch_slamatrix sketch row i : {} , sketch : {:?}", row, sketch);

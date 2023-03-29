@@ -2,7 +2,7 @@
 //! 
 //! The main arguments are 
 //!  - --csv filename
-//!  - --symetric true or false  specifies if the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
+//!  - --symetric  if present specifies the graph is symetric. In this case the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
 //!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
 //!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric.
 //!     It is also possible to declare as symetric an asymetric unweighted graph. It is then symetrised when reading the file.
@@ -27,14 +27,14 @@
 //! 
 //! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 100 and 10 iterations
 //! in the range approximations:  
-//! embed --csv "p2p-Gnutella09.txt" --symetric "true" embedding hope  --approx "ADA" rank --targetrank 100 --nbiter 10 
+//! embed --csv "p2p-Gnutella09.txt" --symetric "true"  embedding hope  --approx "ADA" rank --targetrank 100 --nbiter 10 --output outputname 
 //! 
 //! with precision target:  
-//! embed --csv "p2p-Gnutella08.txt" --symetric "true" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3
+//! embed --csv "p2p-Gnutella08.txt" --symetric "true" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3 --output outputname
 //! 
 //! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 :
 //! 
-//! embed --csv "p2p-Gnutella08.txt"  --symetric "true" embedding sketching --decay 0.1  --dim 500 --nbiter 3 
+//! embed --csv "p2p-Gnutella08.txt"  --symetric "true" embedding sketching --decay 0.1  --dim 500 --nbiter 3 --output outputname
 //! 
 //! 
 //! 2. **Validation mode with estimation of AUC on link prediction task**.
@@ -50,12 +50,12 @@
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --npass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3
 //! 
 //!
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --npass 10 --skip 0.1 hope --approx ADA precision --epsil 0.2 --maxrank 200  --blockiter 3
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope --approx ADA precision --epsil 0.2 --maxrank 200  --blockiter 3
 //!
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --npass 10 --skip 0.1 hope --approx ADA rank --targetrank 100  --nbiter 10
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope --approx ADA rank --targetrank 100  --nbiter 10
 //! 
 //!     embed --csv wiki-Vote.txt --symetric false validation --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
 //! 
@@ -70,7 +70,7 @@
 use log::{log_enabled};
 
 use anyhow::{anyhow};
-use clap::{Arg, ArgMatches, Command, arg};
+use clap::{Arg, ArgMatches, Command, ArgAction, arg};
 
 use graphembed::prelude::*;
 use sprs::{TriMatI};
@@ -85,59 +85,20 @@ const _DATADIR : &str = &"/home/jpboth/Data/Graphs";
 fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
     log::debug!("in parse_sketching");
     // check for potential symetric argument 
-    let symetric : bool = match matches.value_of("symetric") {
-        Some(str) => {
-            log::debug!("got symetric arg in sketching");
-            let res = str.parse::<bool>();
-            if res.is_err() {
-                log::error!("error decoding symetric argument for sketching");
-                return Err(anyhow!("error decoding symetric argument for sketching"));
-            }
-            else {
-                res.unwrap()
-            }
-        },
-        _   => { 
-            log::debug!("setting symetric default mode in sketching");
-            true
-        },
-    }; // end match 
-
-    // get embedding dimension
-    let dimension = match matches.value_of("dim") {
-        Some(str) => {
-            let res = str.parse::<usize>();
-            if res.is_ok() {
-                res.unwrap()
-            }
-            else {
-                return Err(anyhow!("error parsing dim"));
-            }
-        },
-        _   => { return Err(anyhow!("error parsing dim")); },
-    }; // end match
-
-    // get decay
-    let decay = match matches.value_of("decay") {
-        Some(str) => {
-            str.parse::<f64>().unwrap()
-        },
-        _   => { return Err(anyhow!("error parsing decay")); },
-    }; // end match 
-
-    // get nbiter
-    let nb_iter = match matches.value_of("nbiter") {
-        Some(str) => {
-            let res = str.parse::<usize>();
-            if res.is_ok() {
-                res.unwrap()
-            }
-            else {
-                return Err(anyhow!("error parsing decay"));
-            }
-        },
-        _   => { return Err(anyhow!("error parsing decay")); },
-    }; // end match nb_iter
+    let symetric_flag : bool = matches.contains_id("symetric");
+    let symetric : bool;
+    //
+    if symetric_flag {
+        symetric = *matches.get_one::<bool>("symetric").expect("expecting true or false");
+        log::info!("got symetric directive graph in sketching, symetric : {}", symetric);
+    }
+    else {
+        log::info!("using default : expecting symetric graph in sketching"); 
+        symetric = true;       
+    }
+    let dimension = *matches.get_one::<usize>("dimension").expect("dim value required");
+    let decay =  *matches.get_one::<f64>("decay").expect("decay float value required");
+    let nb_iter = *matches.get_one::<usize>("nbiter").expect("nb_iter value required");
     //
     let sketch_params = NodeSketchParams{sketch_size: dimension, decay, nb_iter, symetric, parallel : true};
     return Ok(sketch_params);
@@ -150,102 +111,26 @@ fn parse_sketching(matches : &ArgMatches) -> Result<NodeSketchParams, anyhow::Er
 fn parse_hope_args(matches : &ArgMatches)  -> Result<HopeParams, anyhow::Error> {
     log::debug!("in parse_hope");
     // first get mode Katz or Rooted Page Rank
-    let mut epsil : f64 = 0.;
-    let mut maxrank : usize = 0;
-    let mut blockiter = 0;
-    let mut decay : Option<f64> = None;
-    // get approximation mode
-    let hope_mode = match matches.value_of("proximity") {
-        Some("KATZ") => {  HopeMode::KATZ
-        },
-        Some("RPR")  => {  HopeMode::RPR
-        },
-        Some("ADA")  => {  HopeMode::ADA},
-        _            => {
-                            log::error!("did not get proximity used : ADA,KATZ or RPR");
-                            std::process::exit(1);
-        },
-    };
-
-    if let Some(str)  = matches.value_of("decay")  { 
-        let res = str.parse::<f64>();
-        match res {
-            Ok(val) => { decay = Some(val)},
-            _            => {   
-                                return Err(anyhow!("could not parse Hope decay"));
-                            },
-        };  // end of decay match 
-    }
-    else { // check we have decay in non ADA mode
-        match hope_mode {
-            HopeMode::ADA => { decay = Some(1.);},
-            _ => {
-                if decay.is_none() {
-                    log::error!("Hope mode requires --decay for non ADA proximity");
-                    println!("Hope mode requires --decay for non ADA proximity");
-                    return Err(anyhow!("Hope mode requires --decay for non ADA proximity"));
-                };
-            },
-        };
-    }
-    
-    
+    let hope_mode = HopeMode::ADA;  // only ADA for now
+    let decay = 1.;
     match matches.subcommand() {
 
         Some(("precision", sub_m)) =>  {
-            if let Some(str) = sub_m.value_of("epsil") {
-                let res = str.parse::<f64>();
-                match res {
-                    Ok(val) => { epsil = val;},
-                    _            => { return Err(anyhow!("could not parse Hope epsil"));},
-                }         
-            } // end of epsil
- 
-
-            // get maxrank
-            if let Some(str) = sub_m.value_of("maxrank") {
-                let res = str.parse::<usize>();
-                match res {
-                    Ok(val) => { maxrank = val;},
-                    _              => { return Err(anyhow!("could not parse Hope maxrank")); },
-                }
-            }
-
-            // get blockiter
-            if let Some(str) = sub_m.value_of("blockiter") {
-                let res = str.parse::<usize>();
-                match res {
-                    Ok(val) => { blockiter = val;},
-                    _              => { return Err(anyhow!("could not parse Hope blockiter"));},
-                }        
-            }
+            let epsil = *sub_m.get_one::<f64>("epsil").expect("could not parse Hope epsil");
+            let maxrank = *sub_m.get_one::<usize>("maxrank").expect("could not parse Hope maxrank");
+            let blockiter = *sub_m.get_one::<usize>("blockiter").expect("could not parse Hope blockiter");
             //
             let range = RangeApproxMode::EPSIL(RangePrecision::new(epsil, blockiter, maxrank));
-            let params = HopeParams::new(hope_mode, range, decay.unwrap());
+            let params = HopeParams::new(hope_mode, range, decay);
             return Ok(params);
         },  // end decoding precision arg
 
-
         Some(("rank", sub_m)) => {
-            if let Some(str) = sub_m.value_of("targetrank") {
-                let res = str.parse::<usize>();
-                match res {
-                    Ok(val) => { maxrank = val;},
-                    _              => { return Err(anyhow!("could not parse Hope maxrank"));},
-                }
-            } // end of target rank
-
-            // get blockiter
-            if let Some(str) = sub_m.value_of("nbiter") {
-                let res = str.parse::<usize>();
-                match res {
-                    Ok(val) => { blockiter = val ; },
-                    _              => {  return Err(anyhow!("could not parse Hope blockiter")); }
-                }    
-            }   
+            let targetrank = *sub_m.get_one::<usize>("targetrank").expect("could not parse Hope target rank");
+            let blockiter = *sub_m.get_one::<usize>("nbiter").expect("could not parse Hope nbiter"); 
             //          
-            let range = RangeApproxMode::RANK(RangeRank::new(maxrank, blockiter));
-            let params = HopeParams::new(hope_mode, range, decay.unwrap());
+            let range = RangeApproxMode::RANK(RangeRank::new(targetrank, blockiter));
+            let params = HopeParams::new(hope_mode, range, decay);
             return Ok(params);
         }, // end of decoding rank arg
 
@@ -298,39 +183,18 @@ fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow:
     //
     log::debug!("in parse_validation_cmd");
     // for now only link prediction is implemented
-    let delete_proba : f64;
-    let nbpass : usize;
-
-    match matches.value_of("skip") {
-        Some(str) =>  { 
-                let res = str.parse::<f64>();
-                match res {
-                    Ok(val) => { delete_proba = val},
-                    _       => { return Err(anyhow!("could not parse skip parameter"));
-                                },
-                } 
-        } 
-        _      => { return Err(anyhow!("could not parse decay"));}
-    };  // end of skip match 
-
-    match matches.value_of("nbpass") {
-        Some(str) =>  { 
-                let res = str.parse::<usize>();
-                match res {
-                    Ok(val) => { nbpass = val},
-                    _       => { return Err(anyhow!("could not parse nbpass parameter"));
-                                },
-                } 
-        } 
-        _      => { return Err(anyhow!("could not parse decay"));}
-    };  // end of skip match 
+    let nbpass = *matches.get_one::<usize>("nbpass").expect("number of validation pass required");
+    let delete_proba = *matches.get_one::<f64>("skip").expect("could not parse skip parameter");
     // 
     let symetric = true; // default is symetric, we do not have here the global io parameter
     let validation_params = ValidationParams::new(delete_proba, nbpass, symetric);
     //
-    let embedding_params_res = parse_embedding_cmd(matches);
-    if embedding_params_res.is_ok() {
-        return Ok(ValidationCmd{validation_params, embedding_params : embedding_params_res.unwrap()});
+    let embedding_cmd_res = parse_embedding_cmd(matches);
+
+    if embedding_cmd_res.is_ok() {
+        // for validation we do not need ouput
+        let embedding_cmd = embedding_cmd_res.unwrap();
+        return Ok(ValidationCmd{validation_params, embedding_params : embedding_cmd.0});
     }
     else {
         log::info!("parse_embedding_cmd failed");
@@ -344,12 +208,26 @@ fn parse_validation_cmd(matches : &ArgMatches) ->  Result<ValidationCmd, anyhow:
 
 // parsing of embedding command
 #[doc(hidden)]
-fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow::Error> {
+fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<(EmbeddingParams,io::output::Output) , anyhow::Error> {
     log::debug!("in parse_embedding_cmd");
+    //
+    let bson_output_name = matches.get_one::<String>("output");
+    let output_name : Option<String>;
+
+    if bson_output_name.is_some() {
+        output_name = Some(bson_output_name.unwrap().clone());
+        log::info!("will ouput embedding in bson file :  {:?}", output_name);
+    }
+    else {
+        output_name = None;
+    }
+    //
+    let output_params = io::output::Output::new(graphembed::io::output::Format::BSON, true, &output_name);
+    //
     match matches.subcommand() {
         Some(("hope", sub_m))       => {
                 if let Ok(params) = parse_hope_args(sub_m) {
-                    return Ok(EmbeddingParams::from(params));
+                    return Ok((EmbeddingParams::from(params), output_params));
                 }
                 else { 
                     log::error!("parse_hope_args failed");
@@ -358,11 +236,11 @@ fn parse_embedding_cmd(matches : &ArgMatches) ->  Result<EmbeddingParams, anyhow
         },
         Some(("sketching" , sub_m)) => {
                 if let Ok(params) = parse_sketching(sub_m) {
-                    return Ok(EmbeddingParams::from(params));
+                    return Ok((EmbeddingParams::from(params), output_params));
                 }
                 else { 
-                    log::error!("parse_hope_args failed");
-                    return Err(anyhow!("parse_hope_args failed"));
+                    log::error!("parse_sketching failed");
+                    return Err(anyhow!("parse_sketching failed"));
                 }
         },
            _                                    => {
@@ -384,54 +262,111 @@ pub fn main() {
     //
     // first we define subcommands we will need, hope , sketching , validation
     // the hope command
+    //
     let hope_cmd = Command::new("hope")
     .subcommand_required(false)
     .arg_required_else_help(true)
-    .arg(Arg::new("proximity")
-        .long("approx")
-        .required(true)
-        .takes_value(true)
-        .help("specify ADA or RPR"))
-    .arg(Arg::new("decay")
-        .long("decay").takes_value(true).help("RPR option needs a decay"))
     .subcommand(Command::new("precision")
         .arg_required_else_help(true)
-        .args(&[
-            arg!(--maxrank <maxrank> "maximum rank expected"),
-            arg!(--blockiter <blockiter> "integer between 2 and 5"),
-            arg!(-e --epsil <epsil> "precision between 0. and 1."),
-        ]))
+        .arg(Arg::new("epsil")
+            .long("epsil")
+            .help("precision between 0. and 1.")
+            .required(true)
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(f64))
+        )
+        .arg(Arg::new("maxrank")
+            .long("maxrank")
+            .help("maximum rank expected")
+            .required(true)
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(usize))
+        )            
+        .arg(Arg::new("blockiter")
+            .long("blockiter")
+            .help("blockiter")
+            .required(true)
+            .help("integer between 2 and 5")
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(usize))  
+        )
+    )
     .subcommand(Command::new("rank")
         .arg_required_else_help(true)
-        .args(&[
-            arg!(--targetrank <targetrank> "expected rank"),
-            arg!(--nbiter <nbiter> "integer between 2 and 5"),
-        ])          
+        .arg(Arg::new("targetrank")
+            .help("rank expected")
+            .long("targetrank")
+            .required(true)
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(usize))
+        )            
+        .arg(Arg::new("nbiter")
+            .long("nbiter")
+            .help("number of iterations")
+            .required(true)
+            .help("integer between 2 and 5")
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(usize))  
+        ) 
     );
-
     // the sketch embedding command
     let sketch_cmd = Command::new("sketching")
-        .arg(Arg::new("symetric").required(false).takes_value(true).long("symetric").help("true or false"))
-        .arg_required_else_help(true)
-        .args(&[
-            arg!(-d --dim <dim> "the embedding dimension"),
-            arg!(--decay <decay> "decay coefficient"),
-            arg!(--nbiter <nbiter> "number of loops around a node"),
-        ]
+        .arg(Arg::new("symetric")
+            .required(false)
+            .long("symetric")
+            .value_parser(clap::value_parser!(bool))
+            .action(clap::ArgAction::SetTrue))
+        .arg(Arg::new("dimension")
+            .required(true)
+            .short('d')
+            .long("dim")
+            .help("the embedding dimension")
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(usize))
+            )
+        .arg(Arg::new("decay")
+            .required(true)
+            .long("decay")
+            .help("decay coefficient")
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(f64))        
+        )
+        .arg(Arg::new("nbiter")
+            .required(true)
+            .long("nbiter")
+            .help("number of loops around a node ")
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(usize))    
     );
 
     // validation must have one embedding subcommand
     let validation_cmd= Command::new("validation")
         .subcommand_required(true)
-        .args(&[
-            arg!(--nbpass <nbpass> "number of passes of validation"),
-            arg!(--skip <fraction> "fraction of edges to skip in training set"),
-            ])
+        .arg(Arg::new("nbpass")
+            .required(true)
+            .long("nbpass")
+            .help("number  of passes of validation")
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(usize))
+        )
+        .arg(Arg::new("skip")
+            .required(true)
+            .long("skip")
+            .help("fraction of edges to skip in training set")
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(f64))        
+        )                   
         .subcommand(hope_cmd.clone())
         .subcommand(sketch_cmd.clone());
 
     // the embedding command does just the embedding
     let embedding_command = Command::new("embedding")
+        .arg(Arg::new("output")
+            .long("output")
+            .short('o')
+            .value_parser(clap::value_parser!(String))
+            .action(ArgAction::Set)  
+            .help("-o fname for a dump in fname.bson"))
         .subcommand_required(true)
         .subcommand(hope_cmd.clone())
         .subcommand(sketch_cmd.clone());
@@ -440,21 +375,21 @@ pub fn main() {
     // ===================
     //
     let matches = Command::new("embed")
-        .subcommand_required(true)
         .arg_required_else_help(true)
         .arg(Arg::new("csvfile")
-            .long("csv")    
-            .takes_value(true)
+            .long("csv")  
             .required(true)
+            .value_parser(clap::value_parser!(String))
+            .action(ArgAction::Set)  
             .help("expecting a csv file"))
         .arg(Arg::new("symetry")
-            .short('s').long("symetric").required(true).default_value("yes")
-            .help(" -s for a symetric embedding, default is symetric"))
-        .arg(Arg::new("output")
-            .long("output")
-            .short('o')
-            .takes_value(true)
-            .help("-o fname for a dump in fname.bson"))
+            .short('s')
+            .long("symetric")
+            .required(true)
+            .value_parser(clap::value_parser!(bool))
+            .default_value("true")
+            .help(" -s "))
+        .subcommand_required(true)
         .subcommand(embedding_command)
         .subcommand(validation_cmd)
     .get_matches();
@@ -463,54 +398,14 @@ pub fn main() {
     // decode args
     // ==========
 
-    let mut fname = String::from("");
-    if matches.is_present("csvfile") {
-        let csv_file = matches.value_of("csvfile").ok_or("").unwrap().parse::<String>().unwrap();
-        if csv_file == "" {
-            println!("parsing of request_dir failed");
-            std::process::exit(1);
-        }
-        else {
-            log::info!("input file : {:?}", csv_file.clone());
-            fname = csv_file.clone();
-        }
-    }
-    
-    let symetric_graph =  match matches.value_of("symetry") {
-        Some(str) => {
-            let res = str.parse::<bool>();
-            if res.is_ok() {
-                res.unwrap()
-            }
-            else {
-                println!("error parsing symetric , must be \"true\" or \"false\" ");
-                std::process::exit(1);
-            }
-        },
-        _   => {  // default is true
-            true 
-        },
-    }; // end match symetry
-
-    let mut output_params : io::output::Output = io::output::Output::default();
-    if matches.is_present("output") {
-        log::debug!("got output directive");
-        let bson_name = matches.value_of("output").ok_or("").unwrap().parse::<String>().unwrap();
-        if bson_name == "" {
-            println!("parsing of bson output name failed");
-            log::error!("parsing of bson output name failed");
-            std::process::exit(1);
-        }
-        else {
-            log::info!("output file : {:?}", bson_name.clone());
-            let bson_output_name = Some(bson_name);
-            output_params = io::output::Output::new(graphembed::io::output::Format::BSON, true, &bson_output_name);
-        }
-    } //end match output bson
+    let fname = matches.get_one::<String>("csvfile").expect("need a csv file");
+ 
+    let symetric_graph =  *matches.get_one::<bool>("symetry").expect("true or false");
 
     // now we have datafile and symetry we can parse subcommands and parameters
     let mut embedding_parameters : Option<EmbeddingParams> = None;
     let mut validation_params : Option<ValidationParams> = None;
+    let mut output_params : Option<io::output::Output>= None;
     //
     match matches.subcommand() {
         Some(("validation", sub_m)) => {
@@ -529,7 +424,10 @@ pub fn main() {
             log::debug!("got embedding command");
             let res = parse_embedding_cmd(sub_m);
             match res {
-                Ok(params) => { embedding_parameters = Some(params); },
+                Ok((embedding_params, embed_ouput_params)) => { 
+                                                                                    embedding_parameters = Some(embedding_params); 
+                                                                                    output_params = Some(embed_ouput_params);
+                                                                                },
                 _                     => { 
                     log::error!("exiting with error {}", res.err().unwrap());
                     std::process::exit(1);
@@ -558,12 +456,21 @@ pub fn main() {
     }  // end if validation
 
     // examine embedding_parameters to see if we do hope or sketching
-    
+    // embedding directive without validation and no dump is most probably an error
+    if embedding_parameters.is_some() && validation_params.is_none() {
+        if output_params.is_none() {
+            log::error!("embedding asked without validation and no output given to dump the embedding ..., are you sure");
+            std::process::exit(1);
+        }
+    }
     log::info!(" parsing of commands succeeded"); 
     log::debug!("\n embedding paramertes : {:?}", embedding_parameters.as_ref());
     //
-//    let path = std::path::Path::new(_DATADIR).join(fname.clone());
     let path = std::path::Path::new(&fname);
+    if !path.exists() {
+        log::error!("file do not exist : {:?}", fname);
+        std::process::exit(1);
+    }
     if log_enabled!(log::Level::Info) {
         log::info!("\n\n loading file {:?}, symetric = {}", path, symetric_graph);
     }
@@ -598,9 +505,10 @@ pub fn main() {
                 };
                 let embed_res = embedding.unwrap();
                 // should dump somewhere
-                let res = bson_dump(&embed_res, &output_params);
+                let output = output_params.as_ref().unwrap();
+                let res = bson_dump(&embed_res, output);
                 if res.is_err() {
-                    log::error!("bson dump in {} failed", output_params.get_output_name());
+                    log::error!("bson dump in {} failed", output.get_output_name());
                 }
             }
             else  {
@@ -647,10 +555,11 @@ pub fn main() {
                             log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
                             std::process::exit(1);
                         };
-                        let embed_res = embedding.unwrap();             
-                        let res = bson_dump(&embed_res, &output_params);
+                        let embed_res = embedding.unwrap();  
+                        let output = output_params.as_ref().unwrap();
+                        let res = bson_dump(&embed_res, output);
                         if res.is_err() {
-                            log::error!("bson dump in {} failed", output_params.get_output_name());
+                            log::error!("bson dump in {} failed", output.get_output_name());
                         }   
                     },
                     false => {  
@@ -662,9 +571,10 @@ pub fn main() {
                         };
                         let embed_res = embedding.unwrap();
                         // should dump somewhere
-                        let res = bson_dump(&embed_res, &output_params);
+                        let output = output_params.as_ref().unwrap();
+                        let res = bson_dump(&embed_res, output);
                         if res.is_err() {
-                            log::error!("bson dump in {} failed", output_params.get_output_name());
+                            log::error!("bson dump in {} failed", output.get_output_name());
                         }    
                     },  // end asymetric sketching
                 };
