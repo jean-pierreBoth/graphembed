@@ -70,7 +70,7 @@
 use log::{log_enabled};
 
 use anyhow::{anyhow};
-use clap::{Arg, ArgMatches, Command, ArgAction, arg};
+use clap::{Arg, ArgMatches, Command, ArgAction};
 
 use graphembed::prelude::*;
 use sprs::{TriMatI};

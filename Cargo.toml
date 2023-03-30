@@ -1,6 +1,6 @@
 [package]
 name = "graphembed"
-version = "0.0.6"
+version = "0.0.7"
 authors = ["jeanpierre.both@gmail.com"]
 repository = "https://github.com/jean-pierreBoth/graphembed"
 keywords = ["graph", "embedding", "hash"]
@@ -34,7 +34,7 @@ num-traits = {version = "0.2"}
 
 # linear algebra stuff
 ndarray = {version = "0.15", features=["rayon", "serde"]}
-ndarray-linalg = {version = "0.15", default-features = false}
+ndarray-linalg = {version = "0.16", default-features = false}
 lapacke = {version = "0.5"}
 openblas-src = {version = "0.10", optional = true, default=false}
 lapack-src = {version = "0.8", optional = true}
@@ -53,12 +53,12 @@ rayon = {version = "1.5"}
 num_cpus = {version = "1.13"}
 
 cpu-time = {version = "1.0"}
-clap = { version = "3.1", features = ["derive"] }
+clap = {version = "4.2"}
 
 ##
 indexmap = {version = "1.9"}
 ahash = {version = "0.7"}
-probminhash = {version = "0.1.6"}
+probminhash = {version = "0.1"}
 #probminhash = {path = "../probminhash"}
 
 ## rand utils
@@ -73,10 +73,11 @@ hdrhistogram =  {version = "7.5"}
 float-ord = {version = "0.3"}
 
 #hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
-hnsw_rs = {version = "0.1.17", features = ["simdeez_f"]}
+hnsw_rs = {version = "0.1.19", features = ["simdeez_f"]}
 
-#annembed = {version = "0.0.8", default = false}
-annembed ={ path = "../annembed", default = false}
+annembed = {version = "0.0.10", default = false}
+#annembed = {git= "https://github.com/jean-pierreBoth/annembed"}
+#annembed ={ path = "../annembed", default = false}
 
 #  
 lazy_static = { version = "1.4"}

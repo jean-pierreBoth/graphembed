@@ -57,7 +57,8 @@ The svd is approximated by randomization as described in Halko-Tropp 2011 as imp
 *Large Scale decomposition via convex programming  2017*  
     M.Danisch T.H Hubert Chan and M.Sozio
 
-The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation* and the comments on the embedding of the *Orkut* graph where we can use the community data provided with the graph.
+The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation* and the comments on the embedding of the *Orkut* graph where we can use the community data provided with the graph to analyze the behaviour of embedded edge lengths.  
+In particular it is shown that embedding of edges internal to a community are consistently smaller than embedded edges crossing a block frontier, see [orkut.md](./orkut.md).
 
 ## Some data sets
 

@@ -27,7 +27,7 @@ impl Output {
             },
             None => String::from("embedding.bson"),
         };
-        Output{fmt, indexation, output_name : String::from(output_name)} 
+        Output{fmt, indexation, output_name : output_name} 
     }
     /// get ouput format
     pub fn get_fmt(&self) -> Format { self.fmt}
