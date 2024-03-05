@@ -583,6 +583,8 @@ where
         deleted_edges.len()
     );
     let degrees = csmat.degrees();
+    let mean_degree = degrees.iter().sum::<usize>() as f64 / nb_nodes as f64;
+    log::info!("mean degree : {:.3e}", mean_degree);
     // loop on sampled nodes
     let mut nb_sampled = 0;
     for i in 0..nb_nodes {
@@ -590,8 +592,9 @@ where
             continue;
         };
         nb_sampled += 1;
+        let mut has_deleted = false;
         // how good is the embedding of node i
-        let nb_check = nb_edges_check.min(degrees[i]);
+        let denominator = nb_edges_check.min(degrees[i]);
         // sort edges by decreasing length
         let mut neighbours_i: Vec<(usize, f64)> = (0..nb_nodes)
             .into_par_iter()
@@ -608,31 +611,45 @@ where
         let mut nb_found = 0;
         let mut k = 0;
         for j in 1..neighbours_i.len() {
+            // we bypass existing edges
+            if trimat_set.contains(&(i, j)) {
+                continue;
+            }
+            // we know we have a potential edge
+            k = k + 1;
             if !deleted_edges.contains(&(i, j)) {
                 continue;
             }
-            // (i,j) is a deleted edge (and so (j,i) recall that!)
+            // we know we have a delete edge
+            has_deleted = true;
+            // (i,j) is a deleted edge (and so (j,i) recall that!) and we are in the first nb_check non trained on edges
             nb_found += 1;
-            k = k + 1;
-            if k >= nb_check {
+            if k >= nb_edges_check {
                 break;
             }
         } // end of for on deleted edges.
-        log::debug!("found edge deleted for node : {}", nb_found);
-        let precision = nb_found as f64 / nb_check as f64;
-        histogram.insert(precision);
+        log::trace!("found edge deleted for node : {}", nb_found);
+        let precision = nb_found as f64 / denominator as f64;
+        if has_deleted {
+            histogram.insert(precision);
+        }
     } // end loop on nodes
       //
-    log::debug!("nb nodes examined : {:?}", nb_sampled);
-    //
     log::info!(
-        "estimate_vcmpr iteration quantiles at  0.1 : {:.3e}, 0.25 : {:.3e} , 0.5 : {:.3e},  0.75 : {:.3e}, 0.9 : {:.3e} ",
-        histogram.query(0.1).unwrap().1,
-        histogram.query(0.25).unwrap().1,
-        histogram.query(0.5).unwrap().1,
-        histogram.query(0.75).unwrap().1,
-        histogram.query(0.9).unwrap().1,
+        "nb nodes examined : {:?}, nb nodes with a deleted edge : {}",
+        nb_sampled,
+        histogram.count()
     );
+    //
+    for i in 0..20 {
+        let q = i as f64 / 20.;
+        log::info!(
+            "quantiles at {:.3e} , vcmpr : {:.3e}",
+            q,
+            histogram.query(q).unwrap().1
+        );
+    }
+    log::info!("average precision : {:.3e}", histogram.cma().unwrap());
     //
     return Ok(histogram);
 } // end of estimate_vcmpr

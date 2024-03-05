@@ -31,7 +31,7 @@ a real distance on the embedding space for the symetric embedding.
 
 An extension of the paper is also implemented to get asymetric embedding for directed graph. The similarity is also based on the hash of sets (nodes going to or from) a given node but then the dissimilarity is no more a distance (no symetry and some discrepancy with the triangular inequality).
 
-**The orkut graph with 3 millions nodes and 100 millions of edge is embedded in less than 10' with a 8 core laptop with this algorithm**.
+**The orkut graph with 3 millions nodes and 100 millions of edge is embedded in less than 10' with a 8 core laptop with this algorithm with an AUC of 0.955**.
 
 - **gkernel**
 
@@ -146,3 +146,12 @@ The general syntax is :
     It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
 
 - Use the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.
+
+## License
+
+Licensed under either of
+
+* Apache License, Version 2.0, [LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>
+* MIT license [LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>
+
+at your option.

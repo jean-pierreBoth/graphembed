@@ -707,6 +707,15 @@ pub fn main() {
                         symetric_graph,
                         &f,
                     );
+                    // we compare with VCMPR
+                    let _quant = link::estimate_vcmpr(
+                        &trimat.to_csr(),
+                        validation_params.get_nbpass(),
+                        20,
+                        validation_params.get_delete_fraction(),
+                        symetric_graph,
+                        &f,
+                    );
                 }
                 // TODO precision estimation too costly must subsample
                 //    estimate_precision(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);

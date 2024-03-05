@@ -29,6 +29,7 @@ use hnsw_rs::prelude::*;
 /// Directory containing the 2 data files
 /// TODO use clap in main
 const ORKUT_DATA_DIR: &'static str = "/home/jpboth/Data/Graphs/Orkut/";
+const DUMP_DIR: &'static str = "/home/jpboth/graphembed/Runs/";
 
 /// Read graph (given as csv) and ground truth communities
 fn read_orkut_graph(dirpath: &Path) -> Result<Graph<u32, f64, Undirected, u32>, anyhow::Error> {
@@ -112,9 +113,11 @@ pub fn main() {
     //
     // check if we have a stored decomposition
     //
-    let dump_path = Path::new("/home/jpboth/Rust/graphembed/orkut-decomposition.json");
+    let dump_path = Path::new(&DUMP_DIR);
     //
-    let fileres = OpenOptions::new().read(true).open(&dump_path);
+    let fileres = OpenOptions::new()
+        .read(true)
+        .open(&dump_path.join("orkut-decomposition.json"));
     if fileres.is_err() {
         log::error!(
             "reload could not open file {:?}, will do decomposition",
@@ -164,8 +167,9 @@ pub fn main() {
     // now we embed the graph
     //
     let orkut_embedding: Embedding<usize, usize, Embedded<usize>>;
-    let orkut_bson_path = Path::new("/home/jpboth/Rust/graphembed/orkut_embedded.bson");
-    let fileres = OpenOptions::new().read(true).open(&orkut_bson_path);
+    let fileres = OpenOptions::new()
+        .read(true)
+        .open(&dump_path.join("orkut_embedded.bson"));
     if fileres.is_err() {
         log::info!("going to embed orkut graph");
         let path = Path::new(ORKUT_DATA_DIR);
@@ -206,15 +210,15 @@ pub fn main() {
         }
         log::info!("orkut embedding done");
     } else {
+        let reload_file = dump_path.join("orkut_embedded.bson");
         log::info!(
             "found bson file, reloading embedding, trying to reload from {:?}",
-            &orkut_bson_path
+            &reload_file.to_str()
         );
-        let reloaded = embeddedbson::bson_load::<usize, usize, Embedded<usize>>(
-            orkut_bson_path.to_str().unwrap(),
-        );
+        let reloaded =
+            embeddedbson::bson_load::<usize, usize, Embedded<usize>>(reload_file.to_str().unwrap());
         if reloaded.is_err() {
-            log::error!("reloading of bson from {:?} failed", &orkut_bson_path);
+            log::error!("reloading of bson from {:?} failed", &reload_file.to_str());
             log::error!("error is : {:?}", reloaded.err());
             std::panic!("bson reloading failed");
         }

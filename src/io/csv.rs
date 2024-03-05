@@ -490,7 +490,7 @@ where
 
 /// Loads a directed/undirected  weighted/unweighted graph in csv format into a TriMatI representation.  
 ///   
-/// - directed must be set to true if graph is directed.
+/// - directed must be set to true if graph is directed. Otherwise trimat is constructed with 2 edges (i->j and j->i)
 /// - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
 ///
 /// If there are 3 fields by record, the third is assumed to be a weight convertible type F (F morally is usize, f32 or f64)

@@ -1,6 +1,6 @@
 [package]
 name = "graphembed"
-version = "0.0.7"
+version = "0.0.8"
 authors = ["jeanpierre.both@gmail.com"]
 repository = "https://github.com/jean-pierreBoth/graphembed"
 keywords = ["graph", "embedding", "hash"]
@@ -8,7 +8,6 @@ license = "MIT OR Apache-2.0"
 description = "graph embedding"
 documentation = "https://docs.rs/graphembed"
 edition = "2021"
-
 
 
 [lib]
@@ -24,74 +23,74 @@ path = "src/bin/embed.rs"
 # default is version spec is ^ meaning can update up to max non null version number
 # cargo doc --no-deps avoid dependencies doc generation
 #
-petgraph = {version = "0.6"}
+petgraph = { version = "0.6" }
 
-serde= {version = "1.0", features = ["derive"] }
-serde_json= {version = "1.0"}
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
 
-num = {version = "0.4"}
-num-traits = {version = "0.2"}
+num = { version = "0.4" }
+num-traits = { version = "0.2" }
 
 # linear algebra stuff
-ndarray = {version = "0.15", features=["rayon", "serde"]}
-ndarray-linalg = {version = "0.16", default-features = false}
-lapacke = {version = "0.5"}
-openblas-src = {version = "0.10", optional = true, default=false}
-lapack-src = {version = "0.8", optional = true}
-sprs = {version = "0.11"}
+ndarray = { version = "0.15", features = ["rayon", "serde"] }
+ndarray-linalg = { version = "0.16", default-features = false }
+lapacke = { version = "0.5" }
+openblas-src = { version = "0.10", optional = true, default = false }
+lapack-src = { version = "0.8", optional = true }
+sprs = { version = "0.11" }
 
 # io
 
-csv = {version = "1.1"}
-bson = {version = "2.6"}
+csv = { version = "1.3" }
+bson = { version = "2.9" }
 
 
 # for //
-atomic = {version = "0.5.1"}
-parking_lot = {version="0.12"}
-rayon = {version = "1.5"}
-num_cpus = {version = "1.13"}
+atomic = { version = "0.6" }
+parking_lot = { version = "0.12" }
+rayon = { version = "1.9" }
+num_cpus = { version = "1.13" }
 
-cpu-time = {version = "1.0"}
-clap = {version = "4.2"}
+cpu-time = { version = "1.0" }
+clap = { version = "4.5" }
 
 ##
-indexmap = {version = "1.9"}
-ahash = {version = "0.7"}
-probminhash = {version = "0.1"}
+indexmap = { version = "1.9" }
+ahash = { version = "0.7" }
+probminhash = { version = "0.1" }
 #probminhash = {path = "../probminhash"}
 
 ## rand utils
-rand = {version = "0.8"}
-rand_xoshiro = {version = "0.6"}
-rand_distr = {version = "0.4"}
+rand = { version = "0.8" }
+rand_xoshiro = { version = "0.6" }
+rand_distr = { version = "0.4" }
 
 ## sorting, indexing
-ordered-float = {version = "3.4"}
-indxvec = {version = "1.4"}
-hdrhistogram =  {version = "7.5"}
-float-ord = {version = "0.3"}
+ordered-float = { version = "3.4" }
+indxvec = { version = "1.4" }
+hdrhistogram = { version = "7.5" }
+quantiles = { version = "0.7" }
 
 #hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
-hnsw_rs = {version = "0.1.19", features = ["simdeez_f"]}
+hnsw_rs = { version = "0.2", features = ["simdeez_f"] }
 
-annembed = {version = "0.0.10", default = false}
+annembed = { version = "0.1", default = false }
 #annembed = {git= "https://github.com/jean-pierreBoth/annembed"}
 #annembed ={ path = "../annembed", default = false}
 
 #  
-lazy_static = { version = "1.4"}
+lazy_static = { version = "1.4" }
 
 # decreasing order of log for debug build : (max_level_)trace debug info warn error off
 # decreasing order of log for release build (release_max_level_)  .. idem
 #log = { version = "0.4", features = ["max_level_trace", "release_max_level_debug"] }
-log = { version = "0.4"}
-env_logger = { version = "0.10"}
+log = { version = "0.4" }
+env_logger = { version = "0.10" }
 
 # hack to avoid interaction bug with intel-mkl
 anyhow = { version = "1.0.58" }
 # for documentation
-katexit = {version = "0.1"}
+katexit = { version = "0.1" }
 
 
 [features]
@@ -99,10 +98,22 @@ katexit = {version = "0.1"}
 # can be change to 
 #
 #default = ["annembed/intel-mkl-static", "ndarray-linalg/intel-mkl-static"]
-default = []
+default = ["openblas-system"]
 
-intel-mkl-static = ["ndarray/blas", "ndarray-linalg/intel-mkl-static", "annembed/intel-mkl-static"]
+intel-mkl-static = [
+    "ndarray/blas",
+    "ndarray-linalg/intel-mkl-static",
+    "annembed/intel-mkl-static",
+]
 
-openblas-static = ["ndarray/blas", "ndarray-linalg/openblas-static", "annembed/openblas-static"]
+openblas-static = [
+    "ndarray/blas",
+    "ndarray-linalg/openblas-static",
+    "annembed/openblas-static",
+]
 
-openblas-system = ["ndarray/blas", "ndarray-linalg/openblas-system", "annembed/openblas-system"]
+openblas-system = [
+    "ndarray/blas",
+    "ndarray-linalg/openblas-system",
+    "annembed/openblas-system",
+]
