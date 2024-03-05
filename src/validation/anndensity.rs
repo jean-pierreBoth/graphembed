@@ -303,14 +303,15 @@ impl BlockCheck {
 /// Builds the Hnsw structure from the embedded data
 /// In the Hnsw structure original nodes of the graph are identified by their NodeIndex or rank in embedded structure.  
 /// (The N type of the graph structure is not used anymore at this step)
-pub fn embeddedtohnsw<F, D>(
-    embedded: &dyn EmbeddedT<F>,
+pub fn embeddedtohnsw<'a, 'b, F, D>(
+    embedded: &'a dyn EmbeddedT<F>,
     max_nb_connection: usize,
     ef_c: usize,
-) -> Result<Hnsw<F, DistPtr<F, f64>>, anyhow::Error>
+) -> Result<Hnsw<'b, F, DistPtr<F, f64>>, anyhow::Error>
 where
     F: Copy + Clone + Send + Sync,
     D: Distance<F>,
+    'b: 'a,
 {
     //
     let distance_e = embedded.get_distance();

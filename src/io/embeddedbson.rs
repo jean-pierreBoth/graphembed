@@ -1,5 +1,5 @@
 //! module to do bson io for embedding results
-//! 
+//!
 //!  Data are formatted in a bson Document, each value has a key.
 //!
 //!  The encoding is done in 3 parts:
@@ -11,7 +11,7 @@
 //! - symetric or asymetric flag
 //! - dimension of vectors
 //! - number of vectors
-//! 
+//!
 //! 2. The embedded arrays, one or two depending on asymetry
 //!     - loop on number of vectors
 //!     each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN (1)
@@ -20,7 +20,7 @@
 //!     and there is another loop giving ingoing or target) representation of node with key made by IN encoding
 //!     so first vector of the second group of embedded vectors corresponding to nodes as target has key
 //!     "0,1" the second vector has key "1,1"
-//! 
+//!
 //! 3. The nodeindexation can also be encoded in a subdocument associated to key *"indexation"*.
 //!    The dump of nodeindexation is not mandatory as it can be retrieved by loading the original graph again.  
 //!    The presence of nodeindexation can be tested by checking if the main document has ky *"indexation"*.  
@@ -30,64 +30,70 @@
 // Note : a Bson document must not be larger than 16Mb!
 // So we need to have many Documents in the file dumped
 
+use anyhow::anyhow;
 
-use anyhow::{anyhow};
+use std::fs::OpenOptions;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
 
-use std::fs::{OpenOptions};
-use std::path::{Path};
-use std::io::{BufWriter, BufReader};
-
-// to convert NodeId to a string, so NodeId must satisfy NodeId : ToString 
+// to convert NodeId to a string, so NodeId must satisfy NodeId : ToString
 // this  requires NodeId :  Display + ?Sized to get auto implementation
-use std::string::ToString;
 use std::str::FromStr;
+use std::string::ToString;
 
 // for serilaizatio, desreialization
-use bson::{bson, DeserializerOptions,  Bson, Document};
-use serde::{Serialize, Deserialize};
+use bson::{bson, Bson, DeserializerOptions, Document};
+use serde::{Deserialize, Serialize};
 
-
-use num::cast::FromPrimitive;
-use ndarray::{Array2, ArrayView1};
 use indexmap::IndexSet;
+use ndarray::{Array2, ArrayView1};
+use num::cast::FromPrimitive;
 
+use crate::embed::tools::edge::{IN, OUT};
 use crate::embedding::*;
-use crate::embed::tools::edge::{IN,OUT};
 use crate::io;
 
-
 /// This structure defines the header of the bson document
-#[derive(Debug,Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct EmbeddedBsonHeader {
     /// version of dump format
-    pub version : i64,
+    pub version: i64,
     /// true if embedding is symetric
-    pub symetric : bool,
+    pub symetric: bool,
     /// encodes type of vectors used in the embedding. Must be f32 f64 or usze
-    pub type_name : String,
+    pub type_name: String,
     /// dimension of the embedding (length of vectors)
-    pub dimension : i64,
+    pub dimension: i64,
     /// number of vectors.
-    pub nbdata : i64,
+    pub nbdata: i64,
 } // end of EmbeddedBsonHeader
 
-
 impl EmbeddedBsonHeader {
-    pub fn new(symetric : bool , type_name : String, dimension : i64, nbdata : i64) -> Self {
-        EmbeddedBsonHeader{version : 1, symetric, type_name, dimension, nbdata}
+    pub fn new(symetric: bool, type_name: String, dimension: i64, nbdata: i64) -> Self {
+        EmbeddedBsonHeader {
+            version: 1,
+            symetric,
+            type_name,
+            dimension,
+            nbdata,
+        }
     }
 } // end of impl EmbeddedBsonHeader
-
 
 /// dump an embedding in bson format in filename fname.  
 /// If dump_indexation is true, nodeindexation will also be dumped, and retrieved from bson file.
 /// The dump consists in a header document. Then each node is dumped in its document (a bson document must less than 16Mb)
 /// The last document contains the indexation if dumped is asked for.
-/// 
-pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, EmbeddedData>, output : &io::output::Output) -> Result<(), anyhow::Error>
-    where   NodeId : std::hash::Hash + std::cmp::Eq + std::fmt::Display,  
-            EmbeddedData : EmbeddedT<F> ,
-            F : Serialize {
+///
+pub fn bson_dump<F, NodeId, EmbeddedData>(
+    embedding: &Embedding<F, NodeId, EmbeddedData>,
+    output: &io::output::Output,
+) -> Result<(), anyhow::Error>
+where
+    NodeId: std::hash::Hash + std::cmp::Eq + std::fmt::Display,
+    EmbeddedData: EmbeddedT<F>,
+    F: Serialize,
+{
     //
     log::info!("entering bson_dump");
     //
@@ -96,18 +102,17 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
     let file;
     if fileres.is_ok() {
         file = fileres.unwrap();
-    }
-    else {
+    } else {
         return Err(anyhow!("could not open file : {}", path.display()));
     }
     let mut bufwriter = BufWriter::new(file);
     let mut doc = Document::new();
 
     let embedded = embedding.get_embedded_data();
-    log::info!("\t symetry embedding : {}",  embedded.is_symetric());
+    log::info!("\t symetry embedding : {}", embedded.is_symetric());
     // dump header part
-    let dim : i64 = FromPrimitive::from_usize(embedded.get_dimension()).unwrap();
-    let nbdata : i64 =  FromPrimitive::from_usize(embedded.get_nb_nodes()).unwrap();
+    let dim: i64 = FromPrimitive::from_usize(embedded.get_dimension()).unwrap();
+    let nbdata: i64 = FromPrimitive::from_usize(embedded.get_nb_nodes()).unwrap();
     // we could allocate a EmbeddedBsonHeader and call bson::to_bson(&bson_header).unwrap() but for C decoder ...
     let bson_header = bson!({
         "version": 1 as i64,
@@ -116,7 +121,7 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
         "dimension": dim,
         "nbdata": nbdata
         }
-    ); 
+    );
     doc.insert("header", bson_header);
     let res = doc.to_writer(&mut bufwriter);
     if res.is_err() {
@@ -126,8 +131,12 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
     // now loop on data vectors
     for i in 0..nbdata as usize {
         let mut doc = Document::new();
-        let data : Vec<Bson> = embedded.get_embedded_node(i, OUT).iter().map(|x| bson::to_bson(x).unwrap()).collect();
-        let ival : i64 =  FromPrimitive::from_usize(i).unwrap();
+        let data: Vec<Bson> = embedded
+            .get_embedded_node(i, OUT)
+            .iter()
+            .map(|x| bson::to_bson(x).unwrap())
+            .collect();
+        let ival: i64 = FromPrimitive::from_usize(i).unwrap();
         let mut key = ival.to_string();
         key.push_str(",");
         key.push_str(&OUT.to_string());
@@ -135,7 +144,10 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
         let res = doc.to_writer(&mut bufwriter);
         if res.is_err() {
             log::error!("bson dump error OUT , in node {i}");
-            return Err(anyhow!("bson dump error for OUT node {i} {}", res.err().unwrap()));
+            return Err(anyhow!(
+                "bson dump error for OUT node {i} {}",
+                res.err().unwrap()
+            ));
         }
     }
     // if asymetric we must dump in part
@@ -143,8 +155,12 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
         log::debug!("asymetric part to bson... ");
         for i in 0..nbdata as usize {
             let mut doc = Document::new();
-            let data : Vec<Bson> = embedded.get_embedded_node(i, IN).iter().map(|x| bson::to_bson(x).unwrap()).collect();
-            let ival : i64 = FromPrimitive::from_usize(i).unwrap();
+            let data: Vec<Bson> = embedded
+                .get_embedded_node(i, IN)
+                .iter()
+                .map(|x| bson::to_bson(x).unwrap())
+                .collect();
+            let ival: i64 = FromPrimitive::from_usize(i).unwrap();
             let mut key = ival.to_string();
             key.push_str(",");
             key.push_str(&IN.to_string());
@@ -152,12 +168,15 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
             let res = doc.to_writer(&mut bufwriter);
             if res.is_err() {
                 log::error!("bson dump error  in node IN  {i}");
-                return Err(anyhow!("bson dump error for IN node {i} {}", res.err().unwrap()));
+                return Err(anyhow!(
+                    "bson dump error for IN node {i} {}",
+                    res.err().unwrap()
+                ));
             }
         }
         log::debug!("asymetric part converted to bson");
     }
-    // We dump nodeindexation as a document with 
+    // We dump nodeindexation as a document with
     // each key being nodeid converted to a String
     if output.get_indexation() {
         log::info!("\t dumping NodeIndexation");
@@ -175,27 +194,24 @@ pub fn bson_dump<F, NodeId, EmbeddedData>(embedding : &Embedding<F, NodeId, Embe
         }
         log::debug!("\t NodeIndexation bson encoded");
     } // end dump indexation
-    //
-    log::info!("bson dump in file {} finished",  path.display());
+      //
+    log::info!("bson dump in file {} finished", path.display());
     //
     Ok(())
-//    Err(anyhow!("dump of bson not yet"))
-}  // end of bson_dump
-
-
+    //    Err(anyhow!("dump of bson not yet"))
+} // end of bson_dump
 
 /// returns the bson header of an embedding.  
 /// This can be useful to retrieve the type of the embedding (dumped via a call to std::any::type_name::\<F\>()).
 /// The type will be "f64", "f32" or "i64" as Bson imposes the conversion of usize to i64
-pub fn get_bson_header(fname : &String) -> Result<EmbeddedBsonHeader, anyhow::Error> {
+pub fn get_bson_header(fname: &String) -> Result<EmbeddedBsonHeader, anyhow::Error> {
     let path = Path::new(fname);
     log::info!("get_bson_header: trying to open file : {:?}", path);
     let fileres = OpenOptions::new().read(true).open(&path);
     let file;
     if fileres.is_ok() {
         file = fileres.unwrap();
-    }
-    else {
+    } else {
         log::error!("reload of bson dump failed");
         return Err(anyhow!("reloadfailed: {}", fileres.err().unwrap()));
     }
@@ -206,63 +222,76 @@ pub fn get_bson_header(fname : &String) -> Result<EmbeddedBsonHeader, anyhow::Er
         return Err(anyhow!(res.err().unwrap()));
     }
     let doc = res.unwrap();
-    let res =  doc.get("header");
+    let res = doc.get("header");
     if res.is_none() {
         log::error!("could load header from file {}", path.display());
         return Err(anyhow!("could not find header in document"));
     }
-    let bson_header = res.unwrap().clone();  // TODO avoid clone ?
+    let bson_header = res.unwrap().clone(); // TODO avoid clone ?
     let header: EmbeddedBsonHeader = bson::from_bson(bson_header).unwrap();
     log::info!(" bson header reloaded");
     return Ok(header);
 } // end of get_bson_header
-
 
 /// The structure returned by bson_load.
 pub struct EmbeddedBsonReload<F, NodeId> {
     /// The minimal embedded data when graph is symetric
     pub(crate) out_embedded: Array2<F>,
     /// If grap is asymetric we get embedding of nodes as targets (or destinations) in_embedded
-    pub(crate) in_embedded : Option<Array2<F>>,
+    pub(crate) in_embedded: Option<Array2<F>>,
     /// If nodeindexation was dumped in bson
-    pub(crate) node_indexation : Option< IndexSet<NodeId>>
-}  // end of EmbeddedBsonReload
+    pub(crate) node_indexation: Option<IndexSet<NodeId>>,
+} // end of EmbeddedBsonReload
 
-
-
-impl <F, NodeId> EmbeddedBsonReload<F, NodeId> {
-    pub fn new(out_embedded : Array2<F>, in_embedded : Option<Array2<F>>, 
-                                node_indexation : Option< IndexSet<NodeId>>) -> Self {
-        EmbeddedBsonReload{out_embedded, in_embedded, node_indexation}
+impl<F, NodeId> EmbeddedBsonReload<F, NodeId> {
+    pub fn new(
+        out_embedded: Array2<F>,
+        in_embedded: Option<Array2<F>>,
+        node_indexation: Option<IndexSet<NodeId>>,
+    ) -> Self {
+        EmbeddedBsonReload {
+            out_embedded,
+            in_embedded,
+            node_indexation,
+        }
     }
-    /// returns embedded data. If asymetric embedding it is embedded as a source. 
+    /// returns embedded data. If asymetric embedding it is embedded as a source.
     /// If embedding is symetric it is the whole embedding.
-    pub fn get_out_embedded(&self) -> &Array2<F> { &self.out_embedded}
+    pub fn get_out_embedded(&self) -> &Array2<F> {
+        &self.out_embedded
+    }
     /// returns node indexation if present
-    pub fn get_node_indexation(&self) -> Option<&IndexSet<NodeId>> { self.node_indexation.as_ref() }
+    pub fn get_node_indexation(&self) -> Option<&IndexSet<NodeId>> {
+        self.node_indexation.as_ref()
+    }
     /// If the embedding dumped is asymetric this returns an array giving the embedding as a target (or destination) node.
-    pub fn get_in_embedded(&self) -> Option<&Array2<F>> { self.in_embedded.as_ref()}
-}  // enf of impl EmbeddedBsonReload
-
+    pub fn get_in_embedded(&self) -> Option<&Array2<F>> {
+        self.in_embedded.as_ref()
+    }
+} // enf of impl EmbeddedBsonReload
 
 /// reloads embedded data from a previous bson dump and returns a EmbeddedBsonReload structure.  
 /// The structure  Embedded or EmbeddedAsym can be reconstituted from it (or with a graph reload to get nodeindexation)
 ///
-pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBsonReload<F, NodeId>, anyhow::Error>
-    where   NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> ,
-            F : num_traits::Zero + Clone + serde::de::DeserializeOwned,
-            NodeId : ToString + FromStr {
+pub fn bson_load<'a, F, NodeId, EmbeddedData>(
+    fname: &str,
+) -> Result<EmbeddedBsonReload<F, NodeId>, anyhow::Error>
+where
+    NodeId: std::hash::Hash + std::cmp::Eq,
+    EmbeddedData: EmbeddedT<F>,
+    F: num_traits::Zero + Clone + serde::de::DeserializeOwned,
+    NodeId: ToString + FromStr,
+{
     //
     log::info!("entering bson_load, file name : {:?}", fname);
-    // 
+    //
     let path = Path::new(fname);
     let fileres = OpenOptions::new().read(true).open(&path);
     let file;
     if fileres.is_ok() {
         file = fileres.unwrap();
         log::debug!("bson_load, path name : {:?}, file ok , unwrap done", path);
-    }
-    else {
+    } else {
         log::error!("reload of bson dump failed");
         return Err(anyhow!("reloadfailed: {}", fileres.err().unwrap()));
     }
@@ -274,14 +303,14 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
         return Err(anyhow!(res.err().unwrap()));
     }
     let doc = res.unwrap();
-    let res =  doc.get("header");
+    let res = doc.get("header");
     if res.is_none() {
         log::error!("could load header from file {}", path.display());
         return Err(anyhow!("could not find header in document"));
     }
     log::debug!("\t found header key");
-    let bson_header = res.unwrap().clone();  // TODO avoid clone ?
-    // now decode our fields
+    let bson_header = res.unwrap().clone(); // TODO avoid clone ?
+                                            // now decode our fields
     let header: EmbeddedBsonHeader = bson::from_bson(bson_header).unwrap();
     log::info!("header : {:?}", header);
     if header.version != 1 {
@@ -289,13 +318,17 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
         return Err(anyhow!("format version error, inconsistent with header"));
     }
     // now reload data. First part is default OUT part
-    let nb_data : usize =  FromPrimitive::from_i64(header.nbdata).unwrap();
+    let nb_data: usize = FromPrimitive::from_i64(header.nbdata).unwrap();
     log::debug!("bson_load , nb_data = {nb_data}");
-    let dim : usize = FromPrimitive::from_i64(header.dimension).unwrap();
+    let dim: usize = FromPrimitive::from_i64(header.dimension).unwrap();
     log::debug!("bson_load , dim : {dim}");
     let type_name = std::any::type_name::<F>();
     if header.type_name != std::any::type_name::<F>() {
-        log::error!("header as type name : {}, reloading with : {}", header.type_name, type_name);
+        log::error!(
+            "header as type name : {}, reloading with : {}",
+            header.type_name,
+            type_name
+        );
         return Err(anyhow!("type error, inconsistent with header"));
     }
     let mut out_array = Array2::<F>::zeros((0, dim));
@@ -303,7 +336,10 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
         // we have one document for each node
         let res = Document::from_reader(&mut bufreader);
         if res.is_err() {
-            log::error!("could not load document  for node {i} from file {}", path.display());
+            log::error!(
+                "could not load document  for node {i} from file {}",
+                path.display()
+            );
             return Err(anyhow!(res.err().unwrap()));
         }
         let doc = res.unwrap();
@@ -311,7 +347,7 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
         let mut key = i.to_string();
         key.push_str(",");
         key.push_str(&OUT.to_string());
-        let res =  doc.get(&key);
+        let res = doc.get(&key);
         if res.is_none() {
             log::error!("could not get record for key {:?}", key);
             return Err(anyhow!("could not get record for key {:?}", key));
@@ -320,10 +356,13 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
         let options = DeserializerOptions::builder().human_readable(false).build();
         let data_1d_res = bson::from_bson_with_options(res.unwrap().clone(), options);
         if data_1d_res.is_err() {
-            log::info!("\t bson decoding error for node {i}, key : {key}, err : {:?}", data_1d_res.err());
+            log::info!(
+                "\t bson decoding error for node {i}, key : {key}, err : {:?}",
+                data_1d_res.err()
+            );
             panic!("bson decoding error for OUT node {i}");
         }
-        let data_1d : Vec<F> = data_1d_res.unwrap();
+        let data_1d: Vec<F> = data_1d_res.unwrap();
         let res = out_array.push_row(ArrayView1::from(data_1d.as_slice()));
         if res.is_err() {
             return Err(anyhow!("could not insert OUT array vector {:?}", i));
@@ -331,7 +370,7 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
         log::debug!("\t decoded OUT array vector {:?}", i);
     }
     log::info!("\t got OUT part of embedding");
-    // 
+    //
     let mut in_array_opt: Option<Array2<F>> = None;
     if !header.symetric {
         let mut in_array = Array2::<F>::zeros((0, dim));
@@ -340,37 +379,44 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
             // we have one document for each node
             let res = Document::from_reader(&mut bufreader);
             if res.is_err() {
-                log::error!("could not load document  for node IN {i} from file {}", path.display());
+                log::error!(
+                    "could not load document  for node IN {i} from file {}",
+                    path.display()
+                );
                 return Err(anyhow!(res.err().unwrap()));
             }
             let doc = res.unwrap();
             let mut key = i.to_string();
             key.push_str(",");
             key.push_str(&IN.to_string());
-            let res =  doc.get(&key);
+            let res = doc.get(&key);
             if res.is_none() {
                 log::error!("could get record for key {:?}", key);
                 return Err(anyhow!("could get record for key {:?}", key));
-            }        
+            }
             let options = DeserializerOptions::builder().human_readable(false).build();
-            let data_1d : Vec<F> = bson::from_bson_with_options(res.unwrap().clone(), options).unwrap();
+            let data_1d: Vec<F> =
+                bson::from_bson_with_options(res.unwrap().clone(), options).unwrap();
             let res = in_array.push_row(ArrayView1::from(data_1d.as_slice()));
             if res.is_err() {
                 return Err(anyhow!("could not insert IN array vector {:?}", i));
             }
             log::debug!("decoded IN array vector {:?}", i);
-        } 
+        }
         in_array_opt = Some(in_array);
-    }  
+    }
     log::info!("\t finished bson decoding of embedded vectors");
     log::info!("\t bson load checking for key indexation");
     // trying node indexation
     let res = Document::from_reader(&mut bufreader);
     if res.is_err() {
-        log::info!("could not find indexation document from file {}, err : {:?}", path.display(), res.err());
+        log::info!(
+            "could not find indexation document from file {}, err : {:?}",
+            path.display(),
+            res.err()
+        );
         return Ok(EmbeddedBsonReload::new(out_array, in_array_opt, None));
-    }
-    else {
+    } else {
         log::info!("\t found document , node indexation");
         let bson_indexation = res.unwrap();
         let mut node_indexation = IndexSet::<NodeId>::with_capacity(bson_indexation.len());
@@ -378,41 +424,52 @@ pub fn bson_load<'a, F, NodeId, EmbeddedData>(fname : &str) -> Result<EmbeddedBs
         while let Some(item) = index_iter.next() {
             let res = NodeId::from_str(item.0);
             let node_id = match res {
-                Ok(node_id)  => node_id,
+                Ok(node_id) => node_id,
                 Err(_e) => {
-                    log::error!("could get node rank for node_id {}", item.0);   
+                    log::error!("could get node rank for node_id {}", item.0);
                     return Err(anyhow!("could get node rank for node_id {}", item.0));
                 }
             };
             let res = item.1.as_i64();
             if res.is_none() {
-                log::error!("could get node rank for node_id {}", item.0);   
-                return Err(anyhow!("could get node rank for node_id {}", item.0));      
+                log::error!("could get node rank for node_id {}", item.0);
+                return Err(anyhow!("could get node rank for node_id {}", item.0));
             }
             node_indexation.insert(node_id);
         }
         assert_eq!(node_indexation.len(), nb_data);
-        return Ok(EmbeddedBsonReload::new(out_array, in_array_opt, Some(node_indexation)));
-    }   // end case we have indexation in bson file
+        return Ok(EmbeddedBsonReload::new(
+            out_array,
+            in_array_opt,
+            Some(node_indexation),
+        ));
+    } // end case we have indexation in bson file
 } // end of bson_load
-
 
 // This function checks equality of embedded and reloaded
 #[allow(unused)]
-fn check_equality<F,NodeId, EmbeddedData> (embedding : &Embedding<F, NodeId, EmbeddedData>, reloaded : &EmbeddedBsonReload<F, NodeId>) -> Result<bool, anyhow::Error> 
-    where   NodeId : std::hash::Hash + std::cmp::Eq,  EmbeddedData : EmbeddedT<F> ,
-            F : num_traits::Zero + Clone + serde::de::DeserializeOwned + PartialEq + std::fmt::Display,
-            NodeId : ToString + FromStr {
-        
+fn check_equality<F, NodeId, EmbeddedData>(
+    embedding: &Embedding<F, NodeId, EmbeddedData>,
+    reloaded: &EmbeddedBsonReload<F, NodeId>,
+) -> Result<bool, anyhow::Error>
+where
+    NodeId: std::hash::Hash + std::cmp::Eq,
+    EmbeddedData: EmbeddedT<F>,
+    F: num_traits::Zero + Clone + serde::de::DeserializeOwned + PartialEq + std::fmt::Display,
+    NodeId: ToString + FromStr,
+{
     let embedded_data = embedding.get_embedded_data();
     let out_reloaded = reloaded.get_out_embedded();
-    assert_eq!(out_reloaded.dim(), (embedded_data.get_nb_nodes(), embedded_data.get_dimension()));
+    assert_eq!(
+        out_reloaded.dim(),
+        (embedded_data.get_nb_nodes(), embedded_data.get_dimension())
+    );
     // first chech out as it is the default and is always present
     log::info!("test_bson_moreno checking equality of reload, OUT embedding");
     for i in 0..embedded_data.get_nb_nodes() {
         let vec_e = embedded_data.get_embedded_node(i, OUT);
         for j in 0..embedded_data.get_dimension() {
-            if vec_e[j] != out_reloaded[[i,j]] {
+            if vec_e[j] != out_reloaded[[i, j]] {
                 log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
                         vec_e[j], out_reloaded[[i,j]]);
             }
@@ -425,15 +482,15 @@ fn check_equality<F,NodeId, EmbeddedData> (embedding : &Embedding<F, NodeId, Emb
         for i in 0..embedded_data.get_nb_nodes() {
             let vec_e = embedded_data.get_embedded_node(i, IN);
             for j in 0..embedded_data.get_dimension() {
-                if vec_e[j] != in_reloaded[[i,j]] {
+                if vec_e[j] != in_reloaded[[i, j]] {
                     log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
                             vec_e[j], in_reloaded[[i,j]]);
                     return Ok(false);
                 }
             }
         }
-    }  // end check IN in asymetric case
-    // check equality of node indexation
+    } // end check IN in asymetric case
+      // check equality of node indexation
     if reloaded.get_node_indexation().is_some() {
         log::debug!("checking node indeation");
         let loaded_indexation = reloaded.get_node_indexation().unwrap();
@@ -450,10 +507,7 @@ fn check_equality<F,NodeId, EmbeddedData> (embedding : &Embedding<F, NodeId, Emb
     } // end case node_indexation
     log::debug!("check_equality exiting");
     Ok(true)
-}  // end of check equality
-
-
-
+} // end of check equality
 
 #[cfg(test)]
 mod tests {
@@ -466,50 +520,62 @@ mod tests {
         if res.is_err() {
             println!("could not init log");
         }
-    }  // end of log_init_test
+    } // end of log_init_test
 
-
-
-
-// test with usize embedding
-#[test]
+    // test with usize embedding
+    #[test]
     fn test_bson_moreno_usize() {
         log_init_test();
         //
-        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        let path = Path::new(crate::DATADIR)
+            .join("moreno_lesmis")
+            .join("out.moreno_lesmis_lesmis");
         log::debug!("\n\n test_bson_moreno, loading file {:?}", path);
         let header_size = crate::io::csv::get_header_size(&path);
-        assert_eq!(header_size.unwrap(),2);
+        assert_eq!(header_size.unwrap(), 2);
         println!("\n\n test_weighted_csv_to_trimat, data : {:?}", path);
         //
-        let trimat_res  = csv_to_trimat::<f64>(&path, false, b' ');
+        let trimat_res = csv_to_trimat::<f64>(&path, false, b' ');
         if let Err(err) = &trimat_res {
             eprintln!("ERROR: {}", err);
-            assert_eq!(1,0);
+            assert_eq!(1, 0);
         }
-        let (trimat, node_indexation)  = trimat_res.unwrap();
+        let (trimat, node_indexation) = trimat_res.unwrap();
         // embed
         let sketch_size = 15;
         let decay = 0.1;
         let nb_iter = 2;
         let parallel = false;
         let symetric = true;
-        let sketching_params = NodeSketchParams{sketch_size, decay, nb_iter, symetric, parallel};
+        let sketching_params = NodeSketchParams {
+            sketch_size,
+            decay,
+            nb_iter,
+            symetric,
+            parallel,
+        };
         let mut nodesketch = NodeSketch::new(sketching_params, trimat);
         let embedding = Embedding::new(node_indexation, &mut nodesketch);
         if embedding.is_err() {
-            log::error!("nodesketch embedding failed error : {:?}", embedding.as_ref().err());
+            log::error!(
+                "nodesketch embedding failed error : {:?}",
+                embedding.as_ref().err()
+            );
             std::process::exit(1);
         };
         let embedding = embedding.unwrap();
         // now we can do a bson dump
-        let output = io::output::Output::new(io::output::Format::BSON, true, &Some(String::from("moreno_usize.bson")) );
+        let output = io::output::Output::new(
+            io::output::Format::BSON,
+            true,
+            &Some(String::from("moreno_usize.bson")),
+        );
         let bson_res = bson_dump(&embedding, &output);
         if bson_res.is_err() {
             log::error!("bson dump in file {} failed", &output.get_output_name());
             log::error!("error returned : {:?}", bson_res.err().unwrap());
-            assert_eq!(1,0);
-        } 
+            assert_eq!(1, 0);
+        }
         //
         log::info!("trying reload from {}", &output.get_output_name());
         let reloaded = bson_load::<usize, usize, Embedded<usize>>(output.get_output_name());
@@ -522,56 +588,57 @@ mod tests {
         match &res_equality {
             Err(_e) => {
                 log::error!("check equality encountered error in test_bson_moreno_usize");
-                assert_eq!(1,0);                
+                assert_eq!(1, 0);
             }
-            Ok(val) => {
-                match val {
-                    false => {
-                        log::error!("check equality returned false in test_bson_moreno");
-                        assert_eq!(1, 0);                        
-                    }
-                    true => {},
+            Ok(val) => match val {
+                false => {
+                    log::error!("check equality returned false in test_bson_moreno");
+                    assert_eq!(1, 0);
                 }
-            }
+                true => {}
+            },
         }
     } // end of test_bson_moreno
-
-
-
 
     #[test]
     fn test_bson_moreno_f32() {
         log_init_test();
         //
-        let path = Path::new(crate::DATADIR).join("moreno_lesmis").join("out.moreno_lesmis_lesmis");
+        let path = Path::new(crate::DATADIR)
+            .join("moreno_lesmis")
+            .join("out.moreno_lesmis_lesmis");
         log::debug!("\n\n test_bson_moreno, loading file {:?}", path);
         let header_size = crate::io::csv::get_header_size(&path);
-        assert_eq!(header_size.unwrap(),2);
+        assert_eq!(header_size.unwrap(), 2);
         println!("\n\n test_weighted_csv_to_trimat, data : {:?}", path);
         //
-        let trimat_res  = csv_to_trimat::<f32>(&path, false, b' ');
+        let trimat_res = csv_to_trimat::<f32>(&path, false, b' ');
         if let Err(err) = &trimat_res {
             eprintln!("ERROR: {}", err);
-            assert_eq!(1,0);
+            assert_eq!(1, 0);
         }
-        let (trimat, node_indexation)  = trimat_res.unwrap();
+        let (trimat, node_indexation) = trimat_res.unwrap();
         // embed
         let hope_m = HopeMode::ADA;
         let decay_f = 0.05;
-    //    let range_m = RangeApproxMode::RANK(RangeRank::new(500, 2));
+        //    let range_m = RangeApproxMode::RANK(RangeRank::new(500, 2));
         let range_m = RangeApproxMode::EPSIL(RangePrecision::new(0.1, 10, 300));
         let params = HopeParams::new(hope_m, range_m, decay_f);
-         // now we embed
-        let mut hope = Hope::new(params, trimat); 
+        // now we embed
+        let mut hope = Hope::new(params, trimat);
         let hope_embedding = Embedding::new(node_indexation, &mut hope).unwrap();
         // now we can do a bson dump
-        let output = io::output::Output::new(io::output::Format::BSON, true, &Some(String::from("moreno_f32.bson")) );
+        let output = io::output::Output::new(
+            io::output::Format::BSON,
+            true,
+            &Some(String::from("moreno_f32.bson")),
+        );
         let bson_res = bson_dump(&hope_embedding, &output);
         if bson_res.is_err() {
             log::error!("bson dump in file {} failed", &output.get_output_name());
             log::error!("error returned : {:?}", bson_res.err().unwrap());
-            assert_eq!(1,0);
-        } 
+            assert_eq!(1, 0);
+        }
         //
         log::info!("trying reload from {}", &output.get_output_name());
         let reloaded = bson_load::<f32, usize, Embedded<f32>>(output.get_output_name());
@@ -584,19 +651,15 @@ mod tests {
         match &res_equality {
             Err(_e) => {
                 log::error!("check equality encountered error in test_bson_moreno");
-                assert_eq!(1,0);                
+                assert_eq!(1, 0);
             }
-            Ok(val) => {
-                match val {
-                    false => {
-                        log::error!("check equality returned false in test_bson_moreno");
-                        assert_eq!(1, 0);                        
-                    }
-                    true => {},
+            Ok(val) => match val {
+                false => {
+                    log::error!("check equality returned false in test_bson_moreno");
+                    assert_eq!(1, 0);
                 }
-            }
+                true => {}
+            },
         }
     } // end of test_bson_moreno_f32
-
-
 } // end of mod tests

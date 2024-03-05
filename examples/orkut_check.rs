@@ -80,15 +80,15 @@ use graphembed::prelude::*;
 use graphembed::validation::anndensity::*;
 
 use hnsw_rs::hnswio::*;
-use hnsw_rs::prelude::*;
 
 use hnsw_rs::prelude::DistPtr;
 
 use hdrhistogram::Histogram;
 
 /// Directory containing the 2 data files
-/// TODO use clap in main
+/// TODO: use clap in main
 const ORKUT_DATA_DIR: &'static str = "/home/jpboth/Data/Graphs/Orkut/";
+const DUMP_DIR: &'static str = "/home/jpboth/graphembed/Runs/";
 
 /// Read graph (given as csv) and ground truth communities
 fn read_orkut_graph(dirpath: &Path) -> Result<Graph<u32, f64, Undirected, u32>, anyhow::Error> {
@@ -105,6 +105,7 @@ fn read_orkut_graph(dirpath: &Path) -> Result<Graph<u32, f64, Undirected, u32>, 
     Ok(graph)
 } // end of read_orkutgraph
 
+// read community file
 fn read_orkut_com(dirpath: &Path) -> anyhow::Result<Vec<Vec<u32>>> {
     let fpath = dirpath.join("com-orkut.top5000.cmty.txt");
     log::info!("read_orkut_com : reading {fpath:?}");
@@ -164,46 +165,7 @@ fn jaccard_distance<T: Eq>(v1: &[T], v2: &[T]) -> f64 {
     1. - (common as f64) / (v1.len() as f64)
 } // end of jaccard
 
-// receive base name of dump. Files to reload are made by concatenating "hnsw.data" and "hnsw.graph" to path
-fn reload_orkut_hnsw(path: String) -> Hnsw<usize, DistPtr<usize, f64>> {
-    //
-    let mut graphfname = path.clone();
-    graphfname.push_str(".hnsw.graph");
-    let graphpath = Path::new(&graphfname);
-    let graphfileres = OpenOptions::new().read(true).open(graphpath);
-    if graphfileres.is_err() {
-        println!(
-            "test_dump_reload: could not open file {:?}",
-            graphpath.as_os_str()
-        );
-        std::panic::panic_any("test_dump_reload: could not open file".to_string());
-    }
-    let graphfile = graphfileres.unwrap();
-    //
-    let mut datafname = path.clone();
-    datafname.push_str(".hnsw.data");
-    let datapath = Path::new(&datafname);
-    let datafileres = OpenOptions::new().read(true).open(&datapath);
-    if datafileres.is_err() {
-        println!(
-            "test_dump_reload : could not open file {:?}",
-            datapath.as_os_str()
-        );
-        std::panic::panic_any("test_dump_reload : could not open file".to_string());
-    }
-    let datafile = datafileres.unwrap();
-    //
-    let mut graph_in = BufReader::new(graphfile);
-    let mut data_in = BufReader::new(datafile);
-    // we need to call load_description first to get distance name
-    let hnsw_description = load_description(&mut graph_in).unwrap();
-    let mydist = DistPtr::<usize, f64>::new(jaccard_distance::<usize>);
-
-    let hnsw_loaded: Hnsw<usize, DistPtr<usize, f64>> =
-        load_hnsw_with_dist(&mut graph_in, &hnsw_description, mydist, &mut data_in).unwrap();
-    //
-    hnsw_loaded
-} // end of reload_orkut_hnsw
+//
 
 // try to examine what happens to community through the embedding
 // compares edges inside community with edges going out of community
@@ -277,9 +239,11 @@ pub fn main() {
     //
     // check if we have a stored decomposition
     //
-    let dump_path = Path::new("/home/jpboth/Rust/graphembed/orkut-decomposition.json");
+    let dump_path = Path::new(DUMP_DIR);
     //
-    let fileres = OpenOptions::new().read(true).open(&dump_path);
+    let fileres = OpenOptions::new()
+        .read(true)
+        .open(&dump_path.join("orkut-decomposition.json"));
     if fileres.is_err() {
         log::error!(
             "reload could not open file {:?}, will do decomposition",
@@ -316,7 +280,7 @@ pub fn main() {
 
     // if we really need the explicitly the embedding
     let orkut_embedding: Embedding<usize, usize, Embedded<usize>>;
-    let orkut_bson_path = Path::new("/home/jpboth/Rust/graphembed/orkut_embedded.bson");
+    let orkut_bson_path = Path::new(DUMP_DIR).join("orkut_embedded.bson");
     let fileres = OpenOptions::new().read(true).open(&orkut_bson_path);
     if fileres.is_err() {
         log::info!(
@@ -343,12 +307,19 @@ pub fn main() {
         let embedding = from_bson_with_jaccard(bson_reloaded);
         orkut_embedding = embedding.unwrap();
     }
-
     //
     // we reload the hnsw dumped by example orkut_hnsw
     //
-    let hnsw_loaded: Hnsw<usize, DistPtr<usize, f64>> =
-        reload_orkut_hnsw(String::from("orkuthnsw"));
+    let path = Path::new("DUMP_DIR");
+    let reloader = HnswIo::new(path.to_path_buf(), String::from("orkuthnsw"));
+    let mydist = DistPtr::<usize, f64>::new(jaccard_distance::<usize>);
+
+    let hnsw_loaded = reloader.load_hnsw_with_dist(mydist);
+    if hnsw_loaded.is_err() {
+        log::error!("could not happen reload hnsw from path : {:?}", path);
+        std::panic!();
+    }
+    let hnsw_loaded = hnsw_loaded.unwrap();
     //
     //  now we can check how are embedded blocks
     //

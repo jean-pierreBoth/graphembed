@@ -5,18 +5,16 @@
 
 use std::collections::BinaryHeap;
 
-use anyhow::{anyhow};
-
-
-
+use anyhow::anyhow;
 
 use indexmap::IndexSet;
 
+use ordered_float::OrderedFloat;
 use petgraph::graph::{Graph, NodeIndex};
 
-use float_ord::FloatOrd;
-
-pub fn pcore4<N,E,Ty, Ix>(graph : &Graph<N,E,Ty, Ix>, pfunction : fn(&Graph<N, E, Ty, Ix>, &IndexSet<NodeIndex<Ix>>, NodeIndex<Ix>) -> f64) {
-
-    let min_heap = BinaryHeap::<FloatOrd<f64>>::new();
-}  // end of pcore4
+pub fn pcore4<N, E, Ty, Ix>(
+    graph: &Graph<N, E, Ty, Ix>,
+    pfunction: fn(&Graph<N, E, Ty, Ix>, &IndexSet<NodeIndex<Ix>>, NodeIndex<Ix>) -> f64,
+) {
+    let min_heap = BinaryHeap::<OrderedFloat<f64>>::new();
+} // end of pcore4
