@@ -435,7 +435,7 @@ where
 ///  
 /// This function tests for the following delimiters [b'\t', b',' , b' '] in the csv file.
 /// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  
-/// For an asymetric graph directed must be set to true.
+/// **For an asymetric graph directed must be set to true**.
 pub fn csv_to_csrmat_delimiters<F: Float + FromStr>(
     filepath: &Path,
     directed: bool,

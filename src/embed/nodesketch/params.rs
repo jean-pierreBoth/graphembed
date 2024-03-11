@@ -1,4 +1,7 @@
-//! defines parameters for nodesketch embedding
+//! The module defines parameters for nodesketch embedding.
+//!
+//! As weight given to an edge depends exponentially on the number of hops we made from origin node,
+//! The decay must be related to the number of hops (iterations) asked around a node.
 
 #[derive(Debug, Copy, Clone)]
 pub struct NodeSketchParams {
@@ -16,6 +19,12 @@ pub struct NodeSketchParams {
 } // end of NodeSketchParams
 
 impl NodeSketchParams {
+    #[cfg_attr(doc, katexit::katexit)]
+    ///
+    /// Generally only a few hops are necessary around a node to characterize neighborhood (and so probable missing edges ni validation).
+    /// The weight $w$ of an edge at a distance $nbhops$ from the node around which we work is given by   $$ w = decay^{nbhops}$$      
+    /// So decay and nb_iter (nb_hops) must be chosen so that the edge weight is still significant.
+    ///
     pub fn new(
         sketch_size: usize,
         decay: f64,

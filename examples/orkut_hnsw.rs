@@ -1,14 +1,16 @@
-//! example of density decompositon for Orkut graph [https://snap.stanford.edu/data/com-Orkut.html]
+//! example of density decompositon for Orkut graph [orkut](https://snap.stanford.edu/data/com-Orkut.html)
 //!
 //! The graph is undirected with 3072441 nodes and 117 185 083 edges
 //! The output is the ordered list of densest stable sets
 //!
-//! Frank-Wolfe 500 iterations run in 12.3mn. The whole computation need 13.4mn on a 8 cores 2-thread/core laptop with i7 intel proc
+//! **This binary does density block decomposition, graph embedding and pass the embedding through  an Approximate Nearest Neighbours [Hnsw](https://crates.io/crates/hnsw_rs)**
 //!
 //! The purpose of this example is to test block decomposition, embed the graph and transform the result into a Hnsw structure
 //! and store the results for posterior treatment.
 //!
-//! The block decomposition, embedding and hnsw steps need 35mn on the same 8 cores 2-thread/core laptop with i7 intel proc
+//! Frank-Wolfe 500 iterations run in 330s. The whole computation need 13.4mn on a 24 cores (32 threads) laptop with i9 intel proc
+//!
+//! The block decomposition, embedding and hnsw steps need 15mn (wall clock) on the same 24 cores (32 threads) laptop with i9 intel proc
 
 use anyhow::anyhow;
 
@@ -28,8 +30,8 @@ use hnsw_rs::prelude::*;
 
 /// Directory containing the 2 data files
 /// TODO use clap in main
-const ORKUT_DATA_DIR: &'static str = "/home/jpboth/Data/Graphs/Orkut/";
-const DUMP_DIR: &'static str = "/home/jpboth/graphembed/Runs/";
+const ORKUT_DATA_DIR: &'static str = "/home/jpboth/Data/Graph/Orkut/";
+const DUMP_DIR: &'static str = "/home/jpboth/Rust/graphembed/";
 
 /// Read graph (given as csv) and ground truth communities
 fn read_orkut_graph(dirpath: &Path) -> Result<Graph<u32, f64, Undirected, u32>, anyhow::Error> {
@@ -114,14 +116,13 @@ pub fn main() {
     // check if we have a stored decomposition
     //
     let dump_path = Path::new(&DUMP_DIR);
+    let fname = "orkut-decomposition.json";
     //
-    let fileres = OpenOptions::new()
-        .read(true)
-        .open(&dump_path.join("orkut-decomposition.json"));
+    let fileres = OpenOptions::new().read(true).open(&dump_path.join(fname));
     if fileres.is_err() {
         log::error!(
             "reload could not open file {:?}, will do decomposition",
-            dump_path.as_os_str()
+            dump_path.join(fname).as_os_str()
         );
         log::info!(
             " reload could not open file {:?}, will do decomposition ",
@@ -133,13 +134,20 @@ pub fn main() {
         );
         decomposition = approximate_decomposition(&orkut_graph, nb_iter);
         // and dump decomposition
-        let res = decomposition.dump_json(&dump_path);
+        let res = decomposition.dump_json(&dump_path.join(fname));
         match res {
             Ok(_) => {
-                log::info!("orkut decomposition dumped in {dump_path:?} : Ok");
+                log::info!(
+                    "orkut decomposition dumped in {:?} : Ok",
+                    dump_path.join(fname)
+                );
             }
             Err(_) => {
-                log::info!("orkut decomposition dump failed in {dump_path:?} : Err");
+                log::info!(
+                    "orkut decomposition dump failed in {:?} : Err",
+                    dump_path.join(fname)
+                );
+                std::process::exit(1);
             }
         };
         let nb_blocks = decomposition.get_nb_blocks();
@@ -177,7 +185,7 @@ pub fn main() {
         let res = csv_to_trimat_delimiters::<f64>(&path.join("com-orkut.ungraph.txt"), false);
         let (orkut_trimat, node_index) = res.unwrap();
         let sketch_size = 200;
-        let decay = 0.2;
+        let decay = 0.3;
         let nb_iter = 5;
         let parallel = true;
         let symetric = true;

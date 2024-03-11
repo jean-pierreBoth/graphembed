@@ -2,10 +2,11 @@
 //!
 //! The main arguments are
 //!  - --csv filename
-//!  - --symetric  if present specifies the graph is symetric. In this case the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
+//!  - --symetric ture  if present specifies the graph is symetric. In this case the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
 //!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
-//!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric.
-//!     It is also possible to declare as symetric an asymetric unweighted graph. It is then symetrised when reading the file.
+//!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric (--symetric false). In this case
+//!     **for the validation parameters the flag --symetric is required to get deletion of both edges i->j and j->i**
+//!     
 //!  - --output or -o filename  
 //!     This dumps the embedding in a bson file named filename.bson. See module [bson].  
 //!     By default an embedding is written in the file **embedding.bson**.
@@ -27,10 +28,10 @@
 //!
 //! Hope mode for embedding with Adamic Adar approximation using approximation with a target rank of 100 and 10 iterations
 //! in the range approximations:  
-//! embed --csv "p2p-Gnutella09.txt" --symetric "true"  embedding hope  --approx "ADA" rank --targetrank 100 --nbiter 10 --output outputname
+//! embed --csv "p2p-Gnutella09.txt" --symetric "true"  embedding hope  rank --targetrank 100 --nbiter 10 --output outputname
 //!
 //! with precision target:  
-//! embed --csv "p2p-Gnutella08.txt" --symetric "true" embedding hope  --approx "ADA" precision --epsil 0.2 --maxrank 1000 --blockiter 3 --output outputname
+//! embed --csv "p2p-Gnutella08.txt" --symetric "true" embedding hope   precision --epsil 0.2 --maxrank 1000 --blockiter 3 --output outputname
 //!
 //! Sketching embedding with 3 hop neighbourhood, weight decay factor of 0.1 at each hop, dimension 500 :
 //!
@@ -39,23 +40,27 @@
 //!
 //! 2. **Validation mode with estimation of AUC on link prediction task**.
 //!
-//!  The validation command has 2 parameters:
+//!  The validation command has 2 parameters and one possible flag:
 //! - --nbpass
 //!     It determines the number of validation pass to be done.  
 //! - --skip
 //!     It determines the number of edges to delete in the validation pass. Recall that the real number of discarded edges
 //!     can be smaller as we must not make isolated points.
+//! - --symetric
 //!
 //!     It suffices to add the command : **validation --nbpass nbpass --skip fraction** before and instead  the "embedding" command name.
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
 //!     We get for example :  
 //!   
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 **--symetric**
 //!
+//! **Note: The symetric flag at end of the preceding command is required to enforce the symetric deletion of edges. If absent the embedding (and edge deletion deletion) will
+//!   be done in asymetric mode.  
+//!   This inconvenience makes possible to treat a symetric as a way to assess asymetry effects**.
 //!
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope --approx ADA precision --epsil 0.2 --maxrank 200  --blockiter 3
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope  precision --epsil 0.2 --maxrank 200  --blockiter 3
 //!
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope --approx ADA rank --targetrank 100  --nbiter 10
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope  rank --targetrank 100  --nbiter 10
 //!
 //!     embed --csv wiki-Vote.txt --symetric false validation --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
 //!
@@ -77,7 +82,7 @@ use sprs::TriMatI;
 use graphembed::io;
 
 /// variable to be used to run tests
-const _DATADIR: &str = &"/home/jpboth/Data/Graphs";
+const _DATADIR: &str = &"/home/jpboth/Data/Graph";
 
 #[doc(hidden)]
 fn parse_sketching(matches: &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
@@ -282,6 +287,8 @@ fn parse_embedding_cmd(
 
 #[doc(hidden)]
 pub fn main() {
+    // TODO: to put in clap ? just for now select at compile time
+    let do_vcmpr = true;
     //
     println!("initializing default logger from environment ...");
     let _ = env_logger::Builder::from_default_env().init();
@@ -523,6 +530,7 @@ pub fn main() {
     let path = std::path::Path::new(&fname);
     if !path.exists() {
         log::error!("file do not exist : {:?}", fname);
+        println!("file do not exist : {:?}", fname);
         std::process::exit(1);
     }
     if log_enabled!(log::Level::Info) {
@@ -602,6 +610,16 @@ pub fn main() {
                     symetric_graph,
                     &f,
                 );
+                if do_vcmpr {
+                    let _quant = link::estimate_vcmpr(
+                        &trimat.to_csr(),
+                        params.get_nbpass(),
+                        10,
+                        params.get_delete_fraction(),
+                        symetric_graph,
+                        &f,
+                    );
+                }
             }
         } // end case Hope
 
@@ -708,14 +726,16 @@ pub fn main() {
                         &f,
                     );
                     // we compare with VCMPR
-                    let _quant = link::estimate_vcmpr(
-                        &trimat.to_csr(),
-                        validation_params.get_nbpass(),
-                        20,
-                        validation_params.get_delete_fraction(),
-                        symetric_graph,
-                        &f,
-                    );
+                    if do_vcmpr {
+                        let _quant = link::estimate_vcmpr(
+                            &trimat.to_csr(),
+                            validation_params.get_nbpass(),
+                            50,
+                            validation_params.get_delete_fraction(),
+                            symetric_graph,
+                            &f,
+                        );
+                    }
                 }
                 // TODO precision estimation too costly must subsample
                 //    estimate_precision(&trimat.to_csr(), params.get_nbpass(), params.get_delete_fraction(), false, &f);

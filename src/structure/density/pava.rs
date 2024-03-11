@@ -2,8 +2,6 @@
 //! Adapted from pav_regression crate (See crates.io) with some added functionality
 //! (see comments in source file)
 
-
-
 // This file is modified from the crate pav_regression
 // Added following modifications:
 // - avoid reallocations of points to be dispatched
@@ -12,21 +10,19 @@
 // - added struct BlockPoint that keep track of index of points in blocks through merge operations
 // - methods to get contents of each block
 
+use anyhow::anyhow;
 
-
-use anyhow::{anyhow};
-
-use ordered_float::OrderedFloat;
 use num_traits::float::Float;
+use ordered_float::OrderedFloat;
 
-use num_traits::{FromPrimitive};
-use std::fmt::{Debug};
+use num_traits::FromPrimitive;
+use std::fmt::Debug;
 
 use indxvec::Vecops;
 
 use std::cell::RefCell;
 
-const EPSIL : f64 = 1.0E-6;
+const EPSIL: f64 = 1.0E-6;
 
 /// Isotonic regression can be done in either mode
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -36,26 +32,37 @@ pub enum Direction {
 }
 /// A point in 2D cartesian space
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub struct Point<T:Float+Debug> {
+pub struct Point<T: Float + Debug> {
     x: T,
     y: T,
     weight: T,
 }
 
 /// default point. zero weight so do not count
-impl <T> Default for Point<T> where T : Float + Debug {
+impl<T> Default for Point<T>
+where
+    T: Float + Debug,
+{
     fn default() -> Self {
-        Point{ x : T::zero(), y : T::zero(), weight : T::zero()}
+        Point {
+            x: T::zero(),
+            y: T::zero(),
+            weight: T::zero(),
+        }
     }
 } // end of default for Point
 
-
-
-impl <T> Point<T> 
-    where  T : Float + Debug + std::ops::AddAssign {
+impl<T> Point<T>
+where
+    T: Float + Debug + std::ops::AddAssign,
+{
     /// Create a new Point
     pub fn new(x: T, y: T) -> Point<T> {
-        Point { x, y, weight: T::from(1.0).unwrap() }
+        Point {
+            x,
+            y,
+            weight: T::from(1.0).unwrap(),
+        }
     }
 
     /// Create a new Point with a specified weight
@@ -86,21 +93,20 @@ impl <T> Point<T>
     }
 }
 
-
 /// ordering with respect to x for sorting methods. But centroids are compared with respect to y!
-impl <T:Float+ Debug> PartialOrd for Point<T> {
+impl<T: Float + Debug> PartialOrd for Point<T> {
     fn partial_cmp(&self, other: &Point<T>) -> Option<std::cmp::Ordering> {
         self.x.partial_cmp(&other.x)
     }
-} // end of impl PartialOrd for Point<T> 
+} // end of impl PartialOrd for Point<T>
 
-
-fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T  
-    where T : Float + Debug {
+fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T
+where
+    T: Float + Debug,
+{
     let prop = (*at_x - (a.x)) / (b.x - a.x);
     (b.y - a.y) * prop + a.y
 }
-
 
 //==========================================================================================================
 
@@ -108,61 +114,93 @@ fn interpolate_two_points<T>(a: &Point<T>, b: &Point<T>, at_x: &T) -> T
 /// To store a block of iso values points in isotonic regression
 /// This structure stores the index(es) of the original points in the block
 #[derive(Debug, Copy, Clone)]
-pub struct BlockPoint<'a, T:Float + Debug> {
+pub struct BlockPoint<'a, T: Float + Debug> {
     /// sorting direction, TODO do we need it ?
-    direction : Direction,
+    direction: Direction,
     /// unsorted points,   
-    points : &'a [Point<T>],
+    points: &'a [Point<T>],
     /// so that i -> points\[sorted_index\[i\]\] is sorted according to direction
-    index : &'a[usize],
+    index: &'a [usize],
     /// first index in sorted index. first is in block. So the block consists in  points\[index\[first\] ... points\[index\[last] \[
-    first : usize,
+    first: usize,
     /// last index in sorted index, last is outside block
-    last : usize,
+    last: usize,
     /// centroid of block of points
-    centroid : Point<T>,
+    centroid: Point<T>,
 } // end of BlockPoint
 
-
-impl <'a, T> BlockPoint<'a, T>  
-    where T : Float + std::ops::DivAssign + std::ops::AddAssign + Debug {
-    
-    pub fn new(direction: Direction, points : &'a Vec<Point<T>>, index : &'a [usize], first : usize, last : usize) -> Self {
-        BlockPoint{direction, points, index, first , last, centroid : Point::<T>::default()}
+impl<'a, T> BlockPoint<'a, T>
+where
+    T: Float + std::ops::DivAssign + std::ops::AddAssign + Debug,
+{
+    pub fn new(
+        direction: Direction,
+        points: &'a Vec<Point<T>>,
+        index: &'a [usize],
+        first: usize,
+        last: usize,
+    ) -> Self {
+        BlockPoint {
+            direction,
+            points,
+            index,
+            first,
+            last,
+            centroid: Point::<T>::default(),
+        }
     }
 
     // creation of block from a point
-    fn new_from_point(direction: Direction, points : &'a [Point<T>], index : &'a [usize], idx : usize) -> Self {
+    fn new_from_point(
+        direction: Direction,
+        points: &'a [Point<T>],
+        index: &'a [usize],
+        idx: usize,
+    ) -> Self {
         let centroid = points[index[idx]].clone();
-        BlockPoint{direction, points, index,  first : idx , last : idx+1, centroid}
+        BlockPoint {
+            direction,
+            points,
+            index,
+            first: idx,
+            last: idx + 1,
+            centroid,
+        }
     }
 
-
     /// merge two contiguous BlockPoint
-    pub(crate) fn merge(&mut self, other : &BlockPoint<'a, T>) ->  Result<(), anyhow::Error> {
-        log::debug!("entering block merge self, {} {} other :  {} {} ", self.first, self.last, other.first, other.last);
+    pub(crate) fn merge(&mut self, other: &BlockPoint<'a, T>) -> Result<(), anyhow::Error> {
+        log::debug!(
+            "entering block merge self, {} {} other :  {} {} ",
+            self.first,
+            self.last,
+            other.first,
+            other.last
+        );
         // check contiguity
         if self.last == other.first {
             self.last = other.last;
-        }
-        else if self.first == other.last {
+        } else if self.first == other.last {
             self.first = other.first;
-        }
-        else {
+        } else {
             log::error!("not contiguous blocks");
-            return Err(anyhow!("not contiguous blocks"));                    
+            return Err(anyhow!("not contiguous blocks"));
         }
         // update centroid of blocks
         self.centroid.merge(&other.centroid);
         //
-        log::debug!("exiting block merge self, {} {}, centroid : {:?}", self.first, self.last, self.centroid);
+        log::debug!(
+            "exiting block merge self, {} {}, centroid : {:?}",
+            self.first,
+            self.last,
+            self.centroid
+        );
         //
         return Ok(());
     } // end of merge
 
-
     /// return centroid
-    pub fn get_centroid(&self) ->  Point<T> {
+    pub fn get_centroid(&self) -> Point<T> {
         self.centroid
     }
 
@@ -182,133 +220,146 @@ impl <'a, T> BlockPoint<'a, T>
         &self.index[self.first..self.last]
     }
 
-
     // useful to build iterator. return a point given its rank in sorted index
-    fn get_point(&self, idx : usize) -> Option<&'a Point<T>> {
-        if idx < self.first || idx >= self.last{
+    fn get_point(&self, idx: usize) -> Option<&'a Point<T>> {
+        if idx < self.first || idx >= self.last {
             return None;
-        }
-        else {
+        } else {
             return Some(&self.points[self.index[idx]]);
         }
     } // end of get_point
 
-
     /// get number of points in block
     pub fn get_nb_points(&self) -> usize {
-        self.last- self.first
+        self.last - self.first
     }
 
     // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
-    fn is_ordered(&self, other : &BlockPoint<T>) -> bool {
+    fn is_ordered(&self, other: &BlockPoint<T>) -> bool {
         assert_eq!(self.direction, other.direction);
         let ordered = match self.direction {
             Direction::Ascending => {
-                if self.centroid.y < other.centroid.y { true } else { false}
-            },
+                if self.centroid.y < other.centroid.y {
+                    true
+                } else {
+                    false
+                }
+            }
             Direction::Descending => {
-                if self.centroid.y > other.centroid.y { true } else { false}
-            },
+                if self.centroid.y > other.centroid.y {
+                    true
+                } else {
+                    false
+                }
+            }
         };
         ordered
     } // end of is_ordered
 
-
-    /// debug utility, 
+    /// debug utility,
     #[allow(unused)]
     pub fn dump(&self) {
         log::debug!("\n \n block dump");
-        println!("first last centroid : {}  {}   {:?}", self.first, self.last, self.centroid);
-//        println!("index : {:?}", self.index);
+        println!(
+            "first last centroid : {}  {}   {:?}",
+            self.first, self.last, self.centroid
+        );
+        //        println!("index : {:?}", self.index);
         println!(" first points :");
-        let nbd = (self.last-self.first).min(3);
+        let nbd = (self.last - self.first).min(3);
         for i in 0..nbd {
-            println!(" point i : {}  : {:?}", i , self.points[self.index[self.first+i]]);
+            println!(
+                " point i : {}  : {:?}",
+                i,
+                self.points[self.index[self.first + i]]
+            );
         }
         println!(" last points :");
-        let nbd = (self.last-self.first).min(3).min(self.index.len());
+        let nbd = (self.last - self.first).min(3).min(self.index.len());
         for i in (1..nbd).rev() {
-            println!(" point i : {}  : {:?}", i , self.points[self.index[self.last-i]]);
-        }         
+            println!(
+                " point i : {}  : {:?}",
+                i,
+                self.points[self.index[self.last - i]]
+            );
+        }
     }
 
     /// get an iterator over points in block
-    pub fn get_point_iter(&'a self) -> PointIterator<'a,T> {
+    pub fn get_point_iter(&'a self) -> PointIterator<'a, T> {
         return PointIterator::new(&self, self.index);
     }
 } // end of impl BlockPoint
 
-
-
-impl <'a, T:Float + Debug> PartialEq for BlockPoint<'a,T> {
+impl<'a, T: Float + Debug> PartialEq for BlockPoint<'a, T> {
     fn eq(&self, other: &BlockPoint<T>) -> bool {
         self.centroid.eq(&other.centroid)
     }
-} // end of impl PartialOrd for BlockPoint<T> 
-
+} // end of impl PartialOrd for BlockPoint<T>
 
 /// ordering with respect to x (!!) for sorting methods. But centroids are classified  with respect to y!
-impl <'a, T:Float + Debug> PartialOrd for BlockPoint<'a,T> {
+impl<'a, T: Float + Debug> PartialOrd for BlockPoint<'a, T> {
     fn partial_cmp(&self, other: &BlockPoint<T>) -> Option<std::cmp::Ordering> {
         self.centroid.x.partial_cmp(&other.centroid.x)
     }
-} // end of impl PartialOrd for BlockPoint<T> 
+} // end of impl PartialOrd for BlockPoint<T>
 
 // ==========
 
-
 /// An iterator over points in a Block
-pub struct PointIterator<'a, T:Float + Debug> {
+pub struct PointIterator<'a, T: Float + Debug> {
     // block of point
-    block : BlockPoint<'a, T> ,
+    block: BlockPoint<'a, T>,
     /// so that i -> points\[sorted_index\[i\]\] is sorted according to direction
-    index : &'a[usize],
+    index: &'a [usize],
     /// index between block.first... block.last
-    pt_index : usize,
+    pt_index: usize,
 } // end of struct PointIterator
 
-
-
-impl<'a, T> PointIterator<'a, T> 
-    where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug {
-
-    pub fn new(block : &'a BlockPoint<'a, T>, index : &'a[usize]) -> Self {
-        PointIterator{block: block.clone(), index:index, pt_index : block.get_first_index()}
+impl<'a, T> PointIterator<'a, T>
+where
+    T: Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug,
+{
+    pub fn new(block: &'a BlockPoint<'a, T>, index: &'a [usize]) -> Self {
+        PointIterator {
+            block: block.clone(),
+            index: index,
+            pt_index: block.get_first_index(),
+        }
     }
-
 } // end of impl<'a, T> PointIterator
 
-
-
-impl <'a, T> Iterator for PointIterator<'a, T> 
-            where T : Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug  {
+impl<'a, T> Iterator for PointIterator<'a, T>
+where
+    T: Float + std::ops::DivAssign + std::ops::AddAssign + std::ops::DivAssign + Debug,
+{
     //
     type Item = (&'a Point<T>, usize);
     /// next returns a (&point, rank) in array of *unsorted* points as given to the isotonic regression allocator
     fn next(&mut self) -> Option<Self::Item> {
-        if self.pt_index >= self.block.get_last_index() || self.pt_index < self.block.get_first_index() {
+        if self.pt_index >= self.block.get_last_index()
+            || self.pt_index < self.block.get_first_index()
+        {
             return None;
-        }
-        else {
+        } else {
             let point = self.block.get_point(self.pt_index).unwrap();
             let idx = self.pt_index;
             self.pt_index += 1;
             return Some((point, self.index[idx]));
         }
     } // end of next
-
 } // end  of impl Iterator for PointIterator<'a, T>
 
 //=========================================================================================================
 
-
-
-pub(crate) fn get_point_blocnum<T>(regression : &IsotonicRegression<T>) -> Vec<u32> 
-    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug {
-        //
+pub(crate) fn get_point_blocnum<T>(regression: &IsotonicRegression<T>) -> Vec<u32>
+where
+    T: Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug,
+{
+    //
     let index = regression.get_point_index();
     // essentially we invert index
-    let mut rank :Vec::<usize> = (0..index.len()).into_iter().map(|_| 0).collect();
+    let mut rank: Vec<usize> = (0..index.len()).into_iter().map(|_| 0).collect();
     for i in 0..index.len() {
         let k = index[i];
         rank[k] = i;
@@ -316,9 +367,9 @@ pub(crate) fn get_point_blocnum<T>(regression : &IsotonicRegression<T>) -> Vec<u
     // now for each value of rank we must find block such that block.first <= rank < block.last
     let nb_blocks = regression.get_nb_block();
     let mut nb_found = 0;
-    let mut blocknum : Vec::<u32> = (0..index.len()).into_iter().map(|_| 0).collect();
-    let mut last_b_found : usize = 0;
-    let mut found : bool;
+    let mut blocknum: Vec<u32> = (0..index.len()).into_iter().map(|_| 0).collect();
+    let mut last_b_found: usize = 0;
+    let mut found: bool;
     for i in 0..index.len() {
         let k = index[i];
         found = false;
@@ -328,7 +379,12 @@ pub(crate) fn get_point_blocnum<T>(regression : &IsotonicRegression<T>) -> Vec<u
             if i >= block.get_first_index() && i < block.get_last_index() {
                 blocknum[k] = b as u32;
                 nb_found += 1;
-                log::debug!("PointBlockLocator setting point index: {}, rank : {}, set to blocnum  : {}", i, k, b);
+                log::debug!(
+                    "PointBlockLocator setting point index: {}, rank : {}, set to blocnum  : {}",
+                    i,
+                    k,
+                    b
+                );
                 last_b_found = b;
                 found = true;
                 break;
@@ -343,39 +399,42 @@ pub(crate) fn get_point_blocnum<T>(regression : &IsotonicRegression<T>) -> Vec<u
     return blocknum;
 }
 
-
-
 /// This structure stores the affectation of each original point to its block
 pub struct PointBlockLocator {
     /// point`[i`] is to be found in blocknum`[i`]
-    blocknum : Vec<u32>
+    blocknum: Vec<u32>,
 }
 
-
-impl PointBlockLocator  {
-        //
-    pub fn new<T> (regression : &IsotonicRegression<T>)  -> Self 
-    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug {
-        PointBlockLocator{blocknum : get_point_blocnum(&regression)}
+impl PointBlockLocator {
+    //
+    pub fn new<T>(regression: &IsotonicRegression<T>) -> Self
+    where
+        T: Float
+            + std::iter::Sum
+            + FromPrimitive
+            + std::ops::AddAssign
+            + std::ops::DivAssign
+            + Debug,
+    {
+        PointBlockLocator {
+            blocknum: get_point_blocnum(&regression),
+        }
     } // end of new
 
     /// return the block of a point
-    pub fn get_point_block_num(&self, k : usize) -> Result<usize,anyhow::Error> {
+    pub fn get_point_block_num(&self, k: usize) -> Result<usize, anyhow::Error> {
         if k < self.blocknum.len() {
             Ok(self.blocknum[k] as usize)
-        }
-        else {
+        } else {
             Err(anyhow!("too large arg, not so many blocks"))
         }
     } // end of get_point_block_num
-
 
     /// return num bloc of each point
     pub fn get_point_blocnum(&mut self) -> &mut Vec<u32> {
         &mut self.blocknum
     }
-}  // end of PointBlockLocator
-
+} // end of PointBlockLocator
 
 //==========================================================================================================
 
@@ -383,21 +442,22 @@ impl PointBlockLocator  {
 /// centroid point of the original set.
 
 #[derive(Debug)]
-pub struct IsotonicRegression<'a, T:Float + Debug> {
-    direction : Direction,
+pub struct IsotonicRegression<'a, T: Float + Debug> {
+    direction: Direction,
     /// points, unsorted,
-    points: &'a[Point<T>],
+    points: &'a [Point<T>],
     /// index for sorting points according to direction
-    index : Vec<usize>,
+    index: Vec<usize>,
     // blocks. RefCell makes call to do_isotonic without &mut!
-    blocks : RefCell<Vec<BlockPoint<'a, T>>>,
+    blocks: RefCell<Vec<BlockPoint<'a, T>>>,
     // global centroid
     centroid_point: Point<T>,
 } // end of struct IsotonicRegression
 
-
-impl <'a, T> IsotonicRegression<'a, T> 
-    where T : Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug {
+impl<'a, T> IsotonicRegression<'a, T>
+where
+    T: Float + std::iter::Sum + FromPrimitive + std::ops::AddAssign + std::ops::DivAssign + Debug,
+{
     /// Find an ascending isotonic regression from a set of points
     pub fn new_ascending(points: &[Point<T>]) -> IsotonicRegression<T> {
         IsotonicRegression::new(points, Direction::Ascending)
@@ -420,30 +480,27 @@ impl <'a, T> IsotonicRegression<'a, T>
         let index;
         if points.len() > 0 {
             index = points.mergesort_indexed();
-        }
-        else {
+        } else {
             index = Vec::<usize>::new();
         }
-        let blocks = Vec::<BlockPoint::<'a, T>>::new();
+        let blocks = Vec::<BlockPoint<'a, T>>::new();
         log::debug!("initializing IsotonicRegression");
         IsotonicRegression {
             direction,
             points: points,
-            index : index,
-            blocks : RefCell::new(blocks),
+            index: index,
+            blocks: RefCell::new(blocks),
             centroid_point: Point::new(sum_x / point_count, sum_y / point_count),
         }
-    } // end of new 
-
+    } // end of new
 
     /// returns sorting index of original points in the order of the isotonic regression
     pub fn get_point_index(&self) -> &[usize] {
         &self.index
     } // end of get_point_index
 
-
-    // return indexes of original points in block blocknum. Does a copy! 
-    pub fn get_block_point_index<'b:'a>(&'b self, blocknum : usize) -> Option<Vec<usize>> {
+    // return indexes of original points in block blocknum. Does a copy!
+    pub fn get_block_point_index<'b: 'a>(&'b self, blocknum: usize) -> Option<Vec<usize>> {
         let blocks = self.get_blocks();
         if blocknum >= blocks.borrow().len() {
             return None;
@@ -452,22 +509,24 @@ impl <'a, T> IsotonicRegression<'a, T>
         return Some(indexes);
     } // end of get_point_index
 
-
     /// Find the _y_ point at position `at_x`
-    pub fn interpolate<'b:'a>(&'b self, at_x: T) -> T 
-        where T : Float {
+    pub fn interpolate<'b: 'a>(&'b self, at_x: T) -> T
+    where
+        T: Float,
+    {
         //
         log::debug!("interpolate nb blocks = {}", self.blocks.borrow().len());
         if self.blocks.borrow().len() == 0 {
             log::info!("uninitialized regression, running do_isotonic");
             let _res = self.do_isotonic();
         }
-        let blocks =  self.blocks.borrow();
+        let blocks = self.blocks.borrow();
         //
         if blocks.len() == 1 {
             return blocks[0].centroid.y;
         } else {
-            let pos = blocks.binary_search_by_key(&OrderedFloat(at_x), |p| OrderedFloat(p.centroid.x));
+            let pos =
+                blocks.binary_search_by_key(&OrderedFloat(at_x), |p| OrderedFloat(p.centroid.x));
             return match pos {
                 Ok(ix) => blocks[ix].centroid.y,
                 Err(ix) => {
@@ -484,7 +543,11 @@ impl <'a, T> IsotonicRegression<'a, T>
                             &at_x,
                         )
                     } else {
-                        interpolate_two_points(&blocks[ix - 1].centroid, &blocks[ix].centroid, &at_x)
+                        interpolate_two_points(
+                            &blocks[ix - 1].centroid,
+                            &blocks[ix].centroid,
+                            &at_x,
+                        )
                     }
                 }
             };
@@ -492,25 +555,22 @@ impl <'a, T> IsotonicRegression<'a, T>
     }
 
     /// Retrieve the points the input data points that make up the isotonic regression
-    pub fn get_points(&self) -> &'a[Point<T>] {
+    pub fn get_points(&self) -> &'a [Point<T>] {
         &self.points
     }
 
-    pub(crate) fn get_blocks<'b:'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
+    pub(crate) fn get_blocks<'b: 'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
         &self.blocks
     }
 
-
     /// return the BlockPoint of rank rank
-    pub fn get_block(&self, rank : usize) -> Option<BlockPoint<T>> {
+    pub fn get_block(&self, rank: usize) -> Option<BlockPoint<T>> {
         if rank < self.blocks.borrow().len() {
             Some(self.blocks.borrow()[rank])
-        }
-        else {
+        } else {
             None
         }
     } // get_block
-
 
     /// Retrieve the mean point of the original point set+
     pub fn get_centroid(&self) -> &Point<T> {
@@ -519,7 +579,7 @@ impl <'a, T> IsotonicRegression<'a, T>
 
     /// Finalize initialization of the structure.
     /// It is recommended to call it directly before calling interpolate as we can check that all is OK.
-    pub fn do_isotonic<'b:'a>(&'b self)-> Result<(), anyhow::Error>  {
+    pub fn do_isotonic<'b: 'a>(&'b self) -> Result<(), anyhow::Error> {
         //
         log::debug!("do_isotonic , nb points : {:?}", self.points.len());
         //
@@ -530,24 +590,37 @@ impl <'a, T> IsotonicRegression<'a, T>
         if self.blocks.borrow().len() != 0 {
             return Err(anyhow!("regression already done!"));
         }
-        //        
+        //
         let epsil = T::from(EPSIL).unwrap();
         // we must ensure that there is one initial block point by x coordinate, to guarantee consistent block merge
-        let mut blocks: Vec<RefCell<BlockPoint<T>>>  = Vec::new(); 
+        let mut blocks: Vec<RefCell<BlockPoint<T>>> = Vec::new();
         for i in 0..self.points.len() {
-            let new_block = BlockPoint::<T>::new_from_point(self.direction, self.points, &self.index, i);
-            if !(i==0 || (i > 0 && self.points[self.index[i]].x >= self.points[self.index[i-1]].x)) {
-                log::warn!("i : {}, point : {:?}", i , self.points[self.index[i]].x);
+            let new_block =
+                BlockPoint::<T>::new_from_point(self.direction, self.points, &self.index, i);
+            if !(i == 0
+                || (i > 0 && self.points[self.index[i]].x >= self.points[self.index[i - 1]].x))
+            {
+                log::warn!("i : {}, point : {:?}", i, self.points[self.index[i]].x);
                 if i > 0 {
-                    log::warn!("point i-1 : {:?}, point i : {:?}", self.points[self.index[i-1]].x, self.points[self.index[i]].x);
+                    log::warn!(
+                        "point i-1 : {:?}, point i : {:?}",
+                        self.points[self.index[i - 1]].x,
+                        self.points[self.index[i]].x
+                    );
                 }
             }
-//            assert!(i==0 || (i > 0 && self.points[self.index[i]].x >= self.points[self.index[i-1]].x));
-            if i== 0 || ( i>0 && self.points[self.index[i]].x - self.points[self.index[i-1]].x > epsil) {
+            //            assert!(i==0 || (i > 0 && self.points[self.index[i]].x >= self.points[self.index[i-1]].x));
+            if i == 0
+                || (i > 0
+                    && self.points[self.index[i]].x - self.points[self.index[i - 1]].x > epsil)
+            {
                 blocks.push(RefCell::new(new_block));
-            }
-            else {
-                log::debug!("merging two equal points {:#?} {:#?}", self.points[self.index[i-1]].x, self.points[self.index[i]].x);
+            } else {
+                log::debug!(
+                    "merging two equal points {:#?} {:#?}",
+                    self.points[self.index[i - 1]].x,
+                    self.points[self.index[i]].x
+                );
                 let last_block = blocks.pop().unwrap();
                 last_block.borrow_mut().merge(&new_block).unwrap();
                 blocks.push(last_block);
@@ -555,31 +628,40 @@ impl <'a, T> IsotonicRegression<'a, T>
         }
         log::info!("nb blocks before ordering violation : {}", blocks.len());
         //
-        
+
         // we merge blocks as soon there is an ordering violation
         // We scan points according to index. The test of block creation must depend on direction.
-        let mut iso_blocks : Vec<RefCell<BlockPoint<T>>>  = Vec::new(); 
+        let mut iso_blocks: Vec<RefCell<BlockPoint<T>>> = Vec::new();
         // TODO possibly we get cache problem and we need to work on a cloned sorted point array? at memory expense
         for i in 0..blocks.len() {
             // check violation with preceding block
             let mut inserted = false;
             let new_iso = blocks[i].clone();
             while !inserted {
-                if iso_blocks.is_empty() || iso_blocks.last().unwrap().borrow().is_ordered(&new_iso.borrow()) {
-                    log::debug!("\n inserting new block, centroid : {:?} ", new_iso.borrow().centroid);
+                if iso_blocks.is_empty()
+                    || iso_blocks
+                        .last()
+                        .unwrap()
+                        .borrow()
+                        .is_ordered(&new_iso.borrow())
+                {
+                    log::debug!(
+                        "\n inserting new block, centroid : {:?} ",
+                        new_iso.borrow().centroid
+                    );
                     iso_blocks.push(new_iso.clone());
                     inserted = true;
-                }
-                else {
+                } else {
                     let previous = iso_blocks.pop().unwrap();
                     new_iso.borrow_mut().merge(&previous.borrow()).unwrap();
                 }
             }
         } // end of for on blocks
-        //
+          //
         log::info!("\n after final merge nb blocks = {}", iso_blocks.len());
         // transfer to raw blocks
-        let final_blocks : Vec<BlockPoint<T>> = iso_blocks.into_iter().map(|obj|  obj.into_inner() ).collect();
+        let final_blocks: Vec<BlockPoint<T>> =
+            iso_blocks.into_iter().map(|obj| obj.into_inner()).collect();
         *self.blocks.borrow_mut() = final_blocks;
         if log::log_enabled!(log::Level::Debug) {
             self.print_blocks();
@@ -587,15 +669,15 @@ impl <'a, T> IsotonicRegression<'a, T>
         }
         //
         return Ok(());
-    }  // end of do_isotonic
+    } // end of do_isotonic
 
     /// get number of blocks of result
     pub fn get_nb_block(&self) -> usize {
         self.blocks.borrow().len()
     }
 
-    /// return the centroid of a block 
-    pub fn get_block_centroid(&self, bloc : usize) -> Result<Point<T>, ()> {
+    /// return the centroid of a block
+    pub fn get_block_centroid(&self, bloc: usize) -> Result<Point<T>, ()> {
         if bloc > self.get_nb_block() {
             return Err(());
         }
@@ -608,16 +690,14 @@ impl <'a, T> IsotonicRegression<'a, T>
         let blocks = self.blocks.borrow();
         for i in 0..blocks.len() {
             if i == 0 {
-                assert_eq!(blocks[0].first,0);
-            }
-            else {
-                assert_eq!(blocks[i-1].last, blocks[i].first);
+                assert_eq!(blocks[0].first, 0);
+            } else {
+                assert_eq!(blocks[i - 1].last, blocks[i].first);
             }
         }
         assert_eq!(blocks.last().unwrap().last, self.points.len());
         return true;
     } // end of check_blocks
-
 
     // debugging method
     pub(crate) fn print_blocks(&self) {
@@ -627,10 +707,7 @@ impl <'a, T> IsotonicRegression<'a, T>
             blocks[i].dump();
         }
     } // end of get_nb_blocks
-
-} // end of impl  IsotonicRegression<'a, T> 
-
-
+} // end of impl  IsotonicRegression<'a, T>
 
 #[cfg(test)]
 mod tests {
@@ -638,8 +715,7 @@ mod tests {
 
     fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();
-    }  
-
+    }
 
     #[test]
     fn usage_example() {
@@ -653,29 +729,27 @@ mod tests {
         ];
         let regression = IsotonicRegression::new_ascending(points);
         regression.do_isotonic().unwrap();
-        assert_eq!(
-            regression.interpolate(1.5), 1.75
-        );
+        assert_eq!(regression.interpolate(1.5), 1.75);
     }
 
     #[test]
     fn isotonic_no_points() {
-    log_init_test();
-    //
-    let points :  &[Point::<f64>; 0] = &[];
-    let regression = IsotonicRegression::new_ascending(points);
-    let res = regression.do_isotonic();
-    if res.is_err() {
-        println!("{:?}",res.as_ref().err().unwrap());
-    }
-    assert!(&res.is_err());
+        log_init_test();
+        //
+        let points: &[Point<f64>; 0] = &[];
+        let regression = IsotonicRegression::new_ascending(points);
+        let res = regression.do_isotonic();
+        if res.is_err() {
+            println!("{:?}", res.as_ref().err().unwrap());
+        }
+        assert!(&res.is_err());
     }
 
     #[test]
     fn isotonic_one_point() {
         log_init_test();
         //
-        let points =&[Point::<f64>::new(1.0, 2.0)];
+        let points = &[Point::<f64>::new(1.0, 2.0)];
         let regression = IsotonicRegression::new(points, Direction::Ascending);
         let res = regression.do_isotonic();
         assert!(res.is_ok());
@@ -689,7 +763,7 @@ mod tests {
         log_init_test();
         let mut point = Point::<f64>::new(1.0, 2.0);
         point.merge(&Point::<f64>::new(2.0, 0.0));
-        //        
+        //
         assert_eq!(point, Point::new_with_weight(1.5, 1.0, 2.0));
     }
 
@@ -698,7 +772,11 @@ mod tests {
         //
         log_init_test();
         //
-        let points = &[ Point::new(0.5, -0.5), Point::new(2.0, 0.0), Point::new(1.0, 2.0)];
+        let points = &[
+            Point::new(0.5, -0.5),
+            Point::new(2.0, 0.0),
+            Point::new(1.0, 2.0),
+        ];
         let regression = IsotonicRegression::new(points, Direction::Ascending);
         let res = regression.do_isotonic();
         assert!(res.is_ok());
@@ -716,13 +794,16 @@ mod tests {
         assert_eq!(locator.get_point_block_num(2).unwrap(), 1);
     } // end of isotonic_one_not_merged
 
-
     #[test]
     fn isotonic_merge_three() {
         //
         log_init_test();
-        // 
-        let points = &[Point::new(0.0, 1.0), Point::new(1.0, 2.0), Point::new(2.0, -1.0)];
+        //
+        let points = &[
+            Point::new(0.0, 1.0),
+            Point::new(1.0, 2.0),
+            Point::new(2.0, -1.0),
+        ];
         let regression = IsotonicRegression::new(points, Direction::Ascending);
         let res = regression.do_isotonic();
         assert!(res.is_ok());
@@ -736,19 +817,17 @@ mod tests {
     fn test_interpolate() {
         //
         log_init_test();
-        // 
+        //
         let points = [Point::new(1.0, 5.0), Point::new(2.0, 7.0)];
-        let regression =
-            IsotonicRegression::new_ascending(&points);
+        let regression = IsotonicRegression::new_ascending(&points);
         assert!((regression.interpolate(1.5) - 6.0).abs() < f64::EPSILON);
     }
-
 
     #[test]
     fn test_isotonic_ascending() {
         //
         log_init_test();
-        // 
+        //
         let points = &[
             Point::new(0.0, 1.0),
             Point::new(1.0, 2.0),
@@ -757,14 +836,10 @@ mod tests {
 
         let regression = IsotonicRegression::new_ascending(points);
         let _res = regression.do_isotonic();
-        assert_eq!(regression.get_nb_block(),1);
+        assert_eq!(regression.get_nb_block(), 1);
         assert_eq!(
             regression.get_block_centroid(0).unwrap(),
-            Point::new_with_weight(
-                (0.0 + 1.0 + 2.0) / 3.0,
-                (1.0 + 2.0 - 1.0) / 3.0,
-                3.0
-            )
+            Point::new_with_weight((0.0 + 1.0 + 2.0) / 3.0, (1.0 + 2.0 - 1.0) / 3.0, 3.0)
         )
     } // end of test_isotonic_ascending
 
@@ -772,7 +847,7 @@ mod tests {
     fn test_isotonic_descending() {
         //
         log_init_test();
-        // 
+        //
         let points = &[
             Point::new(0.0, -1.0),
             Point::new(1.0, 2.0),
@@ -780,7 +855,7 @@ mod tests {
         ];
         let regression = IsotonicRegression::new_descending(points);
         let _res = regression.do_isotonic();
-        assert_eq!(regression.get_nb_block(),1);
+        assert_eq!(regression.get_nb_block(), 1);
         assert_eq!(
             regression.get_block_centroid(0).unwrap(),
             Point::new_with_weight(1.0, 2.0 / 3.0, 3.0)
@@ -791,7 +866,7 @@ mod tests {
     fn test_descending_interpolation() {
         //
         log_init_test();
-        // 
+        //
         let points = [
             Point::new(0.0, 3.0),
             Point::new(1.0, 2.0),
@@ -801,16 +876,13 @@ mod tests {
         assert_eq!(regression.interpolate(0.5), 2.5);
     }
 
-
     #[test]
     fn test_single_point_regression() {
         //
         log_init_test();
-        // 
+        //
         let points = [Point::new(1.0, 3.0)];
         let regression = IsotonicRegression::new_ascending(&points);
         assert_eq!(regression.interpolate(0.0), 3.0);
     }
-
-
 }

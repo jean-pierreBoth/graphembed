@@ -57,7 +57,7 @@ pub struct NodeSketchAsym {
 impl NodeSketchAsym {
     pub fn new(params: NodeSketchParams, mut trimat: TriMatI<f64, usize>) -> Self {
         //
-        log::debug!("allocating NodeSketchAsym : {:?}", params);
+        log::info!("allocating NodeSketchAsym : {:?}", params);
         //
         let csrmat = diagonal_augmentation(&mut trimat, 1.0);
         let csrmat_transposed = csrmat.transpose_view().to_owned().to_csr();

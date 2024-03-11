@@ -1,4 +1,4 @@
-# Orkut graph density analysis
+# Orkut embedded graph density analysis
 
 We examine the distances between neighbours in the ANN graph in the embedding space.
 
@@ -8,14 +8,14 @@ to the mean distance between neighbours not in the same block. The quantiles are
 |  quantile  | d_in/d_out |
 |  :---:     |  :---:     |
 |   0.05     |  0.48      |
-|   0.1      |  0.502     |
-|   0.25     |  0.65      |
-|   0.5      |  0.83      |  
-|   0.75     |  0.89      |
-|   0.9      |  0.918     |
-|   0.95     |  0.922     |
+|   0.1      |  0.52      |
+|   0.25     |  0.67      |
+|   0.5      |  0.82      |  
+|   0.75     |  0.87      |
+|   0.9      |  0.89      |
+|   0.95     |  0.90      |
 
-The mean ratio weighted by the total degree of departure block is 0.818
+The mean ratio weighted by the total degree of departure block is 0.81
 
 The embedded distance between neighbours in the same block is consistently less than the distance between neighbours not in the same blocks.
 Moreover the mean ratio obtained by weighting the ratio by the total degree of a block (number of edges with at least one point in a given block) is a bit less than the median so larger block seem also consistently embedded.
@@ -51,13 +51,13 @@ Statistics are gathered on the 208 blocks.
 
 |  quantile  | blocks kld |
 |  :---:     |  :---:     |
-|   0.05     |  0.05      |
-|   0.1      |  0.05      |
-|   0.25     |  0.062     |
-|   0.5      |  0.084     |  
-|   0.75     |  0.096     |
-|   0.9      |  0.106     |
-|   0.95     |  0.114     |
+|   0.05     |  0.044     |
+|   0.1      |  0.046     |
+|   0.25     |  0.056     |
+|   0.5      |  0.070     |  
+|   0.75     |  0.086     |
+|   0.9      |  0.096     |
+|   0.95     |  0.110     |
 
 Transition from blocks are in agreement between the original graph and the embedded.  
 

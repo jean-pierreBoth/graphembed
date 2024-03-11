@@ -1,9 +1,9 @@
-//! example of density decompositon for Orkut graph [https://snap.stanford.edu/data/com-Orkut.html]
+//! example of density decompositon for Orkut graph [orkut](https://snap.stanford.edu/data/com-Orkut.html)
 //!
 //! The graph is undirected with 3072441 nodes and 117 185 083 edges
 //!
 //!
-//! The purpose of this example is to test coherence of okut embedding
+//! The purpose of this example executable is to test coherence of orkut embedding.  
 //! We analyze :
 //!   - embedded distances inside communities and at community frontiers
 //!   - embedded distance inside blocks of stable decomposition and at their frontier
@@ -87,8 +87,8 @@ use hdrhistogram::Histogram;
 
 /// Directory containing the 2 data files
 /// TODO: use clap in main
-const ORKUT_DATA_DIR: &'static str = "/home/jpboth/Data/Graphs/Orkut/";
-const DUMP_DIR: &'static str = "/home/jpboth/graphembed/Runs/";
+const ORKUT_DATA_DIR: &'static str = "/home/jpboth/Data/Graph/Orkut/";
+const DUMP_DIR: &'static str = "/home/jpboth/Rust/graphembed/";
 
 /// Read graph (given as csv) and ground truth communities
 fn read_orkut_graph(dirpath: &Path) -> Result<Graph<u32, f64, Undirected, u32>, anyhow::Error> {
@@ -240,14 +240,13 @@ pub fn main() {
     // check if we have a stored decomposition
     //
     let dump_path = Path::new(DUMP_DIR);
+    let fname = "orkut-decomposition.json";
     //
-    let fileres = OpenOptions::new()
-        .read(true)
-        .open(&dump_path.join("orkut-decomposition.json"));
+    let fileres = OpenOptions::new().read(true).open(&dump_path.join(fname));
     if fileres.is_err() {
         log::error!(
             "reload could not open file {:?}, will do decomposition",
-            dump_path.as_os_str()
+            dump_path.join(fname)
         );
         log::error!(
             "orkut-decomposition.json not found, run orkut_hnsw to be able to reload decomposition"
@@ -258,7 +257,7 @@ pub fn main() {
     }
     log::info!("found json file for stored decomposition");
     // we reload decomposition
-    let res = StableDecomposition::reload_json(dump_path);
+    let res = StableDecomposition::reload_json(&dump_path.join(fname));
     if res.is_err() {
         log::info!("could not reload json decompositon");
         panic!("found orkut decompositon but could not reload it")
@@ -310,7 +309,7 @@ pub fn main() {
     //
     // we reload the hnsw dumped by example orkut_hnsw
     //
-    let path = Path::new("DUMP_DIR");
+    let path = Path::new(DUMP_DIR);
     let reloader = HnswIo::new(path.to_path_buf(), String::from("orkuthnsw"));
     let mydist = DistPtr::<usize, f64>::new(jaccard_distance::<usize>);
 

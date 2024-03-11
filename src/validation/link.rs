@@ -6,6 +6,12 @@
 //!
 //! The scoring function for similarity is based upon the distance relative to the Embedded being tested
 //! Jaccard for nodesketch and L2 for Atp
+//!
+//! Deletion of edges is done differently depending on the symetry/asymetry of the graph.  
+//! For a symetric graph edge i->j and j->i are deleted/kept together and for an asymetric graph they are treated independantly.
+//! It is possible to treat edge deletion for a symetric graph as in the asymetric. See [crate::embed]
+//!
+//!
 
 /// We first implement precision measure as described in
 ///       - Link Prediction in complex Networks : A survey
@@ -49,6 +55,12 @@ where
     F: Default + Copy,
 {
     //
+    log::debug!(
+        "filter_csmat symetric mode : {}, delete proba : {:.3e}",
+        symetric,
+        delete_proba
+    );
+    //
     assert!(delete_proba < 1. && delete_proba > 0.);
     log::debug!(
         "filter_csmat, delete proba {}, symetric : {}",
@@ -77,10 +89,7 @@ where
     //
     let mut discarded: usize = 0;
     let mut nb_isolation_not_discarded: usize = 0;
-    let nb_to_discard = match symetric {
-        true => 2 * (nb_edge as f64 * delete_proba) as usize,
-        false => (nb_edge as f64 * delete_proba) as usize,
-    };
+    let nb_to_discard = (nb_edge as f64 * delete_proba) as usize;
     //
     log::debug!(
         "csrmat nb edge : {}, number to discard {}",
@@ -115,10 +124,28 @@ where
         }
         if !discard {
             // we keep edge in triplets
-            rows.push(row);
-            cols.push(col);
-            values.push(*value);
+            if !symetric {
+                rows.push(row);
+                cols.push(col);
+                values.push(*value);
+            }
+            // in symetric mode !discard is significant only when row < col!
+            else {
+                if row < col {
+                    rows.push(row);
+                    cols.push(col);
+                    values.push(*value);
+                    rows.push(col);
+                    cols.push(row);
+                    values.push(*value);
+                } else if row == col {
+                    rows.push(row);
+                    cols.push(col);
+                    values.push(*value);
+                }
+            }
         } else {
+            assert!(row != col);
             log::trace!("link:validation deleting edge {}->{}", row, col);
             deleted_edge.insert((row, col));
             degrees[row].d_out -= 1;
@@ -145,9 +172,13 @@ where
         }
     } // end while
       //
+    assert_eq!(rows.len(), cols.len());
+    assert_eq!(cols.len(), values.len());
+    //
     log::info!(
-        " ratio discarded = {:.3e}",
-        discarded as f64 / (nb_edge as f64)
+        " ratio discarded = {:.3e} nb edges after deletion : {}",
+        discarded as f64 / (nb_edge as f64),
+        values.len()
     );
     if nb_isolation_not_discarded > 0 {
         log::info!(
@@ -490,7 +521,9 @@ where
     E: EmbeddedT<G> + std::marker::Sync,
 {
     //
-    log::debug!("in estimate_auc");
+    log::info!("=================================");
+    log::info!("in estimate_auc, symetric mode");
+    log::info!("=================================");
     // we allocate as many random generator we need for each iteration for future // of iterations
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(456231);
     let mut rngs = Vec::<Xoshiro256PlusPlus>::with_capacity(nbiter);
@@ -534,7 +567,8 @@ where
 //
 //
 
-/// Estimate VertexCentrix Measure of Performance according to [vcmpr}(https://www.pnas.org/doi/10.1073/pnas.2312527121)
+/// Estimate VertexCentrix Measure of Performance according to [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121)
+#[doc(hidden)]
 pub fn estimate_vcmpr<F, G, E>(
     csmat: &CsMatI<F, usize>,
     _nbiter: usize,
@@ -542,14 +576,38 @@ pub fn estimate_vcmpr<F, G, E>(
     delete_proba: f64,
     symetric: bool,
     embedder: &(dyn Fn(TriMatI<F, usize>) -> E + Sync),
-) -> Result<CKMS<f64>, usize>
-where
+) where
     F: Default + Copy + std::marker::Sync,
     G: std::fmt::Debug,
     E: EmbeddedT<G> + std::marker::Sync,
 {
+    // we begin by a degree estimation and vcmpr upper bound estimation
+    let degrees = get_csmat_degrees(csmat);
+    let mut degree_histogram = CKMS::<u32>::new(0.01);
+    for d in &degrees {
+        degree_histogram.insert(d.d_in);
+    }
+    log::trace!(
+        " degree_histogram cma : {:.3e}",
+        degree_histogram.cma().unwrap()
+    );
+    let nbslot = 20;
+    let mut qs = Vec::<f64>::with_capacity(30);
+    for i in 1..nbslot {
+        let q = i as f64 / nbslot as f64;
+        qs.push(q);
+    }
+    qs.push(0.99);
+    qs.push(0.999);
+    for q in qs {
+        log::info!(
+            "fraction : {:.3e}, degree : {}",
+            q,
+            degree_histogram.query(q).unwrap().1
+        );
+    }
     //
-    let mut histogram = CKMS::<f64>::new(0.01);
+    let histogram = std::sync::Arc::new(std::sync::RwLock::new(CKMS::<f64>::new(0.01)));
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(456231);
     // split edges into kept and discarded
     let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, &mut rng);
@@ -558,18 +616,23 @@ where
     for triplet in trimat.triplet_iter() {
         trimat_set.insert((triplet.1 .0, triplet.1 .1));
     }
+    log::debug!(
+        "trimat_set size : {} nb deleted edges : {}",
+        trimat_set.len(),
+        deleted_edges.len()
+    );
     //
     // embedder (passed as a closure)
     //
     let embedded = &embedder(trimat);
     if !embedded.is_symetric() {
-        log::error!("method estimate_vcmpr only possible for symetric embeddings");
-        return Err(1);
+        log::warn!("method estimate_vcmpr only possible for symetric embeddings");
+        //    return Err(1);
     }
 
     // sample nodes if there are too many.
     let uniform = Uniform::<f64>::new(0., 1.);
-    let nb_to_sample = 10000;
+    let nb_to_sample = 2000;
     let nb_nodes = csmat.shape().0;
     let fraction = if nb_to_sample >= nb_nodes {
         1.
@@ -585,16 +648,25 @@ where
     let degrees = csmat.degrees();
     let mean_degree = degrees.iter().sum::<usize>() as f64 / nb_nodes as f64;
     log::info!("mean degree : {:.3e}", mean_degree);
-    // loop on sampled nodes
-    let mut nb_sampled = 0;
-    for i in 0..nb_nodes {
-        if uniform.sample(&mut rng) >= fraction {
-            continue;
-        };
-        nb_sampled += 1;
-        let mut has_deleted = false;
+    // select nodes we will test
+    let selected_nodes: Vec<usize> = (0..nb_nodes)
+        .into_iter()
+        .map(|i| {
+            if uniform.sample(&mut rng) <= fraction {
+                i as i32
+            } else {
+                -1
+            }
+        })
+        .filter(|i| *i >= 0)
+        .map(|i| i as usize)
+        .collect();
+
+    let nb_sampled = selected_nodes.len();
+    log::info!("estimate_vcmpr nb nodes sampled : {}", nb_sampled);
+    //
+    let f = |i: usize| -> usize {
         // how good is the embedding of node i
-        let denominator = nb_edges_check.min(degrees[i]);
         // sort edges by decreasing length
         let mut neighbours_i: Vec<(usize, f64)> = (0..nb_nodes)
             .into_par_iter()
@@ -606,52 +678,87 @@ where
         assert!(
             neighbours_i.first().as_ref().unwrap().1 <= neighbours_i.last().as_ref().unwrap().1
         );
-        assert!(neighbours_i.first().as_ref().unwrap().1 == 0.);
+        //
+        if i <= 50 {
+            for k in 0..20 {
+                log::debug!(
+                    "neighbours_i beginning, i : {} j : {}, d = {:.3e}",
+                    i,
+                    neighbours_i[k].0,
+                    neighbours_i[k].1
+                );
+            }
+        }
         // we have to check nb_check among deleted edges from this node
         let mut nb_found = 0;
+        let mut nb_deleted = 0;
         let mut k = 0;
         for j in 1..neighbours_i.len() {
             // we bypass existing edges
-            if trimat_set.contains(&(i, j)) {
+            if trimat_set.contains(&(i, neighbours_i[j].0)) {
                 continue;
             }
             // we know we have a potential edge
             k = k + 1;
-            if !deleted_edges.contains(&(i, j)) {
-                continue;
+            if deleted_edges.contains(&(i, neighbours_i[j].0)) {
+                log::debug!(
+                    " node {}, degree : {}, edge rank : {}, neighbour : {},, dist : {:.3e}",
+                    i,
+                    degrees[i],
+                    k,
+                    neighbours_i[j].0,
+                    neighbours_i[j].1
+                );
+                nb_deleted += 1;
+                if k <= nb_edges_check {
+                    nb_found += 1;
+                } else {
+                    //            break;
+                    continue;
+                }
             }
-            // we know we have a delete edge
-            has_deleted = true;
-            // (i,j) is a deleted edge (and so (j,i) recall that!) and we are in the first nb_check non trained on edges
-            nb_found += 1;
-            if k >= nb_edges_check {
-                break;
-            }
-        } // end of for on deleted edges.
-        log::trace!("found edge deleted for node : {}", nb_found);
-        let precision = nb_found as f64 / denominator as f64;
-        if has_deleted {
-            histogram.insert(precision);
+        } // end loop on all potential edges
+        log::trace!(
+            "found edge deleted for node : {}, deleted : {}",
+            nb_found,
+            nb_deleted
+        );
+        if nb_deleted > 0 {
+            // if there is no deleted edge, how can this node contribute to anything??
+            let precision = nb_found as f64 / nb_deleted.min(nb_edges_check).min(degrees[i]) as f64;
+            log::debug!("inserting in histogram : {:.3e}", precision);
+            histogram.write().unwrap().insert(precision);
         }
-    } // end loop on nodes
-      //
+        1
+    };
+    //
+    let _res: Vec<usize> = selected_nodes.into_iter().map(|i| i | f(i)).collect();
+    //
+    let count = histogram.read().unwrap().count();
     log::info!(
         "nb nodes examined : {:?}, nb nodes with a deleted edge : {}",
         nb_sampled,
-        histogram.count()
+        count
     );
     //
-    for i in 0..20 {
-        let q = i as f64 / 20.;
+    if count > 0 {
+        for i in 0..=20 {
+            let q = i as f64 / 20.;
+            log::info!(
+                "quantiles at {:.3e} , vcmpr : {:.3e}",
+                q,
+                histogram.read().unwrap().query(q).unwrap().1
+            );
+        }
         log::info!(
-            "quantiles at {:.3e} , vcmpr : {:.3e}",
-            q,
-            histogram.query(q).unwrap().1
+            "average precision : {:.3e}",
+            histogram.read().unwrap().cma().unwrap(),
         );
+    } else {
+        log::error!("empty quantiles");
     }
-    log::info!("average precision : {:.3e}", histogram.cma().unwrap());
     //
-    return Ok(histogram);
+    return;
 } // end of estimate_vcmpr
 
 //================================================================================================================

@@ -1,17 +1,15 @@
 # Graphembed
 
-The purpose of this crate is to provide embedding of directed or undirected graphs with positively weighted edges
-and possibly discrete labels attached to nodes.
+This crate provides ,as a library and an executable,embedding of directed or undirected graphs with positively weighted edges.
 
-- embedding methods
-  
-  - For simple graphs, without data attached to nodes/labels, we provide 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
+
+  - For simple graphs, without data attached to nodes/labels, there are 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
+
+  - To complement the embeddings we provide also core decomposition of graphs (see the module **structure**). We give try to anaylze how Orkut communities are preserved through an embedding. (See Notebooks directory).
 
   - The module **gkernel** is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
     The algorithm is based on an extension of the hashing strategy used in the module **nodesketch**.  
     In the undirected case, this module also computes a global embedding vector for the whole graph. **It is still in an early version**.
-
-- To complement the embeddings we provide also core decomposition of graphs. See the module **structure**
 
 ## Methods
 
@@ -19,7 +17,7 @@ and possibly discrete labels attached to nodes.
 
 - **nodesketch**
 
-*NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  [https://dl.acm.org/doi/10.1145/3292500.3330951]  
+*NodeSketch : Highly-Efficient Graph Embeddings via Recursive Sketching KDD 2019*.  see [nodesketch](https://dl.acm.org/doi/10.1145/3292500.3330951)  
     D. Yang,P. Rosso,Bin-Li, P. Cudre-Mauroux.
 
 It is based on multi hop neighbourhood identification via sensitive hashing based on the recent algorithm **probminhash**. See [arxiv](https://arxiv.org/abs/1911.00675) or  [ieee-2022](https://ieeexplore.ieee.org/document/9185081).
@@ -31,16 +29,13 @@ a real distance on the embedding space for the symetric embedding.
 
 An extension of the paper is also implemented to get asymetric embedding for directed graph. The similarity is also based on the hash of sets (nodes going to or from) a given node but then the dissimilarity is no more a distance (no symetry and some discrepancy with the triangular inequality).
 
-**The orkut graph with 3 millions nodes and 100 millions of edge is embedded in less than 10' with a 8 core laptop with this algorithm with an AUC of 0.955**.
+**The orkut graph with 3 millions nodes and 100 millions of edge is embedded in 5' with a 24 core i9 laptop with this algorithm giving an AUC of 0.95**.
 
-- **gkernel**
-
-  We use the same scheme as in **nodesketch** but we hash the nodes labels so the embedding vectors are computed as the summary of node id's or labels attached to nodes flowing through the edges going into or from a node.
 
 - **atp**
 
-*Asymetric Transitivity Preserving Graph Embedding 2016*  
-    M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
+*Asymetric Transitivity Preserving Graph Embedding 2016*.
+    M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu. See [hope](https://dl.acm.org/doi/10.1145/2939672.2939751).
 
 The objective is to provide an asymetric graph embedding and get estimate of the precision of the embedding in function of its dimension.  
 
@@ -58,7 +53,12 @@ The svd is approximated by randomization as described in Halko-Tropp 2011 as imp
     M.Danisch T.H Hubert Chan and M.Sozio
 
 The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation* and the comments on the embedding of the *Orkut* graph where we can use the community data provided with the graph to analyze the behaviour of embedded edge lengths.  
-In particular it is shown that embedding of edges internal to a community are consistently smaller than embedded edges crossing a block frontier, see results in [orkut.md](./orkut.md) and examples directory together with a small Rust notebook in [Notebooks](./Notebooks/orkutrs.ipynb)
+
+In particular it is shown that :
+  - embedding of edges internal to a community are consistently smaller than embedded edges crossing a block frontier. 
+  - The transition probabilities of edge from one block to another are similar (low kullback divergence) in the original graph and in the embedded graph.
+ 
+  See results in [orkut.md](./orkut.md) and examples directory together with a small Rust notebook in directory [Notebooks](./Notebooks/orkutrs.ipynb)
 
 ## Some data sets
 
@@ -114,6 +114,9 @@ A more global analysis of the embedding with the nodesketch module is done for t
 
 - The munmun_twitter_social graph shows that treating a directed graph as an undirected graph give significantly different results in terms of link prediction AUC.
 
+
+
+
 ## Generalized Svd
 
 An implementation of Generalized Svd comes as a by-product in module [gsvd](./src/atp/gsvd.rs).
@@ -141,7 +144,19 @@ The general syntax is :
     embed file_description [validation_command --validation_arguments] sketching mode  --embedding_arguments  
     for example:  
 
-        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric "true" validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5
+  For a symetric graph we get:
+
+- just embedding:
+        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt --symetric  sketching --decay 0.2  --dim 200 --nbiter 
+
+- embedding and validation:
+ 
+        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 --symetric
+
+For an asymetric graph we get 
+
+       embed --csv ./Data/Graphs/asymetric.csv  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 
+
 
     It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
 
