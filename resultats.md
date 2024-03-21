@@ -14,10 +14,10 @@ is given in the column *"ratio discarded"*.
 Edges of symetric graphs are treated as 2 different edges, one for each orientation. For link prediction, in the symetric case the 2 orientated
 edges are deleted,  in asymetric case, only one edge is deleted.
 
-Computation times are those for **one embedding** with the same parameters as the validation and not the time
-for the whole validation iterations.
-
+Computation times are wall clock times those for **one embedding** with the same parameters as the validation and not the time
+for the whole validation iterations. Cpu times depends on the level of parallelism of each algorithm.
 Timings are given for a 24-core (32 threads) i9 laptop with 64Gb memory
+
 ## Hope embedding results
 
 ### Adamic Adar mode
@@ -25,19 +25,23 @@ Timings are given for a 24-core (32 threads) i9 laptop with 64Gb memory
 The eigenvalue range give the range between higher and lower extracted singular value.
 
 The column *svd* specify how the randomized approximation of the svd was done.
-
-AUC is run with 5 successive runs.
+- (1) means rank subcommand 
+- (2) means precision subcommand
+AUC is run with at least 5 runs (depending on time needed by embedding).
 
 #### Symetric Graphs
 
-| graph      | nb nodes | nb edges |    svd(rank/epsil)    | ratio discarded | eigenvalue range | AUC (link) | time(s) |
-| ---------- | -------- | -------- | :-------------------: | :-------------: | :--------------: | ---------- | :-----: |
-| Gnutella8  | 6301     | 20777    |  rank 20, nbiter 10   |      0.137      |    21.6 - 4.8    | 0.82       |   1.2   |
-| Gnutella8  | 6301     | 20777    |  rank 100, nbiter 10  |      0.137      |    21.6 - 2.5    | 0.71       |   1.6   |
-| ca-AstroPh | 18772    | 396160   |       rank 100        |      0.15       |   83.7 - 14.3    | 0.964      |   11    |
-| ca-AstroPh | 18772    | 396160   |        rank 20        |      0.15       |    83.7 - 33     | 0.93       |   3.5   |
-| youtube    | 1134890  | 2987624  |      maxrank 30       |      0.11       |    4270 - 218    | 0.60       |   490   |
-| youtube    | 1134890  | 2987624  | maxrank 75, bkiter 10 |      0.11       |    4270 - 140    | 0.64       |  1210   |
+| graph      | nb nodes | nb edges |           svd           | ratio discarded | eigenvalue range | AUC (link) | time(s) |
+| ---------- | -------- | -------- | :---------------------: | :-------------: | :--------------: | ---------- | :-----: |
+| Gnutella8  | 6301     | 20777    | rank 20, nbiter 10 (1)  |      0.137      |    21.6 - 4.8    | 0.82       |   1.2   |
+| Gnutella8  | 6301     | 20777    | rank 100, nbiter 10 (1) |      0.137      |    21.6 - 2.5    | 0.71       |   1.6   |
+| ca-AstroPh | 18772    | 396160   | rank 100, bkiter 3 (2)  |      0.15       |      34 - 3      | 0.93       |   <1    |
+| ca-AstroPh | 18772    | 396160   | rank 100, nbiter 5 (1)  |      0.15       |      35 - 5      | 0.938      |   <1    |
+| amazon     | 334863   | 925872   | rank 200, nbiter 5 (1)  |      0.15       |    150 - 9.9     | 0.84       |   63    |
+| youtube    | 1134890  | 2987624  | rank 75, bkiter 3  (2)  |      0.12       |    4270 - 140    | 0.64       |   834   |
+| youtube    | 1134890  | 2987624  | rank 30, nbiter 5  (1)  |      0.12       |    4270 - 471    | 0.90       |  1150   |
+
+The rank subcommand of Hope embedding seem more efficient
 
 #### Asymetric Graphs
 
@@ -73,13 +77,19 @@ AUC is run with 5 successive runs.
 |    100    |    5    |  0.2  |      0.148      |     0.947      |   0.5   |
 |    200    |    5    |  0.2  |      0.148      | 0.96 +- 0.0004 |   0.6   |
 
+### Amazon graph: nb nodes 334 000   nb edges 925 000
+
+| dimension | nb hops | decay | ratio discarded |   AUC +- sigma   | time(s) |
+| :-------: | :-----: | :---: | :-------------: | :--------------: | :-----: |
+|    200    |    3    |  0.3  |      0.118      | 0.963 +- 2.3 E-4 |    5    |
 
 #### youtube graph: nb nodes 1 134 890,   nb edges : 2 987 624 
 
 | dimension | nb hops | decay | ratio discarded |  AUC +- sigma  | time(s) |
 | :-------: | :-----: | :---: | :-------------: | :------------: | :-----: |
 |    200    |    2    |  0.2  |      0.119      | 0.914 +- 0.001 |   13    |
-|    200    |    3    |  0.2  |      0.119      | 0.901 +- 0.001 |   18    |
+|    200    |    3    |  0.2  |      0.119      | 0.899 +- 0.002 |   18    |
+|   1000    |    5    |  0.5  |      0.119      | 0.908 +- 0.002 |   145   |
 
 #### orkut graph. nb nodes 3 072 441 nb edges : 117 185 083
 

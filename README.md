@@ -93,6 +93,7 @@ Possibly some data can need to be converted from Tsv format to Csv, before being
 
 - Symetric
 
+  - Amazon.   Nodes: 334 863   Edges: 925 872  <https://snap.stanford.edu/data/amazon0601.html>
   - youtube.  Nodes: 1 134 890 Edges: 2 987 624 <https://snap.stanford.edu/data/com-Youtube.html>
   - orkut.    Nodes: 3 072 441 Edges: 117 185 083 <https://snap.stanford.edu/data/com-Orkut.html>
 
@@ -132,11 +133,13 @@ The choice of one feature is mandatory to provide required linear algebra librar
 
 ### Usage
 
+The embed module can be generated with the standard : cargo doc --no-deps --bin embed.  
+
 - The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
 It is intrinsically asymetric in nature. It nevertheless gives access to the spectrum of Adamic Adar matrix representing the graph and
 so to the required dimension to get a valid embedding in $R^{n}$.  
 
-- The Sketching embedding is much faster for large graphs but embeds in a space consisting in sequences of node id equipped with the Jaccard distance.
+- The Sketching embedding is much faster for large graphs but embeds in a space consisting in sequences of node id equipped with the Jaccard distance. It is particularly efficient in low degrees graph.
 
 - The *embed* module takes embedding and possibly validation commands (link prediction task) in one directive.  
 The general syntax is :

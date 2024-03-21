@@ -40,13 +40,16 @@
 //!
 //! 2. **Validation mode with estimation of AUC on link prediction task**.
 //!
-//!  The validation command has 2 parameters and one possible flag:
-//! - --nbpass
+//!  The validation command has 2 parameters and 2 possible flaga:
+//! - --nbpass  
 //!     It determines the number of validation pass to be done.  
-//! - --skip
+//! - --skip  
 //!     It determines the number of edges to delete in the validation pass. Recall that the real number of discarded edges
 //!     can be smaller as we must not make isolated points.
-//! - --symetric
+//! - --centric  
+//!     This flag is optional and asks for one pass of centric AUC computation after standard AUC link prediction (See [graphembed::validation::link::estimate_centric_auc()])
+//! - --symetric  
+//!     Specify we want the also the deletion of the reverse edge of of each deleted edge. See note downward.
 //!
 //!     It suffices to add the command : **validation --nbpass nbpass --skip fraction** before and instead  the "embedding" command name.
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
@@ -58,11 +61,11 @@
 //!   be done in asymetric mode.  
 //!   This inconvenience makes possible to treat a symetric as a way to assess asymetry effects**.
 //!
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope  precision --epsil 0.2 --maxrank 200  --blockiter 3
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation [--centric] --nbpass 10 --skip 0.1 hope  precision --epsil 0.2 --maxrank 200  --blockiter 3
 //!
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 hope  rank --targetrank 100  --nbiter 10
+//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation [--centric] --nbpass 10 --skip 0.1 hope  rank --targetrank 100  --nbiter 10
 //!
-//!     embed --csv wiki-Vote.txt --symetric false validation --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
+//!     embed --csv wiki-Vote.txt --symetric false validation [--centric] --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
 //!
 //! The module can be launched (and it is recommended) by preceding the command by setting the variable RUST_LOG to info (normal information) or debug (to get related info)
 //! as for example :  *RUST_LOG=graphembed=debug embed ....*
@@ -216,12 +219,20 @@ fn parse_validation_cmd(matches: &ArgMatches) -> Result<ValidationCmd, anyhow::E
     let nbpass = *matches
         .get_one::<usize>("nbpass")
         .expect("number of validation pass required");
+    //
     let delete_proba = *matches
         .get_one::<f64>("skip")
         .expect("could not parse skip parameter");
     //
+    let centric: bool = matches.get_flag("centric");
+    if centric {
+        log::info!("doing a centric auc pass after standard AUC link prediction");
+    } else {
+        log::info!("no centric pass on link prediction");
+    }
+    //
     let symetric = true; // default is symetric, we do not have here the global io parameter
-    let validation_params = ValidationParams::new(delete_proba, nbpass, symetric);
+    let validation_params = ValidationParams::new(delete_proba, nbpass, symetric, centric);
     //
     let embedding_cmd_res = parse_embedding_cmd(matches);
 
@@ -404,6 +415,12 @@ pub fn main() {
                 .action(ArgAction::Set)
                 .value_parser(clap::value_parser!(f64)),
         )
+        .arg(
+            Arg::new("centric")          // do we process amino acid file, default is dna, pass --aa
+               .long("centric")
+               .action(clap::ArgAction::SetTrue)
+                .help("--centric To ask for a centric validation pass after standard one, require no value")
+            )
         .subcommand(hope_cmd.clone())
         .subcommand(sketch_cmd.clone());
 
@@ -561,7 +578,7 @@ pub fn main() {
     match embedding_parameters.mode {
         EmbeddingMode::Hope => {
             log::info!("embedding mode : Hope");
-            log::debug!(
+            log::info!(
                 " hope parameters : {:?}",
                 embedding_parameters.hope.unwrap()
             );
@@ -592,6 +609,7 @@ pub fn main() {
                         params.get_delete_fraction(),
                         params.get_nbpass(),
                         symetric_graph,
+                        params.do_centric(),
                     );
                 }
                 log::debug!("validation parameters : {:?}", params);
@@ -610,11 +628,21 @@ pub fn main() {
                     symetric_graph,
                     &f,
                 );
-                if do_vcmpr {
-                    let _quant = link::estimate_vcmpr(
+                if params.do_centric() {
+                    if do_vcmpr {
+                        let _quant = link::estimate_vcmpr(
+                            &trimat.to_csr(),
+                            params.get_nbpass(),
+                            10,
+                            params.get_delete_fraction(),
+                            symetric_graph,
+                            &f,
+                        );
+                    }
+                    //
+                    link::estimate_centric_auc(
                         &trimat.to_csr(),
                         params.get_nbpass(),
-                        10,
                         params.get_delete_fraction(),
                         symetric_graph,
                         &f,
@@ -726,11 +754,21 @@ pub fn main() {
                         &f,
                     );
                     // we compare with VCMPR
-                    if do_vcmpr {
-                        let _quant = link::estimate_vcmpr(
+                    if validation_params.do_centric() {
+                        if do_vcmpr {
+                            let _quant = link::estimate_vcmpr(
+                                &trimat.to_csr(),
+                                validation_params.get_nbpass(),
+                                10,
+                                validation_params.get_delete_fraction(),
+                                symetric_graph,
+                                &f,
+                            );
+                        }
+                        //
+                        link::estimate_centric_auc(
                             &trimat.to_csr(),
                             validation_params.get_nbpass(),
-                            50,
                             validation_params.get_delete_fraction(),
                             symetric_graph,
                             &f,

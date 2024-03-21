@@ -22,6 +22,9 @@
 ///             David Liben-Nowell, J Kleinberg 2007
 use log::log_enabled;
 
+use cpu_time::ProcessTime;
+use std::time::SystemTime;
+
 use rand::distributions::{Distribution, Uniform};
 use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -34,7 +37,7 @@ use sprs::{CsMatI, TriMatI};
 use quantiles::ckms::CKMS;
 use rayon::prelude::*;
 
-use crate::embed::tools::{degrees::*, edge::Edge, edge::IN, edge::OUT};
+use crate::embed::tools::{correlation::*, degrees::*, edge::Edge, edge::IN, edge::OUT};
 use crate::embedding::EmbeddedT;
 
 pub enum ValidationMode {
@@ -565,8 +568,6 @@ where
 
 //
 //
-//
-
 /// Estimate VertexCentrix Measure of Performance according to [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121)
 #[doc(hidden)]
 pub fn estimate_vcmpr<F, G, E>(
@@ -581,16 +582,17 @@ pub fn estimate_vcmpr<F, G, E>(
     G: std::fmt::Debug,
     E: EmbeddedT<G> + std::marker::Sync,
 {
+    log::info!("in estimate_vcmpr");
+    //
+    let cpu_start = ProcessTime::now();
+    let sys_start = SystemTime::now();
+    //
     // we begin by a degree estimation and vcmpr upper bound estimation
     let degrees = get_csmat_degrees(csmat);
     let mut degree_histogram = CKMS::<u32>::new(0.01);
     for d in &degrees {
         degree_histogram.insert(d.d_in);
     }
-    log::trace!(
-        " degree_histogram cma : {:.3e}",
-        degree_histogram.cma().unwrap()
-    );
     let nbslot = 20;
     let mut qs = Vec::<f64>::with_capacity(30);
     for i in 1..nbslot {
@@ -627,45 +629,27 @@ pub fn estimate_vcmpr<F, G, E>(
     let embedded = &embedder(trimat);
     if !embedded.is_symetric() {
         log::warn!("method estimate_vcmpr only possible for symetric embeddings");
-        //    return Err(1);
     }
-
-    // sample nodes if there are too many.
-    let uniform = Uniform::<f64>::new(0., 1.);
-    let nb_to_sample = 2000;
+    // sample nodes according to paper algo or mine
     let nb_nodes = csmat.shape().0;
-    let fraction = if nb_to_sample >= nb_nodes {
-        1.
+    let nb_to_sample = 2000;
+    // do we choose paper algorithm or my modification.
+    let uniform_as_paper: bool = true;
+    //=================================
+    let selected_nodes = if uniform_as_paper {
+        sample_nodes_uniform(csmat, nb_to_sample)
     } else {
-        nb_to_sample as f64 / nb_nodes as f64
+        sample_nodes_by_degrees(csmat, nb_to_sample)
     };
-    log::debug!(
-        "nb nodes : {}, sampling fraction : {:.3e}, nb deleted_edges : {:?}",
-        nb_nodes,
-        fraction,
-        deleted_edges.len()
-    );
+    //
     let degrees = csmat.degrees();
     let mean_degree = degrees.iter().sum::<usize>() as f64 / nb_nodes as f64;
     log::info!("mean degree : {:.3e}", mean_degree);
     // select nodes we will test
-    let selected_nodes: Vec<usize> = (0..nb_nodes)
-        .into_iter()
-        .map(|i| {
-            if uniform.sample(&mut rng) <= fraction {
-                i as i32
-            } else {
-                -1
-            }
-        })
-        .filter(|i| *i >= 0)
-        .map(|i| i as usize)
-        .collect();
-
     let nb_sampled = selected_nodes.len();
     log::info!("estimate_vcmpr nb nodes sampled : {}", nb_sampled);
-    //
-    let f = |i: usize| -> usize {
+    // compute precision for node i
+    let f = |i: usize| -> f64 {
         // how good is the embedding of node i
         // sort edges by decreasing length
         let mut neighbours_i: Vec<(usize, f64)> = (0..nb_nodes)
@@ -718,21 +702,41 @@ pub fn estimate_vcmpr<F, G, E>(
                 }
             }
         } // end loop on all potential edges
-        log::trace!(
+        log::debug!(
             "found edge deleted for node : {}, deleted : {}",
             nb_found,
             nb_deleted
         );
-        if nb_deleted > 0 {
-            // if there is no deleted edge, how can this node contribute to anything??
-            let precision = nb_found as f64 / nb_deleted.min(nb_edges_check).min(degrees[i]) as f64;
+        //
+        let precision: f64;
+        let as_paper = false;
+        if as_paper {
+            precision = nb_found as f64 / nb_edges_check.min(degrees[i]) as f64;
             log::debug!("inserting in histogram : {:.3e}", precision);
             histogram.write().unwrap().insert(precision);
+        } else {
+            // here we depart from paper
+            // if there is no deleted edge, how can this node contribute to anything??
+            if nb_deleted > 0 {
+                precision = nb_found as f64 / nb_deleted.min(nb_edges_check).min(degrees[i]) as f64;
+                log::debug!("inserting in histogram : {:.3e}", precision);
+                histogram.write().unwrap().insert(precision);
+            } else {
+                precision = -1.; // here we depart from paper which returns 0.
+            }
         }
-        1
+        //
+        precision
     };
     //
-    let _res: Vec<usize> = selected_nodes.into_iter().map(|i| i | f(i)).collect();
+    let nodes_precision: Vec<(usize, f64)> = selected_nodes
+        .into_iter()
+        .map(|i| (i, f(i)))
+        .filter(|p| p.1 >= 0.)
+        .collect();
+    //
+    let selected_degrees: Vec<f64> = nodes_precision.iter().map(|t| t.0 as f64).collect();
+    let precision: Vec<f64> = nodes_precision.iter().map(|t| t.1).collect();
     //
     let count = histogram.read().unwrap().count();
     log::info!(
@@ -751,15 +755,252 @@ pub fn estimate_vcmpr<F, G, E>(
             );
         }
         log::info!(
-            "average precision : {:.3e}",
+            "average precision @{}: {:.3e}",
+            nb_edges_check,
             histogram.read().unwrap().cma().unwrap(),
         );
     } else {
         log::error!("empty quantiles");
     }
+    // get correlation between precision and degrees
+    let rho = pearson_cor(&selected_degrees, &precision);
+    log::info!("precision , degree correlation : {:.3e}", rho);
+    //
+    log::info!(
+        "\n estimate_vcmpr sys time(s) {:.2e} cpu time(s) {:.2e}",
+        sys_start.elapsed().unwrap().as_secs() as f64,
+        cpu_start.elapsed().as_secs()
+    );
     //
     return;
 } // end of estimate_vcmpr
+
+//
+//
+#[cfg_attr(doc, katexit::katexit)]
+///
+/// This function is inspired by the paper:  
+/// Link prediction using low-dimensional node embeddings:The measurement problem (2024)
+/// See [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121)
+///
+///
+/// We compute a vertex centric measure of performance, but instead of using a precision@k we take benefit
+/// of the sorting of all distances around a node to compute an AUC for each node examined.
+/// We note :
+/// - $nbnodes$ the number of nodes in the graph:
+/// - $n$ the node we are studying
+/// - $d$ the degree of $n$.
+/// - $de$ the number deleted edge having $n$ as extremity.  
+///
+///  So the node has $d$ - $de$ true edges after edge deletion (they are the train edges) and $nbnodes$ - $d$ + $de$ potential edges.
+///
+/// - We sort in increasing order all nodes distances to $n$ in the embedding (dot product for Hope or Jaccard for sketching)
+/// - We parse this array, noting $j$  the current position in the parsing loop.
+///   If j corresponds to a true (train) edge we increment the counter $k$ of true edges encountered up to j
+///   If j corresponds to a deleted (test) neighbour edge: the question we must answer is :  
+///     what is the probability that it has a smaller distance to our reference node $n$ than a random edge?    
+///   As the array is sorted, the response is just the number of indexes greater than j that do not correspond to a true edge so it is
+///     $$ (nbnodes - d  + de -(j - k))/ (nbnodes - d  + de) $$
+///   this fraction is linearly decreasing as j increases.    
+///   If $j=nbnodes$ and we have a deleted edge then this edge is the last we get $k = d - de$ and this last edge contributes 0.
+///   Averging over k we get the centric auc of n and finally averaging over n we get an estimate of centric auc over the graph.
+///
+pub fn estimate_centric_auc<F, G, E>(
+    csmat: &CsMatI<F, usize>,
+    _nbiter: usize,
+    delete_proba: f64,
+    symetric: bool,
+    embedder: &(dyn Fn(TriMatI<F, usize>) -> E + Sync),
+) where
+    F: Default + Copy + std::marker::Sync,
+    G: std::fmt::Debug,
+    E: EmbeddedT<G> + std::marker::Sync,
+{
+    log::info!("\n\n in estimate_centric_auc \n\n");
+    //
+    let cpu_start = ProcessTime::now();
+    let sys_start = SystemTime::now();
+    // we begin by a degree estimation and vcmpr upper bound estimation
+    let degrees = get_csmat_degrees(csmat);
+    let mut degree_histogram = CKMS::<u32>::new(0.01);
+    for d in &degrees {
+        degree_histogram.insert(d.d_in);
+    }
+    let nbslot = 20;
+    let mut qs = Vec::<f64>::with_capacity(30);
+    for i in 1..nbslot {
+        let q = i as f64 / nbslot as f64;
+        qs.push(q);
+    }
+    qs.push(0.99);
+    qs.push(0.999);
+    for q in qs {
+        log::info!(
+            "quantile fraction : {:.3e}, degree : {}",
+            q,
+            degree_histogram.query(q).unwrap().1
+        );
+    }
+    //
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(456231);
+    // split edges into kept and discarded
+    let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, &mut rng);
+    // need to store trimat index before move to embedding
+    let mut trimat_set = HashSet::<(usize, usize)>::with_capacity(trimat.nnz());
+    for triplet in trimat.triplet_iter() {
+        trimat_set.insert((triplet.1 .0, triplet.1 .1));
+    }
+    log::debug!(
+        "trimat_set size : {} nb deleted edges : {}",
+        trimat_set.len(),
+        deleted_edges.len()
+    );
+    //
+    // embedder (passed as a closure)
+    //
+    let embedded = &embedder(trimat);
+    if !embedded.is_symetric() {
+        log::warn!("method estimate_vcmpr only possible for symetric embeddings");
+    }
+    let nb_nodes = csmat.shape().0;
+    let nb_to_sample = 2000;
+    // sample nodes according to paper algo or mine
+    let uniform: bool = true;
+    //=======================
+    let selected_nodes = if uniform {
+        sample_nodes_uniform(csmat, nb_to_sample)
+    } else {
+        sample_nodes_by_degrees(csmat, nb_to_sample)
+    };
+    //
+    let degrees = csmat.degrees();
+    let mean_degree = degrees.iter().sum::<usize>() as f64 / nb_nodes as f64;
+    log::info!("mean degree : {:.3e}", mean_degree);
+    // select nodes we will test
+    let nb_sampled = selected_nodes.len();
+    log::info!("estimate_vcmpr nb nodes sampled : {}", nb_sampled);
+    // This function returns integral auc score on deleted edge
+    let count_deleted = |i: usize| -> usize {
+        let mut nb_deleted = 0;
+        for edge in &deleted_edges {
+            if edge.0 == i {
+                nb_deleted += 1;
+            }
+        }
+        nb_deleted
+    };
+    //
+    let compute_e_auc = |i: usize| -> Option<f64> {
+        // how good is the embedding of node i
+        // sort edges by decreasing length
+        let mut neighbours_i: Vec<(usize, f64)> = (0..nb_nodes)
+            .into_par_iter()
+            .map(|j| (j, embedded.get_noderank_distance(i, j)))
+            .collect();
+        // get neighbours sorted in increasing distance (small distance are most probable edges!)
+        neighbours_i.sort_unstable_by(|a, b| (a.1).partial_cmp(&b.1).unwrap());
+        //
+        assert!(
+            neighbours_i.first().as_ref().unwrap().1 <= neighbours_i.last().as_ref().unwrap().1
+        );
+        //
+        if i <= 50 {
+            for k in 0..20 {
+                log::debug!(
+                    "neighbours_i beginning, i : {} j : {}, d = {:.3e}",
+                    i,
+                    neighbours_i[k].0,
+                    neighbours_i[k].1
+                );
+            }
+        }
+        // how many  deleted edges from this node
+        let nb_deleted = count_deleted(i);
+        if nb_deleted == 0 {
+            return None; // if no edge deleted , cannot contribute to auc
+        }
+        let nb_potential_edges = nb_nodes - degrees[i] + nb_deleted;
+        let mut nb_found_true = 0;
+        let mut found_ranks = Vec::<usize>::with_capacity(degrees[i]);
+        for j in 1..neighbours_i.len() {
+            // we bypass existing edges
+            if trimat_set.contains(&(i, neighbours_i[j].0)) {
+                nb_found_true += 1;
+                continue;
+            }
+            // we know we have a potential edge
+            if deleted_edges.contains(&(i, neighbours_i[j].0)) {
+                log::debug!(
+                    " node {}, degree : {}, edge rank : {}, neighbour : {},, dist : {:.3e}",
+                    i,
+                    degrees[i],
+                    j,
+                    neighbours_i[j].0,
+                    neighbours_i[j].1
+                );
+                found_ranks.push(nb_potential_edges - (j - nb_found_true));
+            }
+        } // end loop on all potential edges
+        log::debug!(
+            "found edge deleted for node : {}, deleted : {}",
+            i,
+            found_ranks.len()
+        );
+        // compute auc
+        let mut e_auc: f64 = 0.;
+        for m in &found_ranks {
+            e_auc = *m as f64 / nb_potential_edges as f64;
+        }
+        //
+        log::debug!("node : {}, degree : {}, auc : {:.3e}", i, degrees[i], e_auc);
+        //
+        Some(e_auc)
+    };
+    //
+    let nodes_e_auc: Vec<(usize, f64)> = selected_nodes
+        .iter()
+        .map(|i| (i, compute_e_auc(*i)))
+        .filter(|node_opt| node_opt.1.is_some())
+        .map(|node_opt| (*node_opt.0, node_opt.1.unwrap()))
+        .collect();
+    //
+    log::info!(
+        "nb nodes examined : {:?}, nb nodes with a deleted edge : {}",
+        selected_nodes.len(),
+        nodes_e_auc.len()
+    );
+    // get degrees and auc for correlation output
+    let selected_degrees: Vec<f64> = nodes_e_auc.iter().map(|t| degrees[t.0] as f64).collect();
+    let selected_auc: Vec<f64> = nodes_e_auc.iter().map(|t| t.1).collect();
+    //
+    // dump histogram
+    //
+    if selected_auc.len() > 0 {
+        let mut histogram = CKMS::<f64>::new(0.01);
+        for f in &selected_auc {
+            histogram.insert(*f);
+        }
+        for i in 0..=20 {
+            let q = i as f64 / 20.;
+            log::info!(
+                "quantiles at {:.3e} , vcmpr : {:.3e}",
+                q,
+                histogram.query(q).unwrap().1
+            );
+        }
+        log::info!("average e_auc : {:.3e}", histogram.cma().unwrap(),);
+    }
+    //
+    let rho = pearson_cor::<f64>(&selected_degrees, &selected_auc);
+    log::info!("\n centric auc , degree correlation : {:.3e}", rho);
+    log::info!(
+        "\n estimate_centric_auc sys time(s) {:.2e} cpu time(s) {:.2e}",
+        sys_start.elapsed().unwrap().as_secs() as f64,
+        cpu_start.elapsed().as_secs()
+    );
+    //
+    return;
+} // end of estimate_centric_auc
 
 //================================================================================================================
 

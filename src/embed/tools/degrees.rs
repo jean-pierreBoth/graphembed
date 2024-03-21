@@ -3,8 +3,12 @@
 use anyhow::anyhow;
 
 use hdrhistogram::Histogram;
+use indexmap::set::IndexSet;
+use rand::distributions::{Distribution, Uniform, WeightedIndex};
 use sprs::CsMatI;
 use std::collections::HashMap;
+
+use rand::prelude::*;
 
 /// first component is in, second component is out!
 #[derive(Copy, Clone, Debug)]
@@ -137,3 +141,74 @@ where
     //
     Ok(degree_histogram)
 }
+
+//
+/// samples (exactly) nb_nodes with weighs proportional to their degrees, return nodes rank
+pub fn sample_nodes_by_degrees<F>(csmat: &CsMatI<F, usize>, nb_nodes: usize) -> Vec<usize>
+where
+    F: Copy + Default,
+{
+    if nb_nodes >= csmat.rows() {
+        log::error!("graph has only {} nb_nodes ", csmat.rows());
+    }
+    let mut sampled = IndexSet::<usize>::with_capacity(nb_nodes);
+    //
+    let degrees = get_csmat_degrees(csmat);
+    let weights: Vec<f32> = degrees
+        .into_iter()
+        .map(|d| (d.degree_in() + d.degree_out()) as f32)
+        .collect();
+    //
+    let mut rng = thread_rng();
+    let distribution = WeightedIndex::new(&weights).unwrap();
+    let mut nb_try = 0;
+    let mut nb_sampled = 0;
+    //
+    while nb_sampled < nb_nodes {
+        let node = distribution.sample(&mut rng);
+        nb_try += 1;
+        if sampled.insert(node) {
+            nb_sampled += 1;
+        }
+    }
+    log::info!(
+        "sample_nodes_by_degrees  nb_try : {} nb_sampled : {}",
+        nb_try,
+        nb_sampled
+    );
+    //
+    let nodes = sampled.into_iter().map(|n| n).collect();
+    nodes
+} // end of sample_nodes_by_degrees
+
+//
+/// sample (approximately) nb_nodes uniformly
+pub fn sample_nodes_uniform<F>(csmat: &CsMatI<F, usize>, nb_sample: usize) -> Vec<usize>
+where
+    F: Copy + Default,
+{
+    //
+    assert_eq!(csmat.rows(), csmat.cols());
+    //
+    let nb_nodes = csmat.rows();
+    assert!(nb_nodes <= i32::MAX as usize);
+    //
+    let uniform = Uniform::<f64>::new(0., 1.);
+    let mut rng = thread_rng();
+    //
+    let fraction = nb_sample as f64 / nb_nodes as f64;
+    let sampled_nodes: Vec<usize> = (0..nb_nodes)
+        .into_iter()
+        .map(|i| {
+            if uniform.sample(&mut rng) <= fraction {
+                i as i32
+            } else {
+                -1
+            }
+        })
+        .filter(|i| *i >= 0)
+        .map(|i| i as usize)
+        .collect();
+    //
+    sampled_nodes
+} // end of sample_nodes_uniform
