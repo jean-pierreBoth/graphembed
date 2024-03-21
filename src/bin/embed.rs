@@ -48,18 +48,19 @@
 //!     can be smaller as we must not make isolated points.
 //! - --centric  
 //!     This flag is optional and asks for one pass of centric AUC computation after standard AUC link prediction (See [graphembed::validation::link::estimate_centric_auc()])
-//! - --symetric  
-//!     Specify we want the also the deletion of the reverse edge of of each deleted edge. See note downward.
+//!
+//!     flaSpecify we want the also the deletion of the reverse edge of of each deleted edge. See note downward.
 //!
 //!     It suffices to add the command : **validation --nbpass nbpass --skip fraction** before and instead  the "embedding" command name.
 //!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
-//!     We get for example :  
+//!     We get for example:
 //!   
-//!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 **--symetric**
+//!    embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 **--symetric**
 //!
-//! **Note: The symetric flag at end of the preceding command is required to enforce the symetric deletion of edges. If absent the embedding (and edge deletion deletion) will
-//!   be done in asymetric mode.  
-//!   This inconvenience makes possible to treat a symetric as a way to assess asymetry effects**.
+//! **Note: The symetric flag at end of the preceding command is specific to the sketching mode.
+//!     In validation it can treat a symetric graph in a symetric or asymetric mode. The flag is required to enforce the symetric deletion of edges. If absent the embedding (and edge deletion deletion) will
+//!     be done in asymetric mode.  
+//!      This inconvenience makes possible to treat a symetric as asymetric and gives a way to assess asymetry effects**.
 //!
 //!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation [--centric] --nbpass 10 --skip 0.1 hope  precision --epsil 0.2 --maxrank 200  --blockiter 3
 //!
