@@ -1,5 +1,7 @@
 //! This module implements some validation tools
-//! - We use the standard link prediction based and a stable block decomposition
+//!  We use :
+//!     - the standard link prediction [link::estimate_auc()] based and a centric auc [link::estimate_centric_auc]
+//!     - A decomposition in stable blocks to evaluate preservation of "communities" [anndensity]
 
 pub mod link;
 /// references

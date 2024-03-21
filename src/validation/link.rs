@@ -634,8 +634,9 @@ pub fn estimate_vcmpr<F, G, E>(
     let nb_nodes = csmat.shape().0;
     let nb_to_sample = 2000;
     // do we choose paper algorithm or my modification.
-    let uniform_as_paper: bool = true;
-    //=================================
+    let uniform_as_paper: bool = false;
+    log::info!("sampling uniform : {:?}", uniform_as_paper);
+    //=====================================================
     let selected_nodes = if uniform_as_paper {
         sample_nodes_uniform(csmat, nb_to_sample)
     } else {
@@ -737,6 +738,11 @@ pub fn estimate_vcmpr<F, G, E>(
     //
     let selected_degrees: Vec<f64> = nodes_precision.iter().map(|t| t.0 as f64).collect();
     let precision: Vec<f64> = nodes_precision.iter().map(|t| t.1).collect();
+    let mean_precision: f64 = precision.iter().sum::<f64>() / precision.len() as f64;
+    let mut sigma_precision = precision.iter().fold(0., |acc, x| {
+        acc + (x - mean_precision) * (x - mean_precision)
+    });
+    sigma_precision = (sigma_precision / precision.len() as f64).sqrt();
     //
     let count = histogram.read().unwrap().count();
     log::info!(
@@ -755,9 +761,10 @@ pub fn estimate_vcmpr<F, G, E>(
             );
         }
         log::info!(
-            "average precision @{}: {:.3e}",
+            "precision @{}: {:.3e}, std deviation : {:.3e}",
             nb_edges_check,
-            histogram.read().unwrap().cma().unwrap(),
+            mean_precision,
+            sigma_precision
         );
     } else {
         log::error!("empty quantiles");
@@ -783,8 +790,9 @@ pub fn estimate_vcmpr<F, G, E>(
 /// Link prediction using low-dimensional node embeddings:The measurement problem (2024)
 /// See [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121)
 ///
+/// 1. Method
 ///
-/// We compute a vertex centric measure of performance, but instead of using a precision@k we take benefit
+/// We compute a vertex centric measure of performance, but instead of using a precision@k (for an arbitrary k) we take benefit
 /// of the sorting of all distances around a node to compute an AUC for each node examined.
 /// We note :
 /// - $nbnodes$ the number of nodes in the graph:
@@ -803,7 +811,14 @@ pub fn estimate_vcmpr<F, G, E>(
 ///     $$ (nbnodes - d  + de -(j - k))/ (nbnodes - d  + de) $$
 ///   this fraction is linearly decreasing as j increases.    
 ///   If $j=nbnodes$ and we have a deleted edge then this edge is the last we get $k = d - de$ and this last edge contributes 0.
-///   Averging over k we get the centric auc of n and finally averaging over n we get an estimate of centric auc over the graph.
+///   Averging over k we get the centric auc of n and finally averaging over 2000 nodes $n$ we get an estimate of centric auc over the graph.
+///
+/// 2. Outputs:
+///  The function outputs:
+/// -  degrees quantiles and
+/// -  centric auc quantiles to check for high variations dependind on points.
+/// -  correlation coefficients between degrees and centric auc.
+/// -  time spent in the function (as the sorting of larges arrays cost cpu time)
 ///
 pub fn estimate_centric_auc<F, G, E>(
     csmat: &CsMatI<F, usize>,
@@ -972,6 +987,11 @@ pub fn estimate_centric_auc<F, G, E>(
     // get degrees and auc for correlation output
     let selected_degrees: Vec<f64> = nodes_e_auc.iter().map(|t| degrees[t.0] as f64).collect();
     let selected_auc: Vec<f64> = nodes_e_auc.iter().map(|t| t.1).collect();
+    let mean_auc: f64 = selected_auc.iter().sum::<f64>() / selected_auc.len() as f64;
+    let mut sigma_auc = selected_auc
+        .iter()
+        .fold(0., |acc, x| acc + (x - mean_auc) * (x - mean_auc));
+    sigma_auc = (sigma_auc / selected_auc.len() as f64).sqrt();
     //
     // dump histogram
     //
@@ -983,12 +1003,16 @@ pub fn estimate_centric_auc<F, G, E>(
         for i in 0..=20 {
             let q = i as f64 / 20.;
             log::info!(
-                "quantiles at {:.3e} , vcmpr : {:.3e}",
+                "quantiles at {:.3e} , centric auc : {:.3e}",
                 q,
                 histogram.query(q).unwrap().1
             );
         }
-        log::info!("average e_auc : {:.3e}", histogram.cma().unwrap(),);
+        log::info!(
+            "average e_auc : {:.3e}, std deviation : {:.3e}",
+            mean_auc,
+            sigma_auc
+        );
     }
     //
     let rho = pearson_cor::<f64>(&selected_degrees, &selected_auc);
