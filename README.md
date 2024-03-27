@@ -5,7 +5,7 @@ This crate provides ,as a library and an executable,embedding of directed or und
 
   - For simple graphs, without data attached to nodes/labels, there are 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
 
-  - To complement the embeddings we provide also core decomposition of graphs (see the module **structure**). We give try to anaylze how Orkut communities are preserved through an embedding. (See Notebooks directory).
+  - To complement the embeddings we provide also core decomposition of graphs (see the module **structure**). We give try to analyze how Orkut communities are preserved through an embedding. (See Notebooks directory).
 
   - The module **gkernel** is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
     The algorithm is based on an extension of the hashing strategy used in the module **nodesketch**.  
@@ -74,8 +74,6 @@ Larger datasets can be downloaded from the SNAP data collections <https://snap.s
   - Les miserables  <http://konect.cc/networks/moreno_lesmis>.  
     This is the graph of co-occurence of characters in Victor Hugo's novel 'Les Misérables'.
 
-  - p2p-Gnutella08.txt.gz   <https://snap.stanford.edu/data/p2p-Gnutella08.html>
-
 - Asymetric graphs
 
   - wiki-vote <https://snap.stanford.edu/data/wiki-Vote.html>
@@ -108,6 +106,8 @@ Possibly some data can need to be converted from Tsv format to Csv, before being
 
 Embedding and link prediction evaluation for the above data sets are given in file [resultats.md](./resultats.md)
 A more global analysis of the embedding with the nodesketch module is done for the orkut graph in file [orkut.md](./orkut.md)
+
+A preliminary of node centric quality estimation is provided in the validation module (see documentation in validation::link).  
 
 ### Some qualitative comments
 
@@ -161,7 +161,7 @@ For an asymetric graph we get
        embed --csv ./Data/Graphs/asymetric.csv  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 
 
 
-    It is detailed in docs of the embed module. Use cargo doc --no-deps as usual.
+    It is detailed in docs of the embed module. Use cargo doc --no-deps (cargo doc --no-dep --bin embed) and as usual.
 
 - Use the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.
 

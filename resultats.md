@@ -22,7 +22,6 @@ Timings are given for a 24-core (32 threads) i9 laptop with 64Gb memory
 
 |   Graph    |   nodes   |    edges    |
 | :--------: | :-------: | :---------: |
-| Gnutella8  |   6301    |   20 777    |
 | ca-AstroPh |   18772   |   396 160   |
 |   Amazon   |  334 000  |   925 000   |
 |    Dblp    |  317079   |  1 049 866  |
@@ -42,20 +41,17 @@ AUC is run with at least 5 runs (depending on time needed by embedding).
 
 #### Symetric Graphs
 
-| graph      |           svd           | ratio discarded | eigenvalue range | AUC (link) | time(s) |
-| ---------- | :---------------------: | :-------------: | :--------------: | :--------: | :-----: |
-| Gnutella8  | rank 20, nbiter 10 (1)  |      0.137      |    21.6 - 4.8    |    0.82    |   1.2   |
-| Gnutella8  | rank 100, nbiter 10 (1) |      0.137      |    21.6 - 2.5    |    0.71    |   1.6   |
-|            |                         |                 |                  |            |         |
-| ca-AstroPh | rank 100, bkiter 3 (2)  |      0.15       |      34 - 3      |    0.93    |   <1    |
-| ca-AstroPh | rank 100, nbiter 5 (1)  |      0.15       |      35 - 5      |   0.938    |   <1    |
-|            |                         |                 |                  |            |         |
-| amazon     | rank 200, nbiter 5 (1)  |      0.15       |    150 - 9.9     |    0.84    |   63    |
-|            |                         |                 |                  |            |         |
-| dblp       | rank 400, nbiter 5 (1)  |      0.19       |      44 - 8      |   0.926    |   190   |
-|            |                         |                 |                  |            |         |
-| youtube    | rank 75, bkiter 3  (2)  |      0.12       |    4270 - 140    |    0.64    |   834   |
-| youtube    | rank 30, nbiter 5  (1)  |      0.12       |    4270 - 471    |    0.90    |  1150   |
+| graph      |          svd           | ratio discarded | eigenvalue range | AUC (link) | time(s) |
+| ---------- | :--------------------: | :-------------: | :--------------: | :--------: | :-----: |
+| ca-AstroPh | rank 100, bkiter 3 (2) |      0.15       |      34 - 3      |    0.93    |   <1    |
+| ca-AstroPh | rank 100, nbiter 5 (1) |      0.15       |      35 - 5      |   0.938    |   <1    |
+|            |                        |                 |                  |            |         |
+| amazon     | rank 200, nbiter 5 (1) |      0.15       |    150 - 9.9     |    0.84    |   63    |
+|            |                        |                 |                  |            |         |
+| dblp       | rank 400, nbiter 5 (1) |      0.19       |      44 - 8      |   0.926    |   190   |
+|            |                        |                 |                  |            |         |
+| youtube    | rank 75, bkiter 3  (2) |      0.12       |    4270 - 140    |    0.64    |   834   |
+| youtube    | rank 30, nbiter 5  (1) |      0.12       |    4270 - 471    |    0.90    |  1150   |
 
 The rank subcommand of Hope embedding is more efficient
 
@@ -85,9 +81,6 @@ The decay coefficient is the factor of reduction of edge weight at each new edge
   
 |   graph    | dimension | nb hops | decay | ratio discarded |   AUC +- sigma   | time(s) |
 | :--------: | :-------: | :-----: | :---: | :-------------: | :--------------: | :-----: |
-| Gnutella8  |    500    |    5    |  0.2  |      0.137      |  0.804 +- 0.001  |   0.4   |
-| Gnutella8  |    500    |    5    |  0.4  |      0.137      | 0.805 +- 0.0009  |   0.4   |
-|            |           |         |       |                 |                  |         |
 | ca-AstroPh |    100    |    5    |  0.2  |      0.148      |      0.947       |   0.5   |
 | ca-AstroPh |    200    |    5    |  0.2  |      0.148      |  0.96 +- 0.0004  |   0.6   |
 |            |           |         |       |                 |                  |         |
