@@ -66,9 +66,9 @@ impl NodeSketch {
             csrmat.rows(),
             csrmat.cols()
         );
+        log::info!("=======================================================");
         log::info!(
-            "\n =======================================================
-            \n sketching symetric params dimension : {}, nbhops : {}, decay : {:.3e}",
+            "sketching symetric params dimension : {}, nbhops : {}, decay : {:.3e}",
             params.get_sketch_size(),
             params.get_nb_iter(),
             params.get_decay_weight()

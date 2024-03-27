@@ -18,6 +18,17 @@ Computation times are wall clock times those for **one embedding** with the same
 for the whole validation iterations. Cpu times depends on the level of parallelism of each algorithm.
 Timings are given for a 24-core (32 threads) i9 laptop with 64Gb memory
 
+## Symetric Graphs size 
+
+|   Graph    |   nodes   |    edges    |
+| :--------: | :-------: | :---------: |
+| Gnutella8  |   6301    |   20 777    |
+| ca-AstroPh |   18772   |   396 160   |
+|   Amazon   |  334 000  |   925 000   |
+|    Dblp    |  317079   |  1 049 866  |
+|  youtube   | 1 134 890 |  2 987 624  |
+|   orkut    | 3 072 441 | 117 185 083 |
+
 ## Hope embedding results
 
 ### Adamic Adar mode
@@ -31,17 +42,25 @@ AUC is run with at least 5 runs (depending on time needed by embedding).
 
 #### Symetric Graphs
 
-| graph      | nb nodes | nb edges |           svd           | ratio discarded | eigenvalue range | AUC (link) | time(s) |
-| ---------- | -------- | -------- | :---------------------: | :-------------: | :--------------: | ---------- | :-----: |
-| Gnutella8  | 6301     | 20777    | rank 20, nbiter 10 (1)  |      0.137      |    21.6 - 4.8    | 0.82       |   1.2   |
-| Gnutella8  | 6301     | 20777    | rank 100, nbiter 10 (1) |      0.137      |    21.6 - 2.5    | 0.71       |   1.6   |
-| ca-AstroPh | 18772    | 396160   | rank 100, bkiter 3 (2)  |      0.15       |      34 - 3      | 0.93       |   <1    |
-| ca-AstroPh | 18772    | 396160   | rank 100, nbiter 5 (1)  |      0.15       |      35 - 5      | 0.938      |   <1    |
-| amazon     | 334863   | 925872   | rank 200, nbiter 5 (1)  |      0.15       |    150 - 9.9     | 0.84       |   63    |
-| youtube    | 1134890  | 2987624  | rank 75, bkiter 3  (2)  |      0.12       |    4270 - 140    | 0.64       |   834   |
-| youtube    | 1134890  | 2987624  | rank 30, nbiter 5  (1)  |      0.12       |    4270 - 471    | 0.90       |  1150   |
+| graph      |           svd           | ratio discarded | eigenvalue range | AUC (link) | time(s) |
+| ---------- | :---------------------: | :-------------: | :--------------: | :--------: | :-----: |
+| Gnutella8  | rank 20, nbiter 10 (1)  |      0.137      |    21.6 - 4.8    |    0.82    |   1.2   |
+| Gnutella8  | rank 100, nbiter 10 (1) |      0.137      |    21.6 - 2.5    |    0.71    |   1.6   |
+|            |                         |                 |                  |            |         |
+| ca-AstroPh | rank 100, bkiter 3 (2)  |      0.15       |      34 - 3      |    0.93    |   <1    |
+| ca-AstroPh | rank 100, nbiter 5 (1)  |      0.15       |      35 - 5      |   0.938    |   <1    |
+|            |                         |                 |                  |            |         |
+| amazon     | rank 200, nbiter 5 (1)  |      0.15       |    150 - 9.9     |    0.84    |   63    |
+|            |                         |                 |                  |            |         |
+| dblp       | rank 400, nbiter 5 (1)  |      0.19       |      44 - 8      |   0.926    |   190   |
+|            |                         |                 |                  |            |         |
+| youtube    | rank 75, bkiter 3  (2)  |      0.12       |    4270 - 140    |    0.64    |   834   |
+| youtube    | rank 30, nbiter 5  (1)  |      0.12       |    4270 - 471    |    0.90    |  1150   |
 
-The rank subcommand of Hope embedding seem more efficient
+The rank subcommand of Hope embedding is more efficient
+
+Centric Auc for Amazon : 0.834, std-dev = 0.006. Centric Auc is within 3 $\sigma$.  
+  correlation(degree, auc) = 0.008
 
 #### Asymetric Graphs
 
@@ -58,47 +77,35 @@ AUC is estimated on 10 passes.
 
 The decay coefficient is the factor of reduction of edge weight at each new edge traversed during exploration around a node.
 
-AUC is run with 5 successive runs.
 
 ### Sketching: Symetric Graphs
 
-#### Gnutella8 graph: nb nodes 6301, nb edges 20777
+
+#### embedding results
   
-| dimension | nb hops | decay | ratio discarded |  AUC +- sigma   | time(s) |
-| :-------: | :-----: | :---: | :-------------: | :-------------: | :-----: |
-|    200    |    3    |  0.2  |      0.137      | 0.792 +- 0.001  |   0.1   |
-|    500    |    5    |  0.2  |      0.137      | 0.804 +- 0.001  |   0.4   |
-|    500    |    5    |  0.4  |      0.137      | 0.805 +- 0.0009 |   0.4   |
+|   graph    | dimension | nb hops | decay | ratio discarded |   AUC +- sigma   | time(s) |
+| :--------: | :-------: | :-----: | :---: | :-------------: | :--------------: | :-----: |
+| Gnutella8  |    500    |    5    |  0.2  |      0.137      |  0.804 +- 0.001  |   0.4   |
+| Gnutella8  |    500    |    5    |  0.4  |      0.137      | 0.805 +- 0.0009  |   0.4   |
+|            |           |         |       |                 |                  |         |
+| ca-AstroPh |    100    |    5    |  0.2  |      0.148      |      0.947       |   0.5   |
+| ca-AstroPh |    200    |    5    |  0.2  |      0.148      |  0.96 +- 0.0004  |   0.6   |
+|            |           |         |       |                 |                  |         |
+|    Dblp    |    100    |    5    |  0.5  |      0.19       | 0.9013 +- 6.6E-4 |    4    |
+|    Dblp    |    400    |    4    |  0.4  |      0.19       | 0.9611 +- 4.4E-4 |  13.8   |
+|            |           |         |       |                 |                  |         |
+|   amazon   |    200    |    3    |  0.3  |      0.118      | 0.963 +- 2.3 E-4 |    5    |
+|            |           |         |       |                 |                  |         |
+|  youtube   |    200    |    2    |  0.2  |      0.119      |  0.914 +- 0.001  |   13    |
+|  youtube   |    200    |    3    |  0.2  |      0.119      |  0.899 +- 0.002  |   18    |
+|  youtube   |   1000    |    5    |  0.5  |      0.119      |  0.908 +- 0.002  |   145   |
+|            |           |         |       |                 |                  |         |
+|   orkut    |    200    |    3    |  0.2  |      0.149      | 0.924 +- 0.0008  |   240   |
+|   orkut    |    200    |    5    |  0.2  |      0.149      | 0.948 +- 0.0011  |   260   |
+|   orkut    |    200    |    5    |  0.3  |      0.149      | 0.953 +- 0.0007  |   260   |
+|   orkut    |    300    |    5    |  0.4  |      0.149      |  0.96 +- 0.0004  |   260   |
 
-#### ca-AstroPh graph: nb nodes 18772, nb edges 396160
- 
-| dimension | nb hops | decay | ratio discarded |  AUC +- sigma  | time(s) |
-| :-------: | :-----: | :---: | :-------------: | :------------: | :-----: |
-|    100    |    5    |  0.2  |      0.148      |     0.947      |   0.5   |
-|    200    |    5    |  0.2  |      0.148      | 0.96 +- 0.0004 |   0.6   |
 
-### Amazon graph: nb nodes 334 000   nb edges 925 000
-
-| dimension | nb hops | decay | ratio discarded |   AUC +- sigma   | time(s) |
-| :-------: | :-----: | :---: | :-------------: | :--------------: | :-----: |
-|    200    |    3    |  0.3  |      0.118      | 0.963 +- 2.3 E-4 |    5    |
-
-#### youtube graph: nb nodes 1 134 890,   nb edges : 2 987 624 
-
-| dimension | nb hops | decay | ratio discarded |  AUC +- sigma  | time(s) |
-| :-------: | :-----: | :---: | :-------------: | :------------: | :-----: |
-|    200    |    2    |  0.2  |      0.119      | 0.914 +- 0.001 |   13    |
-|    200    |    3    |  0.2  |      0.119      | 0.899 +- 0.002 |   18    |
-|   1000    |    5    |  0.5  |      0.119      | 0.908 +- 0.002 |   145   |
-
-#### orkut graph. nb nodes 3 072 441 nb edges : 117 185 083
-
-| dimension | nb hops | decay | ratio discarded |  AUC +- sigma   | time(s) |
-| :-------: | :-----: | :---: | :-------------: | :-------------: | :-----: |
-|    200    |    3    |  0.2  |      0.149      | 0.924 +- 0.0008 |   240   |
-|    200    |    5    |  0.2  |      0.149      | 0.948 +- 0.0011 |   260   |
-|    200    |    5    |  0.3  |      0.149      | 0.953 +- 0.0007 |   260   |
-|    300    |    5    |  0.4  |      0.149      | 0.96 +- 0.0004  |   260   |
 
 ### Sketching: Asymetric Graphs
 

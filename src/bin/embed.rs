@@ -60,7 +60,7 @@
 //! **Note: The symetric flag at end of the preceding command is specific to the sketching mode.
 //!     In validation it can treat a symetric graph in a symetric or asymetric mode. The flag is required to enforce the symetric deletion of edges. If absent the embedding (and edge deletion deletion) will
 //!     be done in asymetric mode.  
-//!      This inconvenience makes possible to treat a symetric as asymetric and gives a way to assess asymetry effects**.
+//!      This inconvenience makes possible to treat a symetric graph as asymetric and gives a way to assess asymetry effects**.
 //!
 //!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation [--centric] --nbpass 10 --skip 0.1 hope  precision --epsil 0.2 --maxrank 200  --blockiter 3
 //!
