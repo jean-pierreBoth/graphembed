@@ -911,7 +911,7 @@ pub fn estimate_centric_auc<F, G, E>(
     for d in &degrees {
         degree_histogram.insert(d.d_in);
     }
-    let nbslot = 20;
+    let nbslot = 40;
     let mut qs = Vec::<f64>::with_capacity(30);
     for i in 1..nbslot {
         let q = i as f64 / nbslot as f64;
