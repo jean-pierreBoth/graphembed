@@ -612,12 +612,10 @@ pub fn estimate_vcmpr<F, G, E>(
     }
     qs.push(0.99);
     qs.push(0.999);
+    println!("\n\n quantiles degrees of graph \n");
+    println!("fraction      degree");
     for q in qs {
-        log::info!(
-            "fraction : {:.3e}, degree : {}",
-            q,
-            degree_histogram.value_at_quantile(q),
-        );
+        println!("{:.3e}        {}", q, degree_histogram.value_at_quantile(q));
     }
     //
     let histogram_paper = std::sync::Arc::new(std::sync::RwLock::new(CKMS::<f64>::new(0.001)));
@@ -798,10 +796,12 @@ pub fn estimate_vcmpr<F, G, E>(
     //
     if count > 0 {
         let nbslot = 40;
+        println!("\n\n vcmpr quantiles");
+        println!(" quantile         vcmpr(paper)    vcmpr(ours)");
         for i in 0..=nbslot {
             let q = i as f64 / nbslot as f64;
-            log::info!(
-                "quantiles at {:.3e} , vcmpr_paper : {:.3e}, vcmp(ours): {:.3e}",
+            println!(
+                "{:.3e}        {:.3e}          {:.3e}",
                 q,
                 histogram_paper
                     .read()
@@ -919,13 +919,16 @@ pub fn estimate_centric_auc<F, G, E>(
     }
     qs.push(0.99);
     qs.push(0.999);
+    println!("\n quantiles degrees of graph \n");
+    println!("  quantiles        degrees");
     for q in qs {
-        log::info!(
-            "quantile fraction : {:.3e}, degree : {}",
+        println!(
+            " {:.3e},        {}",
             q,
             degree_histogram.query(q).unwrap().1
         );
     }
+    println!("\n");
     //
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(456231);
     // split edges into kept and discarded
@@ -1075,13 +1078,11 @@ pub fn estimate_centric_auc<F, G, E>(
         for f in &selected_auc {
             histogram.insert(*f);
         }
+        println!("\n centric auc quantiles");
+        println!("  quantile        centric auc");
         for i in 0..=20 {
             let q = i as f64 / 20.;
-            log::info!(
-                "quantiles at {:.3e} , centric auc : {:.3e}",
-                q,
-                histogram.query(q).unwrap().1
-            );
+            println!("{:.3e}         {:.3e}", q, histogram.query(q).unwrap().1);
         }
         log::info!(
             "average e_auc : {:.3e}, std deviation : {:.3e}",
