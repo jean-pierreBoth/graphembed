@@ -35,8 +35,6 @@ num-traits = { version = "0.2" }
 ndarray = { version = "0.15", features = ["rayon", "serde"] }
 ndarray-linalg = { version = "0.16", default-features = false }
 lapacke = { version = "0.5" }
-openblas-src = { version = "0.10", optional = true, default = false }
-lapack-src = { version = "0.8", optional = true }
 sprs = { version = "0.11" }
 
 # io

@@ -613,9 +613,9 @@ pub fn estimate_vcmpr<F, G, E>(
     qs.push(0.99);
     qs.push(0.999);
     println!("\n\n quantiles degrees of graph \n");
-    println!("fraction      degree");
+    println!("fraction,  degree");
     for q in qs {
-        println!("{:.3e}        {}", q, degree_histogram.value_at_quantile(q));
+        println!("{:.3e}    {}", q, degree_histogram.value_at_quantile(q));
     }
     //
     let histogram_paper = std::sync::Arc::new(std::sync::RwLock::new(CKMS::<f64>::new(0.001)));
@@ -647,7 +647,8 @@ pub fn estimate_vcmpr<F, G, E>(
     let uniform_as_paper: bool = true;
     log::info!("=======================================");
     log::info!("sampling uniform : {:?}", uniform_as_paper,);
-    log::info!("=======================================");
+    log::info!("=======================================\n");
+    //
     //=====================================================
     let selected_nodes = if uniform_as_paper {
         sample_nodes_uniform(csmat, nb_to_sample)
@@ -726,7 +727,8 @@ pub fn estimate_vcmpr<F, G, E>(
             }
         } // end loop on all potential edges
         log::debug!(
-            "found edge deleted for node : {}, deleted : {}",
+            "node {}, nb found edge deleted : {}, deleted : {}",
+            i,
             nb_found,
             nb_deleted
         );
@@ -797,7 +799,7 @@ pub fn estimate_vcmpr<F, G, E>(
     if count > 0 {
         let nbslot = 40;
         println!("\n\n vcmpr quantiles");
-        println!(" quantile         vcmpr(paper)    vcmpr(ours)");
+        println!("quantile         vcmpr(paper)    vcmpr(ours)");
         for i in 0..=nbslot {
             let q = i as f64 / nbslot as f64;
             println!(
@@ -855,7 +857,7 @@ pub fn estimate_vcmpr<F, G, E>(
 /// This function is inspired by the paper:  
 /// Link prediction using low-dimensional node embeddings:The measurement problem (2024)
 /// See [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121)
-/// It tries to remedy to certain interpretation difficulties related to the paper discussed here: [TODO:]
+/// It tries to remedy to certain interpretation difficulties related to the paper discussed here: [linkauc](https://github.com/jean-pierreBoth/Linkauc)
 ///
 /// 1. Method
 ///
@@ -905,11 +907,24 @@ pub fn estimate_centric_auc<F, G, E>(
     //
     let cpu_start = ProcessTime::now();
     let sys_start = SystemTime::now();
-    // we begin by a degree estimation and vcmpr upper bound estimation
-    let degrees = get_csmat_degrees(csmat);
+    // we begin by a degree estimation
+    let degrees = csmat.degrees();
+    let mut mean_degree: f64 = 0.;
+    let mut max_degree: usize = 0;
+    for d in &degrees {
+        mean_degree += (*d) as f64;
+        max_degree = (*d).max(max_degree);
+    }
+    mean_degree /= degrees.len() as f64;
+    log::info!(
+        "mean degree : {:.3e}, max_degree : {}",
+        mean_degree,
+        max_degree
+    );
+    //
     let mut degree_histogram = CKMS::<u32>::new(0.001);
     for d in &degrees {
-        degree_histogram.insert(d.d_in);
+        degree_histogram.insert((*d).try_into().unwrap());
     }
     let nbslot = 40;
     let mut qs = Vec::<f64>::with_capacity(30);
@@ -920,13 +935,9 @@ pub fn estimate_centric_auc<F, G, E>(
     qs.push(0.99);
     qs.push(0.999);
     println!("\n quantiles degrees of graph \n");
-    println!("  quantiles        degrees");
+    println!("quantiles, degrees");
     for q in qs {
-        println!(
-            " {:.3e},        {}",
-            q,
-            degree_histogram.query(q).unwrap().1
-        );
+        println!(" {:.3e},   {}", q, degree_histogram.query(q).unwrap().1);
     }
     println!("\n");
     //
@@ -963,9 +974,6 @@ pub fn estimate_centric_auc<F, G, E>(
         sample_nodes_by_degrees(csmat, nb_to_sample)
     };
     //
-    let degrees = csmat.degrees();
-    let mean_degree = degrees.iter().sum::<usize>() as f64 / nb_nodes as f64;
-    log::info!("mean degree : {:.3e}", mean_degree);
     // select nodes we will test
     let nb_sampled = selected_nodes.len();
     log::info!("estimate_vcmpr nb nodes sampled : {}", nb_sampled);
@@ -1079,10 +1087,10 @@ pub fn estimate_centric_auc<F, G, E>(
             histogram.insert(*f);
         }
         println!("\n centric auc quantiles");
-        println!("  quantile        centric auc");
+        println!("quantile, centric auc");
         for i in 0..=20 {
             let q = i as f64 / 20.;
-            println!("{:.3e}         {:.3e}", q, histogram.query(q).unwrap().1);
+            println!("{:.3e},   {:.3e}", q, histogram.query(q).unwrap().1);
         }
         log::info!(
             "average e_auc : {:.3e}, std deviation : {:.3e}",
