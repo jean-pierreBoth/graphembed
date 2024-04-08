@@ -11,7 +11,7 @@
 //! For a symetric graph edge i->j and j->i are deleted/kept together and for an asymetric graph they are treated independantly.
 //! It is possible to treat edge deletion for a symetric graph as in the asymetric. See [crate::embed]
 //!
-//!
+//! The methods [estimate_centric_auc()] give also a variation of a node centric quality assessment (See also [estimate_vcmpr()])
 
 /// We first implement precision measure as described in
 ///       - Link Prediction in complex Networks : A survey

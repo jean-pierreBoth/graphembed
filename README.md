@@ -60,6 +60,10 @@ In particular it is shown that :
  
   See results in [orkut.md](./orkut.md) and examples directory together with a small Rust notebook in directory [Notebooks](./Notebooks/orkutrs.ipynb)
 
+## Validation
+
+Validation of embeddings is assessed via standard Auc with random deletion of edges. See documentation in the *link* module and *embed* binary.
+We give also a variation based on centric quality assessment as explained at [cauc](http://github.com/jean-pierreBoth/linkauc)
 ## Some data sets
 
 ### Without labels
@@ -161,7 +165,7 @@ For an asymetric graph we get
        embed --csv ./Data/Graphs/asymetric.csv  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 
 
 
-    It is detailed in docs of the embed module. Use cargo doc --no-deps (cargo doc --no-dep --bin embed) and as usual.
+    More details can be found in docs of the embed module. Use cargo doc --no-dep --bin embed (and cargo doc --no-dep) as usual.
 
 - Use the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.
 
