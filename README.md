@@ -130,10 +130,11 @@ An implementation of Generalized Svd comes as a by-product in module [gsvd](./sr
 
 ### Installation
 
-The crate provides three features, required by the *annembed* dependency, to specify which version of lapack you want to use.  
-For example compilation is done by :
+The crate provides features (with a default configuration), required by the *annembed* dependency, to specify which version of lapack you want to use or the choice of simd implementation.
+- For example compilation is done by :
 *cargo build --release --features="openblas-system"* to  use a dynamic link with openblas.
-The choice of one feature is mandatory to provide required linear algebra library.
+The choice of one feature is mandatory to provide required linear algebra library.  
+- On Intel the simdeez_f feature can be used. On other cpus the stdsimd feature can be chosen but it requires compiler >= 1.79
 
 ### Usage
 

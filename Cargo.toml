@@ -53,8 +53,8 @@ cpu-time = { version = "1.0" }
 clap = { version = "4.5" }
 
 ##
-indexmap = { version = "1.9" }
-ahash = { version = "0.7" }
+indexmap = { version = "2.2" }
+ahash = { version = "0.8" }
 probminhash = { version = "0.1" }
 #probminhash = {path = "../probminhash"}
 
@@ -64,15 +64,15 @@ rand_xoshiro = { version = "0.6" }
 rand_distr = { version = "0.4" }
 
 ## sorting, indexing
-ordered-float = { version = "3.4" }
-indxvec = { version = "1.4" }
+ordered-float = { version = "4.2" }
+indxvec = { version = "1.9" }
 hdrhistogram = { version = "7.5" }
 quantiles = { version = "0.7" }
 
 #hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
-hnsw_rs = { version = "0.2", features = ["simdeez_f"] }
+hnsw_rs = { version = "0.2.1" }
 
-annembed = { version = "0.1", default = false }
+annembed = { version = "0.1.2", default = false }
 #annembed = {git= "https://github.com/jean-pierreBoth/annembed"}
 #annembed ={ path = "../annembed", default = false}
 
@@ -96,7 +96,12 @@ katexit = { version = "0.1" }
 # can be change to 
 #
 #default = ["annembed/intel-mkl-static", "ndarray-linalg/intel-mkl-static"]
-default = ["openblas-system"]
+
+default = ["openblas-system", "simdeez_f"]
+
+# simd choice. stdsimd requires nightly compiler
+stdsimd = ["hnsw_rs/stdsimd"]
+simdeez_f = ["hnsw_rs/simdeez_f"]
 
 intel-mkl-static = [
     "ndarray/blas",
