@@ -4,7 +4,7 @@ use anyhow::anyhow;
 
 use hdrhistogram::Histogram;
 use indexmap::set::IndexSet;
-use rand::distributions::{Distribution, Uniform, WeightedIndex};
+use rand::distributions::{Uniform, WeightedIndex};
 use sprs::CsMatI;
 use std::collections::HashMap;
 

@@ -587,10 +587,6 @@ mod tests {
     use super::*;
 
     use crate::prelude::*;
-    use petgraph::Undirected;
-
-    use crate::io::csv::csv_to_trimat;
-    use crate::io::csv::weighted_csv_to_graphmap;
 
     fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();

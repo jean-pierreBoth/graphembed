@@ -1125,8 +1125,6 @@ mod tests {
 
     use crate::prelude::*;
 
-    use sprs::TriMatI;
-
     use crate::embed::nodesketch::nodesketchsym::*;
 
     fn log_init_test() {

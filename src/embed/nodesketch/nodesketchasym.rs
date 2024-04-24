@@ -472,8 +472,6 @@ mod tests {
     //    cargo test --features="openblas-static" validation::link::tests::test_name -- --nocapture
     //    RUST_LOG=graphembed::sketching=TRACE cargo test --features="openblas-static" test_nodesketchasym_wiki -- --nocapture
 
-    use crate::io::csv::csv_to_trimat;
-
     use crate::prelude::*;
 
     fn log_init_test() {

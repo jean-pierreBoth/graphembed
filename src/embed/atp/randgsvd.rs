@@ -29,8 +29,6 @@ use num_traits::float::*;
 
 use ndarray::Array2;
 
-use ndarray_linalg::{Lapack, Scalar};
-
 pub use super::gsvd::{GSvd, GSvdOptParams, GSvdResult};
 
 // this module provides svdapproximation tools à la Hlako-Tropp

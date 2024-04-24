@@ -1,7 +1,5 @@
 //! Basic correlation
 
-use num_traits::float::Float;
-
 use num_traits::*;
 
 use std::fmt::Debug;

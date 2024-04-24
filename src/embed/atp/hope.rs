@@ -746,8 +746,6 @@ mod tests {
 
     use super::*;
 
-    use crate::io::csv::csv_to_trimat;
-
     #[allow(unused)]
     use annembed::tools::svdapprox::{RangePrecision, RangeRank};
 
