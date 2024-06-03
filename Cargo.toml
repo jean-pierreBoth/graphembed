@@ -70,9 +70,9 @@ hdrhistogram = { version = "7.5" }
 quantiles = { version = "0.7" }
 
 #hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
-hnsw_rs = { version = "0.2.1" }
+hnsw_rs = { version = "0.3" }
 
-annembed = { version = "0.1.2", default = false }
+annembed = { version = "0.1", default = false }
 #annembed = {git= "https://github.com/jean-pierreBoth/annembed"}
 #annembed ={ path = "../annembed", default = false}
 
