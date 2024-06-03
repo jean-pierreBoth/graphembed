@@ -2,10 +2,11 @@
 //!
 //! The main arguments are
 //!  - --csv filename
-//!  - --symetric ture  if present specifies the graph is symetric. In this case the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
+//!  - --symetric "true"  if present specifies the graph is symetric. In this case the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
 //!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
-//!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric (--symetric false). In this case
-//!     **for the validation parameters the flag --symetric is required to get deletion of both edges i->j and j->i**
+//!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric (--symetric "false").
+//!     Then graph is deduced only from the read edges.  
+//!     **In this case for the validation parameters by sketching (which can do validation in symetric or asymetric mode) the flag --symetric is required to get deletion of both edges i->j and j->i**
 //!     
 //!  - --output or -o filename  
 //!     This dumps the embedding in a bson file named filename.bson. See module [bson].  
@@ -57,7 +58,7 @@
 //!   
 //!    embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 **--symetric**
 //!
-//! **Note: The symetric flag at end of the preceding command is specific to the sketching mode.
+//! **Note: The symetric flag at end of the preceding command is specific to the validation mode.
 //!     In validation it can treat a symetric graph in a symetric or asymetric mode. The flag is required to enforce the symetric deletion of edges. If absent the embedding (and edge deletion deletion) will
 //!     be done in asymetric mode.  
 //!      This inconvenience makes possible to treat a symetric graph as asymetric and gives a way to assess asymetry effects**.
@@ -605,7 +606,7 @@ pub fn main() {
             } else {
                 let mut params = validation_params.unwrap();
                 if !symetric_graph {
-                    log::debug!("setting asymetric flag for validation");
+                    log::info!("setting asymetric flag for validation");
                     params = ValidationParams::new(
                         params.get_delete_fraction(),
                         params.get_nbpass(),

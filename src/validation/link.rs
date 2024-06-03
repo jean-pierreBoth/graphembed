@@ -618,7 +618,6 @@ pub fn estimate_vcmpr<F, G, E>(
         println!("{:.3e}    {}", q, degree_histogram.value_at_quantile(q));
     }
     //
-    let histogram_paper = std::sync::Arc::new(std::sync::RwLock::new(CKMS::<f64>::new(0.001)));
     let histogram = std::sync::Arc::new(std::sync::RwLock::new(CKMS::<f64>::new(0.001)));
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(456231);
     // split edges into kept and discarded
@@ -672,8 +671,8 @@ pub fn estimate_vcmpr<F, G, E>(
     // select nodes we will test
     let nb_sampled = selected_nodes.len();
     log::info!("estimate_vcmpr nb nodes sampled : {}", nb_sampled);
-    // compute precision for node i first is paper' precision , second is ours
-    let f = |i: usize| -> (f64, f64) {
+    // compute precision for node i
+    let f = |i: usize| -> f64 {
         // how good is the embedding of node i
         // sort edges by decreasing length
         let mut neighbours_i: Vec<(usize, f64)> = (0..nb_nodes)
@@ -734,47 +733,24 @@ pub fn estimate_vcmpr<F, G, E>(
         );
         //
         let precision: f64;
-        let precision_paper: f64;
-        {
-            // paper block
-            precision_paper = nb_found as f64 / nb_edges_check.min(degrees[i]) as f64;
-            log::debug!("inserting in histogram_paper : {:.3e}", precision_paper);
-            histogram_paper.write().unwrap().insert(precision_paper);
+        // our precision, we depart from paper
+        // if there is no deleted edge, how can this node contribute to anything??
+        if nb_deleted > 0 {
+            precision = nb_found as f64 / nb_deleted.min(nb_edges_check) as f64;
+            log::debug!("inserting in histogram : {:.3e}", precision);
+            histogram.write().unwrap().insert(precision);
+        } else {
+            precision = -1.; // here we depart from paper which returns 0.
         }
         //
-        {
-            // our precision, we depart from paper
-            // if there is no deleted edge, how can this node contribute to anything??
-            if nb_deleted > 0 {
-                precision = nb_found as f64 / nb_deleted.min(nb_edges_check).min(degrees[i]) as f64;
-                log::debug!("inserting in histogram : {:.3e}", precision);
-                histogram.write().unwrap().insert(precision);
-            } else {
-                precision = -1.; // here we depart from paper which returns 0.
-            }
-        }
-        //
-        (precision_paper, precision)
+        precision
     };
     //
-    // paper precision
-    //
-    let nodes_precision_paper: Vec<(usize, f64)> =
-        selected_nodes.iter().map(|i| (*i, f(*i).0)).collect();
-    let precision_paper: Vec<f64> = nodes_precision_paper.iter().map(|t| t.1).collect();
-    let mean_precision_paper: f64 =
-        precision_paper.iter().sum::<f64>() / precision_paper.len() as f64;
-    let mut sigma_precision_paper = precision_paper.iter().fold(0., |acc, x| {
-        acc + (x - mean_precision_paper) * (x - mean_precision_paper)
-    });
-    sigma_precision_paper /= precision_paper.len() as f64;
-    sigma_precision_paper = (sigma_precision_paper / precision_paper.len() as f64).sqrt();
-    //
-    // our precision
+    // precision
     //
     let nodes_precision: Vec<(usize, f64)> = selected_nodes
         .iter()
-        .map(|i| (*i, f(*i).1))
+        .map(|i| (*i, f(*i)))
         .filter(|p| p.1 >= 0.)
         .collect();
     //
@@ -792,34 +768,22 @@ pub fn estimate_vcmpr<F, G, E>(
     log::info!(
         "nb nodes examined : {:?}, nb nodes with statistics : {}, nb nodes with statistics : {}",
         nb_sampled,
-        histogram_paper.read().unwrap().count(),
+        histogram.read().unwrap().count(),
         count
     );
     //
     if count > 0 {
         let nbslot = 40;
         println!("\n\n vcmpr quantiles");
-        println!("quantile         vcmpr(paper)    vcmpr(ours)");
+        println!("quantile       vcmpr(ours)");
         for i in 0..=nbslot {
             let q = i as f64 / nbslot as f64;
             println!(
-                "{:.3e}        {:.3e}          {:.3e}",
+                "{:.3e}                 {:.3e}",
                 q,
-                histogram_paper
-                    .read()
-                    .unwrap()
-                    .query(q)
-                    .unwrap_or((0, 0.))
-                    .1,
                 histogram.read().unwrap().query(q).unwrap_or((0, 0.)).1,
             );
         }
-        log::info!(
-            "paper precision @{}: {:.3e}, std deviation : {:.3e}",
-            nb_edges_check,
-            mean_precision_paper,
-            sigma_precision_paper
-        );
         log::info!("\n");
         log::info!(
             "precision @{}: {:.3e}, std deviation : {:.3e}",
@@ -836,10 +800,6 @@ pub fn estimate_vcmpr<F, G, E>(
     let selected_degrees: Vec<f64> = nodes_precision.iter().map(|t| t.0 as f64).collect();
     let rho = pearson_cor(&selected_degrees, &precision);
     log::info!("precision , degree correlation : {:.3e}", rho);
-    let selected_degrees_papers: Vec<f64> =
-        nodes_precision_paper.iter().map(|t| t.0 as f64).collect();
-    let rho = pearson_cor(&selected_degrees_papers, &precision_paper);
-    log::info!("precision_paper , degree correlation : {:.3e}", rho);
     //
     log::info!(
         "\n estimate_vcmpr sys time(s) {:.2e} cpu time(s) {:.2e}",
