@@ -44,12 +44,11 @@ where
     //
     let (nb_row, _) = csmat.shape();
     let mut degrees = (0..nb_row)
-        .into_iter()
         .map(|_| Degree::new(0, 0))
         .collect::<Vec<Degree>>();
     //
-    let mut iter = csmat.iter();
-    while let Some((_val, (i, j))) = iter.next() {
+    let iter = csmat.iter();
+    for (_val, (i, j)) in iter {
         if i != j {
             degrees[i].d_out += 1; // one more out for i
             degrees[j].d_in += 1; // one more in for j
@@ -75,8 +74,8 @@ pub fn get_degree_quant_from_trimat<F>(
     let nb_cols = csmat.cols();
     let mut degrees = HashMap::<usize, u32>::with_capacity(nb_rows.max(nb_cols));
     //
-    let mut mat_iter = csmat.iter();
-    while let Some((_d, (i, j))) = mat_iter.next() {
+    let mat_iter = csmat.iter();
+    for (_d, (i, j)) in mat_iter {
         let i_opt = degrees.get_mut(&i);
         match i_opt {
             None => {
@@ -99,11 +98,11 @@ pub fn get_degree_quant_from_trimat<F>(
         }
     }
     //
-    for (_, v) in &degrees {
+    for v in degrees.values() {
         histo.record(*v as u64).unwrap();
     }
     //
-    return Ok(histo);
+    Ok(histo)
 }
 
 //
@@ -176,9 +175,8 @@ where
         nb_try,
         nb_sampled
     );
-    //
-    let nodes = sampled.into_iter().map(|n| n).collect();
-    nodes
+    // return nodes
+    sampled.into_iter().collect()
 } // end of sample_nodes_by_degrees
 
 //
@@ -198,7 +196,6 @@ where
     //
     let fraction = nb_sample as f64 / nb_nodes as f64;
     let sampled_nodes: Vec<usize> = (0..nb_nodes)
-        .into_iter()
         .map(|i| {
             if uniform.sample(&mut rng) <= fraction {
                 i as i32

@@ -41,7 +41,7 @@ where
                 if i == csr_mat.indices()[j] {
                     log::trace!("got diagonal term ({},{}) val : {} ", i, i, data[i]);
                 }
-                sum_i = sum_i + data[j];
+                sum_i += data[j];
             }
         }
         // we sum of row i
@@ -51,7 +51,7 @@ where
         } else {
             let data = csr_mat.data_mut();
             for j in range_i.clone() {
-                data[j] = data[j] / sum_i;
+                data[j] /= sum_i;
             }
         }
     } // end of for i
@@ -78,7 +78,7 @@ where
         let mut row = mat.row_mut(i);
         let sum_i = row.sum();
         if sum_i > F::zero() {
-            row.map_mut(|x| *x = *x / sum_i);
+            row.map_mut(|x| *x /= sum_i);
         } else {
             nb_null_row += 1;
             log::trace!("dense_row_normalization null sum of row i {}", i);
@@ -151,13 +151,13 @@ where
     let mut adamat = mat.clone().to_owned();
     for i in 0..nb_row {
         adamat.row_mut(i).map_inplace(|x| {
-            *x = *x * diagonal[i];
+            *x *= diagonal[i];
         });
     }
     // compute mat * (adamat) = mat * (diagonal * mat)
     *mat = mat.dot(&adamat);
     //
-    return Ok(());
+    Ok(())
 } // end of adamic_adar_normalization
 
 // return a Csmat with adamic adar renormalization
@@ -187,8 +187,8 @@ where
     let mut values: Vec<F> = Vec::<F>::with_capacity(nnz);
     //
     //
-    let mut cs_iter = mat.iter();
-    while let Some(item) = cs_iter.next() {
+    let cs_iter = mat.iter();
+    for item in cs_iter {
         let row = item.1 .0;
         let col = item.1 .1;
         diagonal[row] += *item.0;
@@ -200,7 +200,7 @@ where
     for i in 0..values.len() {
         let row = rows[i];
         assert!(diagonal[row] != F::zero());
-        values[i] = values[i] / diagonal[row];
+        values[i] /= diagonal[row];
     }
     let da_trimat = TriMatI::<F, usize>::from_triplets((nb_row, nb_col), rows, cols, values);
     let da = da_trimat.to_csr();
@@ -218,7 +218,7 @@ where
     *mat = csmat_ada;
     log::trace!("exiting at end of adamic_adar_normalization_csmat");
     //
-    return Ok(());
+    Ok(())
 } // end of adamic_adar_normalization_csmat
 
 // do a Row normalization for dense or csr matrix

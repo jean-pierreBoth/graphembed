@@ -104,8 +104,8 @@ pub struct GSvd<'a, F: Scalar> {
 ///  - 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$  
 ///
 ///  - one non singular matrix X such that:
-/// $$ V_{1}^{t} \cdot mat1 \cdot X = \Sigma_{1}$$  and
-///    $$V_{2}^{t} \cdot mat2 \cdot X = \Sigma_{2} $$
+///     $$ V_{1}^{t} \cdot mat1 \cdot X = \Sigma_{1}$$  and
+///     $$V_{2}^{t} \cdot mat2 \cdot X = \Sigma_{2} $$
 ///
 ///
 /// If mat2 is non-singular the Gsvd gives the following svd
@@ -202,17 +202,13 @@ where
                 .alpha
                 .as_ref()
                 .unwrap()
-                .slice(s![self.k as usize..(self.k + self.l) as usize]);
+                .slice(s![self.k..(self.k + self.l)]);
             return Some(s1_v);
         } else {
             log::debug!("atp::gsvd::get_s1 : m-k-l < 0");
             // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(self.m >= self.k);
-            let s1_v = self
-                .alpha
-                .as_ref()
-                .unwrap()
-                .slice(s![self.k as usize..(self.m as usize)]);
+            let s1_v = self.alpha.as_ref().unwrap().slice(s![self.k..(self.m)]);
             return Some(s1_v);
         }
     } // end of get_s1
@@ -228,17 +224,13 @@ where
                 .beta
                 .as_ref()
                 .unwrap()
-                .slice(s![self.k as usize..(self.k + self.l) as usize]);
+                .slice(s![self.k..(self.k + self.l)]);
             return Some(s2_v);
         } else {
             log::debug!("atp::gsvd::get_s2 : m-k-l < 0");
             // s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(self.m >= self.k);
-            let s2_v = self
-                .beta
-                .as_ref()
-                .unwrap()
-                .slice(s![self.k as usize..(self.m as usize)]);
+            let s2_v = self.beta.as_ref().unwrap().slice(s![self.k..(self.m)]);
             return Some(s2_v);
         }
     } // end of get_s2
@@ -328,8 +320,6 @@ where
         self.k = usize::try_from(k).unwrap();
         self.l = usize::try_from(l).unwrap();
         //
-        let s1_v: ArrayView<F, Dim<[usize; 1]>>;
-        let s2_v: ArrayView<F, Dim<[usize; 1]>>;
         // s1_v and s2_v values are in the range k..s
         let s = m.min(k + l) as usize;
         if m - k - l >= 0 {
@@ -341,8 +331,8 @@ where
             // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(m >= k);
         }
-        s1_v = alpha.slice(s![k as usize..s]);
-        s2_v = beta.slice(s![k as usize..s]);
+        let s1_v: ArrayView<F, Dim<[usize; 1]>> = alpha.slice(s![k as usize..s]);
+        let s2_v: ArrayView<F, Dim<[usize; 1]>> = beta.slice(s![k as usize..s]);
         // a dump if log Debug enabled we dump alpha, beta and C and S in the middle range of alpha and beta
         if log_enabled!(log::Level::Trace) {
             for i in 0..k as usize {
@@ -380,7 +370,6 @@ where
         let k_u = k as usize;
         // We check permutation making alpha increasing
         let decreasing_alpha: Array1<usize> = (k_u..s)
-            .into_iter()
             .map(|i| usize::from_i32(permuta[i]).unwrap() - k_u - 1)
             .collect();
         //
@@ -398,7 +387,7 @@ where
                 panic!("non sorted alpha");
             }
         }
-        if decreasing_alpha.len() > 0 {
+        if !decreasing_alpha.is_empty() {
             log::debug!(
                 " greatest alpha < 1. : {:.3e}, smallest alpha > 0. : {:.3e}",
                 s1_v[decreasing_alpha[0]],
@@ -411,7 +400,7 @@ where
         //
         self.alpha = Some(alpha);
         self.beta = Some(beta);
-        if decreasing_alpha.len() > 0 {
+        if !decreasing_alpha.is_empty() {
             self.decreasing_s1 = Some(decreasing_alpha)
         }
         // possibly commonx (or Q in Lapack docs) but here we do not keep it
@@ -428,7 +417,7 @@ where
     /// returns the left eigen vectors corresponding to s1
     pub fn get_v1(&self) -> Option<&Array2<F>> {
         match &self.v1 {
-            Some(s) => Some(&s),
+            Some(s) => Some(s),
             _ => None,
         }
     } // end of get_v1
@@ -436,7 +425,7 @@ where
     /// returns the left eigen vectors corresponding to s2
     pub fn get_v2(&self) -> Option<&Array2<F>> {
         match &self.v2 {
-            Some(s) => Some(&s),
+            Some(s) => Some(s),
             _ => None,
         }
     } // end of get_v2
@@ -561,7 +550,7 @@ where
     //   - do a (full) gsvd of the 2 reduced matrices
     //   - lapack rust interface requires we pass matrix as slices so they must be in row order!
 
-    ///
+    //
     pub fn do_gsvd(&mut self) -> Result<GSvdResult<F>, anyhow::Error> {
         //
         log::debug!("entering hope::gsvd do_gsvd");
@@ -611,11 +600,11 @@ where
             let mut q_f32 = Array2::<f32>::zeros((1, a_nbrow));
             _ires = unsafe {
                 // we must cast a and b to f32 slices!! unsafe but we know our types with TypeId
-                let mut af32 = std::slice::from_raw_parts_mut(
+                let af32 = std::slice::from_raw_parts_mut(
                     self.a.as_slice_mut().unwrap().as_ptr() as *mut f32,
                     self.a.len(),
                 );
-                let mut bf32 = std::slice::from_raw_parts_mut(
+                let bf32 = std::slice::from_raw_parts_mut(
                     self.b.as_slice_mut().unwrap().as_ptr() as *mut f32,
                     self.b.len(),
                 );
@@ -630,9 +619,9 @@ where
                     self.b.dim().0.try_into().unwrap(),
                     &mut k,
                     &mut l,
-                    &mut af32,
+                    af32,
                     lda,
-                    &mut bf32,
+                    bf32,
                     ldb,
                     alpha_f32.as_slice_mut().unwrap(),
                     beta_f32.as_slice_mut().unwrap(),
@@ -673,8 +662,8 @@ where
                         b_dim.0.try_into().unwrap(),
                         u,
                         v,
-                        i64::try_from(k).unwrap(),
-                        i64::try_from(l).unwrap(),
+                        i64::from(k),
+                        i64::from(l),
                         alpha,
                         beta,
                         iwork,
@@ -698,11 +687,11 @@ where
             let mut v_f64 = Array2::<f64>::zeros((b_dim.0, b_dim.0));
             let mut q_f64 = Array2::<f64>::zeros((1, a_nbcol));
             _ires = unsafe {
-                let mut af64 = std::slice::from_raw_parts_mut(
+                let af64 = std::slice::from_raw_parts_mut(
                     self.a.as_slice_mut().unwrap().as_mut_ptr() as *mut f64,
                     self.a.len(),
                 );
-                let mut bf64 = std::slice::from_raw_parts_mut(
+                let bf64 = std::slice::from_raw_parts_mut(
                     self.b.as_slice_mut().unwrap().as_mut_ptr() as *mut f64,
                     self.b.len(),
                 );
@@ -717,9 +706,9 @@ where
                     self.b.dim().0.try_into().unwrap(),
                     &mut k,
                     &mut l,
-                    &mut af64,
+                    af64,
                     lda,
-                    &mut bf64,
+                    bf64,
                     ldb,
                     alpha_f64.as_slice_mut().unwrap(),
                     beta_f64.as_slice_mut().unwrap(),
@@ -759,8 +748,8 @@ where
                         b_dim.0.try_into().unwrap(),
                         u,
                         v,
-                        i64::try_from(k).unwrap(),
-                        i64::try_from(l).unwrap(),
+                        i64::from(k),
+                        i64::from(l),
                         alpha,
                         beta,
                         iwork,

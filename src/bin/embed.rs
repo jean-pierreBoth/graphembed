@@ -23,7 +23,7 @@
 //! - Hope embedding can run in 2 approximations mode with a precision mode or a rank target approximation of the similatity matrix
 //!
 //! - The sketching by default is adapted to the symetry declared for the csv file. It is possible to run with NodeSketchAsym on a symetric file
-//! to see the impact on validation for example.
+//!     to see the impact on validation for example.
 //!
 //! example usage:
 //!
@@ -87,7 +87,7 @@ use sprs::TriMatI;
 use graphembed::io;
 
 /// variable to be used to run tests
-const _DATADIR: &str = &"/home/jpboth/Data/Graph";
+const _DATADIR: &str = "/home/jpboth/Data/Graph";
 
 #[doc(hidden)]
 fn parse_sketching(matches: &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
@@ -125,7 +125,7 @@ fn parse_sketching(matches: &ArgMatches) -> Result<NodeSketchParams, anyhow::Err
         symetric,
         parallel: true,
     };
-    return Ok(sketch_params);
+    Ok(sketch_params)
 } // end of parse_sketching
 
 #[doc(hidden)]
@@ -148,7 +148,7 @@ fn parse_hope_args(matches: &ArgMatches) -> Result<HopeParams, anyhow::Error> {
             //
             let range = RangeApproxMode::EPSIL(RangePrecision::new(epsil, blockiter, maxrank));
             let params = HopeParams::new(hope_mode, range, decay);
-            return Ok(params);
+            Ok(params)
         } // end decoding precision arg
 
         Some(("rank", sub_m)) => {
@@ -161,16 +161,16 @@ fn parse_hope_args(matches: &ArgMatches) -> Result<HopeParams, anyhow::Error> {
             //
             let range = RangeApproxMode::RANK(RangeRank::new(targetrank, blockiter));
             let params = HopeParams::new(hope_mode, range, decay);
-            return Ok(params);
+            Ok(params)
         } // end of decoding rank arg
 
         _ => {
             log::error!(
                 "could not decode hope argument, got neither precision nor rank subcommands"
             );
-            return Err(anyhow!("could not parse Hope parameters"));
+            Err(anyhow!("could not parse Hope parameters"))
         }
-    }; // end match
+    } // end match
 } // end of parse_hope_args
 
 //=======================================================================
@@ -241,13 +241,13 @@ fn parse_validation_cmd(matches: &ArgMatches) -> Result<ValidationCmd, anyhow::E
     if embedding_cmd_res.is_ok() {
         // for validation we do not need ouput
         let embedding_cmd = embedding_cmd_res.unwrap();
-        return Ok(ValidationCmd {
+        Ok(ValidationCmd {
             validation_params,
             embedding_params: embedding_cmd.0,
-        });
+        })
     } else {
         log::info!("parse_embedding_cmd failed");
-        return Err(anyhow!("parse_validation_cmd parsing embedding cmd failed"));
+        Err(anyhow!("parse_validation_cmd parsing embedding cmd failed"))
     }
     //
 } // end of parse_validation_cmd
@@ -275,23 +275,23 @@ fn parse_embedding_cmd(
     match matches.subcommand() {
         Some(("hope", sub_m)) => {
             if let Ok(params) = parse_hope_args(sub_m) {
-                return Ok((EmbeddingParams::from(params), output_params));
+                Ok((EmbeddingParams::from(params), output_params))
             } else {
                 log::error!("parse_hope_args failed");
-                return Err(anyhow!("parse_hope_args failed"));
+                Err(anyhow!("parse_hope_args failed"))
             }
         }
         Some(("sketching", sub_m)) => {
             if let Ok(params) = parse_sketching(sub_m) {
-                return Ok((EmbeddingParams::from(params), output_params));
+                Ok((EmbeddingParams::from(params), output_params))
             } else {
                 log::error!("parse_sketching failed");
-                return Err(anyhow!("parse_sketching failed"));
+                Err(anyhow!("parse_sketching failed"))
             }
         }
         _ => {
             log::error!("did not find hope neither sketching commands");
-            return Err(anyhow!("parse_hope_args failed"));
+            Err(anyhow!("parse_hope_args failed"))
         }
     }
 } // parse_embedding_cmd
@@ -304,7 +304,7 @@ pub fn main() {
     let do_vcmpr = true;
     //
     println!("initializing default logger from environment ...");
-    let _ = env_logger::Builder::from_default_env().init();
+    env_logger::Builder::from_default_env().init();
     log::info!("logger initialized from default environment");
     //
     // first we define subcommands we will need, hope , sketching , validation
@@ -478,7 +478,7 @@ pub fn main() {
     let symetric_graph = *matches.get_one::<bool>("symetry").expect("true or false");
 
     // now we have datafile and symetry we can parse subcommands and parameters
-    let mut embedding_parameters: Option<EmbeddingParams> = None;
+    let embedding_parameters: Option<EmbeddingParams>;
     let mut validation_params: Option<ValidationParams> = None;
     let mut output_params: Option<io::output::Output> = None;
     //
@@ -491,7 +491,13 @@ pub fn main() {
                     validation_params = Some(cmd.validation_params);
                     embedding_parameters = Some(cmd.embedding_params);
                 }
-                _ => {}
+                _ => {
+                    log::error!(
+                        "exiting with error in parsing validation command{}",
+                        res.err().unwrap()
+                    );
+                    std::process::exit(1);
+                }
             }
         }
 
@@ -565,7 +571,7 @@ pub fn main() {
         );
     }
     // TODO change argument directed to symetric to csv_to_trimat_delimiters to avoid the !
-    let res = csv_to_trimat_delimiters::<f64>(&path, !symetric_graph);
+    let res = csv_to_trimat_delimiters::<f64>(path, !symetric_graph);
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
         log::error!("embedder failed in csv_to_trimat, reading {:?}", &path);
@@ -632,7 +638,7 @@ pub fn main() {
                 );
                 if params.do_centric() {
                     if do_vcmpr {
-                        let _quant = link::estimate_vcmpr(
+                        link::estimate_vcmpr(
                             &trimat.to_csr(),
                             params.get_nbpass(),
                             10,
@@ -758,7 +764,7 @@ pub fn main() {
                     // we compare with VCMPR
                     if validation_params.do_centric() {
                         if do_vcmpr {
-                            let _quant = link::estimate_vcmpr(
+                            link::estimate_vcmpr(
                                 &trimat.to_csr(),
                                 validation_params.get_nbpass(),
                                 10,

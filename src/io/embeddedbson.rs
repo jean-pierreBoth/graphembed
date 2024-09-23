@@ -14,12 +14,12 @@
 //!
 //! 2. The embedded arrays, one or two depending on asymetry
 //!     - loop on number of vectors
-//!     each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN (1)
-//!     so the first vector of embedding has key "0,0" , the second "1,0"
+//!         each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN (1)
+//!         so the first vector of embedding has key "0,0" , the second "1,0"
 //!     - if embedding is asymetric the first loop gives outgoing (or source) representation of node
-//!     and there is another loop giving ingoing or target) representation of node with key made by IN encoding
-//!     so first vector of the second group of embedded vectors corresponding to nodes as target has key
-//!     "0,1" the second vector has key "1,1"
+//!         and there is another loop giving ingoing or target) representation of node with key made by IN encoding
+//!         so first vector of the second group of embedded vectors corresponding to nodes as target has key
+//!         "0,1" the second vector has key "1,1"
 //!
 //! 3. The nodeindexation can also be encoded in a subdocument associated to key *"indexation"*.
 //!    The dump of nodeindexation is not mandatory as it can be retrieved by loading the original graph again.  
@@ -98,12 +98,11 @@ where
     //
     let path = Path::new(output.get_output_name());
     let fileres = OpenOptions::new().write(true).create(true).open(path);
-    let file;
-    if fileres.is_ok() {
-        file = fileres.unwrap();
+    let file = if fileres.is_ok() {
+        fileres.unwrap()
     } else {
         return Err(anyhow!("could not open file : {}", path.display()));
-    }
+    };
     let mut bufwriter = BufWriter::new(file);
     let mut doc = Document::new();
 
@@ -114,7 +113,7 @@ where
     let nbdata: i64 = FromPrimitive::from_usize(embedded.get_nb_nodes()).unwrap();
     // we could allocate a EmbeddedBsonHeader and call bson::to_bson(&bson_header).unwrap() but for C decoder ...
     let bson_header = bson!({
-        "version": 1 as i64,
+        "version": 1_i64,
         "symetric":embedded.is_symetric(),
         "type_name": std::any::type_name::<F>(),  // TODO must be simplified
         "dimension": dim,
@@ -137,7 +136,7 @@ where
             .collect();
         let ival: i64 = FromPrimitive::from_usize(i).unwrap();
         let mut key = ival.to_string();
-        key.push_str(",");
+        key.push(',');
         key.push_str(&OUT.to_string());
         doc.insert(key, data);
         let res = doc.to_writer(&mut bufwriter);
@@ -161,7 +160,7 @@ where
                 .collect();
             let ival: i64 = FromPrimitive::from_usize(i).unwrap();
             let mut key = ival.to_string();
-            key.push_str(",");
+            key.push(',');
             key.push_str(&IN.to_string());
             doc.insert(key, data);
             let res = doc.to_writer(&mut bufwriter);
@@ -229,7 +228,7 @@ pub fn get_bson_header(fname: &String) -> Result<EmbeddedBsonHeader, anyhow::Err
     let bson_header = res.unwrap().clone(); // TODO avoid clone ?
     let header: EmbeddedBsonHeader = bson::from_bson(bson_header).unwrap();
     log::info!(" bson header reloaded");
-    return Ok(header);
+    Ok(header)
 } // end of get_bson_header
 
 /// The structure returned by bson_load.
@@ -285,7 +284,7 @@ where
     log::info!("entering bson_load, file name : {:?}", fname);
     //
     let path = Path::new(fname);
-    let fileres = OpenOptions::new().read(true).open(&path);
+    let fileres = OpenOptions::new().read(true).open(path);
     let file;
     if fileres.is_ok() {
         file = fileres.unwrap();
@@ -344,7 +343,7 @@ where
         let doc = res.unwrap();
 
         let mut key = i.to_string();
-        key.push_str(",");
+        key.push(',');
         key.push_str(&OUT.to_string());
         let res = doc.get(&key);
         if res.is_none() {
@@ -386,7 +385,7 @@ where
             }
             let doc = res.unwrap();
             let mut key = i.to_string();
-            key.push_str(",");
+            key.push(',');
             key.push_str(&IN.to_string());
             let res = doc.get(&key);
             if res.is_none() {

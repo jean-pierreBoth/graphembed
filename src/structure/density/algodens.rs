@@ -110,7 +110,6 @@ where
     }
     // now we initialize r to 0
     let r: Vec<Arc<RwLock<f32>>> = (0..nb_nodes)
-        .into_iter()
         .map(|_| Arc::new(RwLock::<f32>::new(0.)))
         .collect();
     //
@@ -222,33 +221,27 @@ where
     //
     let nb_reg_blocks = iso_regression.get_nb_block();
     let nb_nodes = graph.node_count();
-    let mut degrees = (0..nb_nodes).into_iter().map(|_| 0).collect::<Vec<u32>>();
-    let pointblocklocator = PointBlockLocator::new(&iso_regression);
+    let mut degrees = (0..nb_nodes).map(|_| 0).collect::<Vec<u32>>();
+    let pointblocklocator = PointBlockLocator::new(iso_regression);
     //
     let mut block_transition = Array2::<f32>::zeros((nb_reg_blocks, nb_reg_blocks));
-    let mut block_size = (0..nb_reg_blocks)
-        .into_iter()
-        .map(|_| 0usize)
-        .collect::<Vec<usize>>();
+    let mut block_size = (0..nb_reg_blocks).map(|_| 0usize).collect::<Vec<usize>>();
     //
     let alfa_tmp = alphar.get_alpha().clone();
     let mut r = alphar.get_r().clone();
     let mut r_test = alphar.get_r().clone();
     // initialize stable_numblocks to sthing  impossible so we know if some points leap through a hole of the algo
-    let mut stable_numblocks: Vec<u32> = (0..r.len())
-        .into_iter()
-        .map(|_| (nb_reg_blocks + 1) as u32)
-        .collect();
+    let mut stable_numblocks: Vec<u32> = (0..r.len()).map(|_| (nb_reg_blocks + 1) as u32).collect();
     let mut points_waiting = Vec::<usize>::with_capacity(r.len());
     let mut block_waiting: u32 = 0;
     //
     for numbloc in 0..nb_reg_blocks {
         log::debug!("\n stability check for block : {}", numbloc);
-        let block = iso_regression.get_block(numbloc).unwrap().clone();
+        let block = iso_regression.get_block(numbloc).unwrap();
         block_size[numbloc] = block.get_nb_points();
         // TODO this iteration can be made // if necessary
-        let mut ptiter = block.get_point_iter();
-        while let Some((&_pt, rank_pt)) = ptiter.next() {
+        let ptiter = block.get_point_iter();
+        for (&_pt, rank_pt) in ptiter {
             let pt_idx = NodeIndex::new(rank_pt);
             points_waiting.push(pt_idx.index());
             // rank guve us the index in graph
@@ -287,7 +280,7 @@ where
           // we must check that r is greater on block than outside
         let mut min_in_block = F::max_value();
         let mut max_not_in_block = F::zero();
-        (0..r_test.len()).into_iter().for_each(|i| {
+        (0..r_test.len()).for_each(|i| {
             let b = pointblocklocator.get_point_block_num(i).unwrap();
             if b <= numbloc {
                 min_in_block = min_in_block.min(r_test[i]);
@@ -311,7 +304,7 @@ where
                 min_in_block,
                 max_not_in_block
             );
-            (0..r_test.len()).into_iter().for_each(|i| r[i] = r_test[i]);
+            (0..r_test.len()).for_each(|i| r[i] = r_test[i]);
             for p in &points_waiting {
                 stable_numblocks[*p] = block_waiting;
             }
@@ -323,10 +316,10 @@ where
             }
         } else {
             // reset r_test to last stable state
-            (0..r_test.len()).into_iter().for_each(|i| r_test[i] = r[i]);
+            (0..r_test.len()).for_each(|i| r_test[i] = r[i]);
         }
         // if we are in the last regression_blocks we treat points_waiting
-        if points_waiting.len() > 0 && numbloc == nb_reg_blocks - 1 {
+        if !points_waiting.is_empty() && numbloc == nb_reg_blocks - 1 {
             log::debug!("treating last block with waiting_points");
             for p in &points_waiting {
                 stable_numblocks[*p] = block_waiting;
@@ -355,32 +348,27 @@ where
     // dump stable_numblocks
     if log::log_enabled!(log::Level::Debug) {
         log::debug!("dumping stable_numblocks");
-        for p in 0..stable_numblocks.len() {
-            log::debug!("point : {},  bloc : {}", p, stable_numblocks[p]);
+        for (p, block) in stable_numblocks.iter().enumerate() {
+            log::debug!("point : {},  bloc : {}", p, block);
         }
     }
     //
     // process matrix of block_transition
     // for each block i get fraction of edge out. i.e going to j. We get a transition probability for each block
     //
-    let mut fraction_out = (0..nb_reg_blocks)
-        .into_iter()
-        .map(|_| 0f32)
-        .collect::<Vec<f32>>();
+    let mut fraction_out = (0..nb_reg_blocks).map(|_| 0f32).collect::<Vec<f32>>();
     let mean_block_size = block_size.iter().sum::<usize>() as f32 / nb_reg_blocks as f32;
     for i in 0..nb_reg_blocks {
         let block_degree = block_transition.row(i).iter().sum::<f32>();
         fraction_out[i] = (i + 1..nb_reg_blocks)
-            .into_iter()
             .fold(0., |acc: f32, j| acc + block_transition[(i, j)])
-            as f32
             / block_degree;
         log::info!(" block {i}, fraction out : {:.3e}", fraction_out[i]);
         block_transition
             .row_mut(i)
             .iter_mut()
             .zip(0usize..)
-            .for_each(|v| *v.0 = *v.0 / (block_degree));
+            .for_each(|v| *v.0 /= block_degree);
     }
     log::info!(" mean block size : {:?}", mean_block_size);
     log::info!("\n block_transition : {:?}", &block_transition);
@@ -391,8 +379,8 @@ where
 
 /// computes an approximate decomposition of graph in blocks of vertices of decreasing density.  
 /// nb_iter is the number of iteration asked for. A standard value is 500.
-pub fn approximate_decomposition<'a, N, F>(
-    graph: &'a Graph<N, F, Undirected>,
+pub fn approximate_decomposition<N, F>(
+    graph: &Graph<N, F, Undirected>,
     nbiter: usize,
 ) -> StableDecomposition
 where
@@ -421,21 +409,18 @@ where
     let alpha = alpha_r.get_alpha();
     let r = alpha_r.get_r();
     //
-    let mut y: Vec<F> = (0..r.len()).into_iter().map(|_| F::zero()).collect();
-    for i in 0..alpha.len() {
-        let node_max = if alpha[i].wsplit.0 > alpha[i].wsplit.1 {
-            alpha[i].edge.source().index()
+    let mut y: Vec<F> = (0..r.len()).map(|_| F::zero()).collect();
+    for esplit in alpha {
+        let node_max = if esplit.wsplit.0 > esplit.wsplit.1 {
+            esplit.edge.source().index()
         } else {
-            alpha[i].edge.target().index()
+            esplit.edge.target().index()
         };
-        y[node_max] += *alpha[i].edge.weight();
+        y[node_max] += *esplit.edge.weight();
     } // end of for i
       // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition
       // as -r increases , y decreases. We begin algo by densest blocks!
-    let points: Vec<Point<F>> = (0..r.len())
-        .into_iter()
-        .map(|i| Point::new(-r[i], y[i]))
-        .collect();
+    let points: Vec<Point<F>> = (0..r.len()).map(|i| Point::new(-r[i], y[i])).collect();
     let iso_regression = IsotonicRegression::new_descending(&points);
     let res_regr = iso_regression.do_isotonic();
     if res_regr.is_err() {
@@ -468,10 +453,7 @@ where
 
 /// log::info histograms of degrees of incremental blocks S_i whose union make B_i
 #[allow(unused)]
-pub fn get_degree_statistics<'a, N, F>(
-    graph: &'a Graph<N, F, Undirected>,
-    stable: &StableDecomposition,
-) {
+pub fn get_degree_statistics<N, F>(graph: &Graph<N, F, Undirected>, stable: &StableDecomposition) {
     //
     let quantiles = vec![0.05, 0.25, 0.5, 0.75, 0.95];
     log::info!("quantiles used : {:?}", quantiles);
@@ -482,10 +464,10 @@ pub fn get_degree_statistics<'a, N, F>(
 } // end of get_degree_statistics
 
 /// log::info hsitograms of degree in block of StableDecomposition
-pub fn get_block_degree_statistics<'a, N, F>(
-    graph: &'a Graph<N, F, Undirected>,
+pub fn get_block_degree_statistics<N, F>(
+    graph: &Graph<N, F, Undirected>,
     stable: &StableDecomposition,
-    quantiles: &Vec<f64>,
+    quantiles: &[f64],
     blocknum: usize,
 ) -> Result<(), ()> {
     //
@@ -504,7 +486,7 @@ pub fn get_block_degree_statistics<'a, N, F>(
         .collect::<Vec<u64>>();
     log::info!(" block degrees: {blocknum}, degrees : {:?} ", degrees);
     //
-    return Ok(());
+    Ok(())
 } // end of get_block_degree_statistics
 
 //==========================================================================================================

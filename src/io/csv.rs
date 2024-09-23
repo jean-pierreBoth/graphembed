@@ -45,7 +45,7 @@ pub(crate) fn get_header_size(filepath: &Path) -> anyhow::Result<usize> {
     //
     log::debug!("get_header_size");
     //
-    let fileres = OpenOptions::new().read(true).open(&filepath);
+    let fileres = OpenOptions::new().read(true).open(filepath);
     if fileres.is_err() {
         log::error!(
             "fn get_header_size : could not open file {:?}",
@@ -109,7 +109,7 @@ where
 {
     //
     // first get number of header lines
-    let nb_headers_line = get_header_size(&filepath)?;
+    let nb_headers_line = get_header_size(filepath)?;
     log::info!(
         "directed_from_csv , got header nb lines {}",
         nb_headers_line
@@ -117,7 +117,7 @@ where
     //
     // get rid of potential lines beginning with # or %
     // initialize a reader from filename, skip lines beginning with # or %
-    let fileres = OpenOptions::new().read(true).open(&filepath);
+    let fileres = OpenOptions::new().read(true).open(filepath);
     if fileres.is_err() {
         log::error!(
             "ProcessingState reload_json : reload could not open file {:?}",
@@ -250,7 +250,7 @@ where
     //
     // get rid of potential lines beginning with # or %
     // initialize a reader from filename, skip lines beginning with # or %
-    let fileres = OpenOptions::new().read(true).open(&filepath);
+    let fileres = OpenOptions::new().read(true).open(filepath);
     if fileres.is_err() {
         log::error!(
             "ProcessingState reload_json : reload could not open file {:?}",
@@ -399,7 +399,7 @@ where
 ///  - delim is the delimiter used in the csv file necessary for csv::ReaderBuilder.
 ///
 /// Returns the MatRepr field and a mapping from NodeId to a rank in matrix.
-pub fn csv_to_csrmat<F: Float + FromStr>(
+pub fn csv_to_csrmat<F>(
     filepath: &Path,
     directed: bool,
     delim: u8,
@@ -436,7 +436,7 @@ where
 /// This function tests for the following delimiters [b'\t', b',' , b' '] in the csv file.
 /// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  
 /// **For an asymetric graph directed must be set to true**.
-pub fn csv_to_csrmat_delimiters<F: Float + FromStr>(
+pub fn csv_to_csrmat_delimiters<F>(
     filepath: &Path,
     directed: bool,
 ) -> anyhow::Result<(MatRepr<F>, NodeIndexation<usize>)>
@@ -464,7 +464,7 @@ where
             &filepath,
             delim
         );
-        res = csv_to_csrmat::<F>(&filepath, directed, delim as u8);
+        res = csv_to_csrmat::<F>(filepath, directed, delim as u8);
         if res.is_err() {
             log::error!(
                 "embedder failed in csv_to_csrmat_delimiters, reading {:?}, with delimiter {:?} ",
@@ -496,7 +496,7 @@ where
 /// If there are 3 fields by record, the third is assumed to be a weight convertible type F (F morally is usize, f32 or f64)
 /// Returns a 2-uple containing first the TriMatI and then the NodeIndexation remapping nodes id as given in the Csv file into (0..nb_nodes)
 ///
-pub fn csv_to_trimat<F: Float + FromStr>(
+pub fn csv_to_trimat<F>(
     filepath: &Path,
     directed: bool,
     delim: u8,
@@ -513,7 +513,7 @@ where
 {
     //
     // first get number of header lines
-    let nb_headers_line = get_header_size(&filepath)?;
+    let nb_headers_line = get_header_size(filepath)?;
     log::info!(
         "directed_from_csv , got header nb lines {}",
         nb_headers_line
@@ -528,7 +528,7 @@ where
     //
     // get rid of potential lines beginning with # or %
     // initialize a reader from filename, skip lines beginning with # or %
-    let fileres = OpenOptions::new().read(true).open(&filepath);
+    let fileres = OpenOptions::new().read(true).open(filepath);
     if fileres.is_err() {
         log::error!(
             "ProcessingState reload_json : reload could not open file {:?}",
@@ -761,11 +761,9 @@ where
     // dump indexation
     if log::log_enabled!(log::Level::Trace) {
         log::trace!("dump of indexation set");
-        let mut iter = nodeindex.iter();
-        let mut rank = 0;
-        while let Some(id) = iter.next() {
+        let iter = nodeindex.iter();
+        for (rank, id) in iter.enumerate() {
             println!(" rank : {}, node id : {} ", rank, id);
-            rank += 1;
         }
     }
     //
@@ -806,7 +804,7 @@ where
             &filepath,
             delim as char
         );
-        res = csv_to_trimat::<F>(&filepath, directed, delim as u8);
+        res = csv_to_trimat::<F>(filepath, directed, delim as u8);
         if res.is_err() {
             log::error!(
                 "embedder failed in csv_to_trimat_delimiters, reading {:?}, trying delimiter {:?} ",

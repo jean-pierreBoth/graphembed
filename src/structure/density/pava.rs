@@ -157,7 +157,7 @@ where
         index: &'a [usize],
         idx: usize,
     ) -> Self {
-        let centroid = points[index[idx]].clone();
+        let centroid = points[index[idx]];
         BlockPoint {
             direction,
             points,
@@ -196,7 +196,7 @@ where
             self.centroid
         );
         //
-        return Ok(());
+        Ok(())
     } // end of merge
 
     /// return centroid
@@ -223,9 +223,9 @@ where
     // useful to build iterator. return a point given its rank in sorted index
     fn get_point(&self, idx: usize) -> Option<&'a Point<T>> {
         if idx < self.first || idx >= self.last {
-            return None;
+            None
         } else {
-            return Some(&self.points[self.index[idx]]);
+            Some(&self.points[self.index[idx]])
         }
     } // end of get_point
 
@@ -238,20 +238,8 @@ where
     fn is_ordered(&self, other: &BlockPoint<T>) -> bool {
         assert_eq!(self.direction, other.direction);
         let ordered = match self.direction {
-            Direction::Ascending => {
-                if self.centroid.y < other.centroid.y {
-                    true
-                } else {
-                    false
-                }
-            }
-            Direction::Descending => {
-                if self.centroid.y > other.centroid.y {
-                    true
-                } else {
-                    false
-                }
-            }
+            Direction::Ascending => self.centroid.y < other.centroid.y,
+            Direction::Descending => self.centroid.y > other.centroid.y,
         };
         ordered
     } // end of is_ordered
@@ -287,7 +275,7 @@ where
 
     /// get an iterator over points in block
     pub fn get_point_iter(&'a self) -> PointIterator<'a, T> {
-        return PointIterator::new(&self, self.index);
+        return PointIterator::new(self, self.index);
     }
 } // end of impl BlockPoint
 
@@ -322,7 +310,7 @@ where
 {
     pub fn new(block: &'a BlockPoint<'a, T>, index: &'a [usize]) -> Self {
         PointIterator {
-            block: block.clone(),
+            block: *block,
             index: index,
             pt_index: block.get_first_index(),
         }
@@ -340,12 +328,12 @@ where
         if self.pt_index >= self.block.get_last_index()
             || self.pt_index < self.block.get_first_index()
         {
-            return None;
+            None
         } else {
             let point = self.block.get_point(self.pt_index).unwrap();
             let idx = self.pt_index;
             self.pt_index += 1;
-            return Some((point, self.index[idx]));
+            Some((point, self.index[idx]))
         }
     } // end of next
 } // end  of impl Iterator for PointIterator<'a, T>
@@ -359,7 +347,7 @@ where
     //
     let index = regression.get_point_index();
     // essentially we invert index
-    let mut rank: Vec<usize> = (0..index.len()).into_iter().map(|_| 0).collect();
+    let mut rank: Vec<usize> = (0..index.len()).map(|_| 0).collect();
     for i in 0..index.len() {
         let k = index[i];
         rank[k] = i;
@@ -367,7 +355,7 @@ where
     // now for each value of rank we must find block such that block.first <= rank < block.last
     let nb_blocks = regression.get_nb_block();
     let mut nb_found = 0;
-    let mut blocknum: Vec<u32> = (0..index.len()).into_iter().map(|_| 0).collect();
+    let mut blocknum: Vec<u32> = (0..index.len()).map(|_| 0).collect();
     let mut last_b_found: usize = 0;
     let mut found: bool;
     for i in 0..index.len() {
@@ -390,13 +378,13 @@ where
                 break;
             }
         }
-        if found != true {
+        if !found {
             log::error!(" point cannot be located in any block");
             regression.check_blocks();
         }
     }
     assert_eq!(nb_found, index.len());
-    return blocknum;
+    blocknum
 }
 
 /// This structure stores the affectation of each original point to its block
@@ -417,7 +405,7 @@ impl PointBlockLocator {
             + Debug,
     {
         PointBlockLocator {
-            blocknum: get_point_blocnum(&regression),
+            blocknum: get_point_blocnum(regression),
         }
     } // end of new
 
@@ -477,12 +465,11 @@ where
             sum_y += point.y * point.weight;
         }
         // get a index for access to sorted values
-        let index;
-        if points.len() > 0 {
-            index = points.mergesort_indexed();
+        let index = if !points.is_empty() {
+            points.mergesort_indexed()
         } else {
-            index = Vec::<usize>::new();
-        }
+            Vec::<usize>::new()
+        };
         let blocks = Vec::<BlockPoint<'a, T>>::new();
         log::debug!("initializing IsotonicRegression");
         IsotonicRegression {
@@ -506,7 +493,7 @@ where
             return None;
         }
         let indexes = Vec::from(blocks.borrow()[blocknum].get_point_index_unsorted());
-        return Some(indexes);
+        Some(indexes)
     } // end of get_point_index
 
     /// Find the _y_ point at position `at_x`
@@ -556,7 +543,7 @@ where
 
     /// Retrieve the points the input data points that make up the isotonic regression
     pub fn get_points(&self) -> &'a [Point<T>] {
-        &self.points
+        self.points
     }
 
     pub(crate) fn get_blocks<'b: 'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
@@ -583,7 +570,7 @@ where
         //
         log::debug!("do_isotonic , nb points : {:?}", self.points.len());
         //
-        if self.points.len() == 0 {
+        if self.points.is_empty() {
             log::info!("no points to do regression");
             return Err(anyhow!("no points to do regression"));
         }
@@ -633,10 +620,10 @@ where
         // We scan points according to index. The test of block creation must depend on direction.
         let mut iso_blocks: Vec<RefCell<BlockPoint<T>>> = Vec::new();
         // TODO possibly we get cache problem and we need to work on a cloned sorted point array? at memory expense
-        for i in 0..blocks.len() {
+        for b in blocks {
             // check violation with preceding block
             let mut inserted = false;
-            let new_iso = blocks[i].clone();
+            let new_iso = b.clone();
             while !inserted {
                 if iso_blocks.is_empty()
                     || iso_blocks
@@ -668,7 +655,7 @@ where
             self.check_blocks();
         }
         //
-        return Ok(());
+        Ok(())
     } // end of do_isotonic
 
     /// get number of blocks of result
@@ -696,7 +683,7 @@ where
             }
         }
         assert_eq!(blocks.last().unwrap().last, self.points.len());
-        return true;
+        true
     } // end of check_blocks
 
     // debugging method

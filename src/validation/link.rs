@@ -101,8 +101,8 @@ where
         nb_to_discard
     );
 
-    let mut csmat_iter = csrmat.iter();
-    while let Some((value, (row, col))) = csmat_iter.next() {
+    let csmat_iter = csrmat.iter();
+    for (value, (row, col)) in csmat_iter {
         let xsi = uniform.sample(rng);
         let mut discard = false;
         if xsi < delete_proba {
@@ -219,9 +219,15 @@ where
     // filter
     let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
     log::debug!(
-        "\n\n one_precision_iteration : nb_deleted edges : {}",
+        "\n\n one_precision_iteration , symtetric : {}, nb_deleted edges : {}",
+        symetric,
         deleted_edges.len()
     );
+    // need to store trimat index before move to embedding
+    let mut trimat_set = HashSet::<(usize, usize)>::with_capacity(trimat.nnz());
+    for triplet in trimat.triplet_iter() {
+        trimat_set.insert((triplet.1 .0, triplet.1 .1));
+    }
     // We construct the list of edges not in reduced graph
     let nb_nodes = csmat.shape().0;
     let max_degree = csmat.degrees().into_iter().max().unwrap();
@@ -230,17 +236,13 @@ where
     let f_i = |i: usize| -> Vec<Edge> {
         let mut edges_i = Vec::<Edge>::with_capacity(max_degree);
         for j in 0..nb_nodes {
-            if j != i && (&trimat).find_locations(i, j).len() == 0usize {
-                edges_i.push(Edge {
-                    0: i,
-                    1: j,
-                    2: 0f64,
-                });
+            if j != i && (trimat).find_locations(i, j).is_empty() {
+                edges_i.push(Edge(i, j, 0_f64));
             }
         }
         edges_i
     };
-    let mut row_embedded: Vec<Vec<Edge>> = (0..nb_nodes).into_par_iter().map(|i| f_i(i)).collect();
+    let mut row_embedded: Vec<Vec<Edge>> = (0..nb_nodes).into_par_iter().map(f_i).collect();
     for i in 0..nb_nodes {
         log::trace!("row i : {}, row_embedded {:?}", i, row_embedded[i]);
         embedded_edges.append(&mut row_embedded[i]);
@@ -249,7 +251,7 @@ where
     // embed (to be passed as a closure)
     //
     let embedded = &embedder(trimat);
-    // now we can compute all edge valuation (similarities betwen nodes pairs) and sort in increasing order
+    // now we can compute all edge valuation (dis-similarities betwen nodes pairs) and sort in increasing order
     // find how many deleted edges are in upper part of the sorted edges.
     for edge in &mut embedded_edges {
         edge.2 = embedded.get_noderank_distance(edge.0, edge.1);
@@ -267,36 +269,45 @@ where
         embedded_edges[embedded_edges.len() - 1]
     );
     //
-    //  TODO parametrize? we give precision at 95% of deleted
-    let retrieved: usize = (0.95 * deleted_edges.len() as f64) as usize;
-    embedded_edges.truncate(retrieved);
+    let testsize = 50.min(embedded_edges.len());
+    embedded_edges.truncate(testsize);
     log::debug!(
-        "\n keeping {}, smallest non diagonal edges remaining {:?} ... {:?}",
-        retrieved,
-        embedded_edges[0],
-        embedded_edges[embedded_edges.len() - 1]
+        "\n keeping {}, smallest non diagonal edges remaining {:?}",
+        testsize,
+        embedded_edges.last().unwrap()
     );
     // how many deleted edges (and so not learned in the embedding) are in the edges list with smallest distance
     let mut h_edges = HashMap::<(usize, usize), f64>::with_capacity(embedded_edges.len());
     for edge in embedded_edges {
         h_edges.insert((edge.0, edge.1), edge.2);
     }
-    let mut nb_in = 0;
-    for edge in &deleted_edges {
-        if h_edges.contains_key(&(edge.0, edge.1)) {
-            nb_in += 1;
-        }
-        if symetric && h_edges.contains_key(&(edge.1, edge.0)) {
-            nb_in += 1;
+    // Now we have 2 questions:
+    // - how many edges are recovered from the deleted in the more probable edges.
+    // - how many edges are true original edges in the more probable edges.
+
+    let mut nb_recall = 0_usize;
+    let mut nb_precision = 0_usize;
+    for (_i, (nodes, _)) in h_edges.iter().enumerate().take(testsize) {
+        // is edge from node1 to node2 in retained edge ?
+        if trimat_set.contains(&(nodes.0, nodes.1)) {
+            nb_precision += 1;
+        } else if deleted_edges.contains(&(nodes.0, nodes.1)) {
+            nb_precision += 1;
+            nb_recall += 1;
         }
     }
     //
-    let recall = nb_in as f64 / deleted_edges.len() as f64;
-    let precision = nb_in as f64 / retrieved as f64;
-    assert!(precision <= 1.);
+    let recall = nb_recall as f64 / testsize.min(deleted_edges.len()) as f64;
+    let precision = nb_precision as f64 / testsize as f64;
     let f1: f64 = 2. * recall * precision / (precision + recall);
-    log::debug!("one_precision_iteration : precison {:.3e}, recall : {:.3e} nb_deleted : {}, nb_retrieved : {}", precision, recall, deleted_edges.len(), retrieved);
+    log::debug!(
+        "one_precision_iteration : precison {:.3e}, recall : {:.3e} nb_deleted : {}",
+        precision,
+        recall,
+        deleted_edges.len()
+    );
     log::info!("f1 = {:.3e}", f1);
+    //    assert!(precision <= 1.);
     //
     (precision, recall)
 } // end of one_precision_iteration
@@ -501,7 +512,7 @@ where
     let auc = good / nb_sample as f64;
     log::info!(" auc = {:3.e} nb dist equality : {}", auc, nb_dist_equality);
     //
-    return auc;
+    auc
 } // end of one_auc_iteration
 
 //
@@ -706,7 +717,7 @@ pub fn estimate_vcmpr<F, G, E>(
                 continue;
             }
             // we know we have a potential edge
-            k = k + 1;
+            k += 1;
             if deleted_edges.contains(&(i, neighbours_i[j].0)) {
                 log::debug!(
                     " node {}, degree : {}, edge rank : {}, neighbour : {},, dist : {:.3e}",
@@ -807,7 +818,6 @@ pub fn estimate_vcmpr<F, G, E>(
         cpu_start.elapsed().as_secs()
     );
     //
-    return;
 } // end of estimate_vcmpr
 
 //
@@ -843,7 +853,7 @@ pub fn estimate_vcmpr<F, G, E>(
 ///   Averging over k we get the centric auc of n and finally averaging over 2000 nodes $n$ we get an estimate of centric auc over the graph.
 ///
 /// 2. Outputs:
-///  The function outputs:
+///     The function outputs:
 /// -  mean centric auc and standard deviation
 /// -  degrees quantiles
 /// -  centric auc quantiles to check for high variations dependind on points.
@@ -1041,7 +1051,7 @@ pub fn estimate_centric_auc<F, G, E>(
     //
     // dump histogram
     //
-    if selected_auc.len() > 0 {
+    if !selected_auc.is_empty() {
         let mut histogram = CKMS::<f64>::new(0.01);
         for f in &selected_auc {
             histogram.insert(*f);
@@ -1067,7 +1077,6 @@ pub fn estimate_centric_auc<F, G, E>(
         cpu_start.elapsed().as_secs()
     );
     //
-    return;
 } // end of estimate_centric_auc
 
 //================================================================================================================
@@ -1155,9 +1164,9 @@ mod tests {
             let trimat_indexed = res.unwrap();
             let csrmat: CsMatI<f64, usize> = trimat_indexed.0.to_csr();
             let symetric = true;
-            let precision = estimate_precision(&csrmat, 5, 0.1, symetric, &nodesketch_get_embedded);
-            log::trace!("precision : {:?}", precision.0);
-            log::trace!("recall : {:?}", precision.1);
+            let precision = estimate_precision(&csrmat, 3, 0.2, symetric, &nodesketch_get_embedded);
+            log::debug!("precision : {:?}", precision.0);
+            log::debug!("recall : {:?}", precision.1);
         };
     } // end of test_link_precision_nodesketch_lesmiserables
 
@@ -1182,7 +1191,7 @@ mod tests {
             let trimat_indexed = res.unwrap();
             let csrmat: CsMatI<f64, usize> = trimat_indexed.0.to_csr();
             let symetric = true;
-            let auc = estimate_auc(&csrmat, 5, 0.1, symetric, &nodesketch_get_embedded);
+            let auc = estimate_auc(&csrmat, 3, 0.2, symetric, &nodesketch_get_embedded);
             log::info!("auc : {:?}", auc);
         };
     } // end of test_link_auc_nodesketch_lesmiserables

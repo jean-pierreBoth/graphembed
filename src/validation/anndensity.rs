@@ -152,9 +152,9 @@ impl BlockCheck {
 
     pub fn get_block(&self, numblock: usize) -> Result<&BlockStat> {
         if numblock >= self.blocks.len() {
-            return Err(anyhow!("BlockCheck get_block bzd block num arg"));
+            Err(anyhow!("BlockCheck get_block bzd block num arg"))
         } else {
-            return Ok(&self.blocks[numblock]);
+            Ok(&self.blocks[numblock])
         }
     } // end of get_block
 
@@ -167,7 +167,7 @@ impl BlockCheck {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&filepath);
+            .open(filepath);
         if fileres.is_err() {
             log::error!(
                 "BlockCheck dump : dump could not open file {:?}",
@@ -181,7 +181,7 @@ impl BlockCheck {
         }
         //
         let mut writer = BufWriter::new(fileres.unwrap());
-        let _ = to_writer(&mut writer, &self).unwrap();
+        to_writer(&mut writer, &self).unwrap();
         //
         Ok(())
     } // end of dump_json
@@ -190,7 +190,7 @@ impl BlockCheck {
     pub fn reload_json(filepath: &Path) -> Result<Self> {
         log::info!("in BlockCheck::reload_json");
         //
-        let fileres = OpenOptions::new().read(true).open(&filepath);
+        let fileres = OpenOptions::new().read(true).open(filepath);
         if fileres.is_err() {
             log::error!(
                 "BlockCheck::reload_json : reload could not open file {:?}",
@@ -326,12 +326,11 @@ where
     // we will insert by blocks
     let block_size = 10000;
     let nb_blocks_min = nbdata / block_size;
-    let nb_blocks;
-    if nbdata > nb_blocks_min * block_size {
-        nb_blocks = nb_blocks_min + 1;
+    let nb_blocks = if nbdata > nb_blocks_min * block_size {
+        nb_blocks_min + 1
     } else {
-        nb_blocks = nb_blocks_min;
-    }
+        nb_blocks_min
+    };
     let mut nb_sent = 0;
     let mut embeded_v = Vec::<(Vec<F>, usize)>::with_capacity(block_size);
     for block in 0..nb_blocks {
@@ -360,7 +359,7 @@ where
     //
     log::debug!("embedtohnsw , sent {nb_sent} to hnsw");
     //
-    return Ok(hnsw);
+    Ok(hnsw)
 } // end of embedtohnsw
 
 // We compute transition probabilities between blocks after embedding and compare it with data
@@ -377,7 +376,7 @@ fn compare_block_density(
     let highest = stable.get_block_points(blocnum).unwrap();
     let block_size_out = highest.len();
     let nb_blocks = stable.get_nb_blocks();
-    let mut block_counts = (0..nb_blocks).into_iter().map(|_| 0.).collect::<Vec<f32>>();
+    let mut block_counts = (0..nb_blocks).map(|_| 0.).collect::<Vec<f32>>();
     //
     let mut min_dist_in_block = f64::INFINITY;
     // loop on points of highest block
@@ -428,7 +427,7 @@ fn compare_block_density(
         mean_dist_out /= nb_dist_out as f32;
     }
     let sum = block_counts.iter().sum::<f32>();
-    block_counts.iter_mut().for_each(|v| *v = *v / sum);
+    block_counts.iter_mut().for_each(|v| *v /= sum);
     //
     let global_density = density as f64 / (nb_dist as f64);
 
@@ -458,7 +457,7 @@ fn compare_block_density(
         divergence,
     );
     //
-    return diststat;
+    diststat
 } // end of compare_block_density
 
 // computes kl divergence between 2 row of block transition. Array are normalized to 1.
@@ -470,12 +469,12 @@ fn kl_divergence(p1: &[f32], p2: &[f32]) -> f32 {
             acc
         }
     });
-    return -div;
+    -div
 } // end of kl_divergence
 
 /// get fraction of edge out of block. recall That B_{i} = \cup S_{j} for j <= i
 #[allow(unused)]
-fn get_block_stats(blocnum: usize, blockout: &Vec<f32>) -> f64 {
+fn get_block_stats(blocnum: usize, blockout: &[f32]) -> f64 {
     let mut out = 0.;
     let mut nb_edges = 0.;
     for j in 0..blockout.len() {
@@ -518,7 +517,7 @@ where
         None => {
             let nb_iter = 500;
             log::info!("doing approximate_decomposition");
-            approximate_decomposition(&graph, nb_iter)
+            approximate_decomposition(graph, nb_iter)
         }
     };
 
@@ -576,7 +575,7 @@ where
     //
     blockcheck.get_divergence_histogram();
     //
-    return Ok(blockcheck);
+    Ok(blockcheck)
 } // end of density_analysis
 
 //========================================================================================================

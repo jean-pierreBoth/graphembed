@@ -113,7 +113,7 @@ where
     //     but for our application we must pass transposed version of Mg and Ml as we must compute inverse(Mg) * Ml
     //     with a = Mg and b = Ml. So it seems we cannot avoid copying when construction the GSvdApprox
 
-    ///
+    //
     pub fn do_approx_gsvd(&self) -> Result<GSvdResult<F>, anyhow::Error> {
         //
         log::debug!("entering apt::do_approx_gsvd");
@@ -185,7 +185,7 @@ where
         gsvd_res
     } // end of do_approx_gsvd
 
-    ///
+    //
     pub fn compute_gsvd_residual(&self) -> f64 {
         panic!("not yet implemented");
     }

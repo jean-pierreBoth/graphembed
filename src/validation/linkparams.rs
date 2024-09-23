@@ -36,7 +36,7 @@ impl ValidationParams {
         self.delete_fraction
     }
 
-    ///
+    //
     pub fn is_symetric(&self) -> bool {
         self.symetric
     }

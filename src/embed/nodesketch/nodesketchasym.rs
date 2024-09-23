@@ -46,7 +46,7 @@ pub struct NodeSketchAsym {
     degrees: Vec<Degree>,
     /// The matrix storing all sketches along iterations for neighbours directed toward current node
     sketches_in: Vec<RowSketch>,
-    ///
+    //
     previous_sketches_in: Vec<RowSketch>,
     /// The matrix storing all sketches along iterations for neighbours reached from current node
     sketches_out: Vec<RowSketch>,
@@ -267,12 +267,12 @@ impl NodeSketchAsym {
         // out treatment new neighbourhood for current iteration
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
         // get an iterator on neighbours of node corresponding to row
-        let mut row_iter = row_vec.iter();
-        while let Some(neighbour) = row_iter.next() {
+        let row_iter = row_vec.iter();
+        for neighbour in row_iter {
             // neighbour.0 is a neighbour of row, it is brought with the weight connection from row to neighbour
             match v_k.get_mut(&neighbour.0) {
                 Some(val) => {
-                    *val = *val + *neighbour.1;
+                    *val += *neighbour.1;
                     log::trace!(
                         "{} augmenting weight in v_k for neighbour {},  new weight {:.3e}",
                         neighbour.0,
@@ -296,7 +296,7 @@ impl NodeSketchAsym {
                 match v_k.get_mut(n) {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to
                     Some(val) => {
-                        *val = *val + weight * *neighbour.1;
+                        *val += weight * *neighbour.1;
                         log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
                                     neighbour.0 , *n, weight * *neighbour.1, *val);
                     }
@@ -340,12 +340,12 @@ impl NodeSketchAsym {
         // in treatment new neighbourhood for current iteration
         let mut v_k = HashMap::<usize, f64, ahash::RandomState>::default();
         // get an iterator on neighbours of node corresponding to row
-        let mut row_iter = row_vec.iter();
-        while let Some(neighbour) = row_iter.next() {
+        let row_iter = row_vec.iter();
+        for neighbour in row_iter {
             // neighbour.0 is a neighbour of row, it is brought with the weight connection from row to neighbour
             match v_k.get_mut(&neighbour.0) {
                 Some(val) => {
-                    *val = *val + *neighbour.1;
+                    *val += *neighbour.1;
                     log::trace!(
                         "{} augmenting weight in v_k for neighbour {},  new weight {:.3e}",
                         neighbour.0,
@@ -369,7 +369,7 @@ impl NodeSketchAsym {
                 match v_k.get_mut(n) {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to
                     Some(val) => {
-                        *val = *val + weight * *neighbour.1;
+                        *val += weight * *neighbour.1;
                         log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
                                 neighbour.0 , *n, weight * *neighbour.1, *val);
                     }
@@ -450,7 +450,7 @@ impl NodeSketchAsym {
 
 impl EmbedderT<usize> for NodeSketchAsym {
     type Output = EmbeddedAsym<usize>;
-    ///
+    //
     fn embed(&mut self) -> Result<EmbeddedAsym<usize>, anyhow::Error> {
         let res = self.compute_embedded();
         match res {

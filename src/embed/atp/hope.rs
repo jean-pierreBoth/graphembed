@@ -120,11 +120,11 @@ impl HopeParams {
 /// The structure stores the adjacency matrix in a full (ndarray) or compressed row storage format (using crate sprs).
 //
 pub struct Hope<F> {
-    ///
+    //
     params: HopeParams,
     /// the graph as a matrix
     mat: MatRepr<F>,
-    ///
+    //
     _degrees: Option<Vec<Degree>>,
     /// store the eigenvalue weighting the eigenvectors. This give information on precision.
     sigma_q: Option<Array1<F>>,
@@ -225,7 +225,7 @@ where
         } */
         let gsvdapprox = GSvdApprox::new(mat_l, mat_g, approx_mode, None);
         //
-        return Ok(gsvdapprox);
+        Ok(gsvdapprox)
     } // end of make_katz_problem
 
     /// Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β P, (1. - β) * I).
@@ -267,7 +267,7 @@ where
         };
         let gsvdapprox = GSvdApprox::new(mat_l, mat_g, approx_mode, None);
         //
-        return Ok(gsvdapprox);
+        Ok(gsvdapprox)
     } // end of make_rooted_pagerank_problem
 
     fn embed_rpr_simple(
@@ -362,7 +362,7 @@ where
         log::trace!("exiting embed_from_svd_result");
         let embedded_a = EmbeddedAsym::new(source, target, None, hope_distance);
         //
-        return Ok(embedded_a);
+        Ok(embedded_a)
     } // end of embed_rpr_simple
 
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I, adamic_ada transform of matrep)
@@ -378,7 +378,7 @@ where
         // Mg is I, so in fact it is useless we have a simple SVD to approximate
         let mat_l = &self.mat;
         let svd_approx = SvdApprox::new(mat_l);
-        return Ok(svd_approx);
+        Ok(svd_approx)
     } // end of make_rooted_pagerank_problem
 
     // fills in embedding from a gsvd
@@ -467,10 +467,10 @@ where
             }
         }
         //
-        if sigma_q.len() > 0 {
+        if !sigma_q.is_empty() {
             log::info!(
                 "last eigen value to first : {}",
-                sigma_q[sigma_q.len() - 1].1 / sigma_q[0].1
+                sigma_q.last().unwrap().1 / sigma_q[0].1
             );
         } else {
             log::error!("compute_embedded : did not found eigenvalues in interval ]0., 1.[");
@@ -542,7 +542,7 @@ where
         log::trace!("exiting embed_from_svd_result");
         let embedded_a = EmbeddedAsym::new(source, target, None, hope_distance);
         //
-        return Ok(embedded_a);
+        Ok(embedded_a)
     } // end of embed_from_svd_result
 
     /// computes the embedding
@@ -602,7 +602,7 @@ where
                 embedding
             }
             HopeMode::ADA => {
-                let range_mode = self.params.get_range_mode().clone();
+                let range_mode = self.params.get_range_mode();
                 let svd_pb = self.make_adamic_adar_problem();
                 let svd_res = svd_pb.unwrap().direct_svd(range_mode);
                 if svd_res.is_err() {
@@ -643,7 +643,7 @@ where
         + Sync,
 {
     type Output = EmbeddedAsym<F>;
-    ///
+    //
     fn embed(&mut self) -> Result<EmbeddedAsym<F>, anyhow::Error> {
         let res = self.compute_embedded();
         match res {
@@ -707,9 +707,9 @@ where
             let mut rows = Vec::<usize>::with_capacity(nnz + n);
             let mut cols = Vec::<usize>::with_capacity(nnz + n);
             let mut values = Vec::<F>::with_capacity(nnz + n);
-            let mut iter = mat.iter();
+            let iter = mat.iter();
             let beta_f = F::from_f64(beta).unwrap();
-            while let Some((val, (row, col))) = iter.next() {
+            for (val, (row, col)) in iter {
                 if row != col {
                     if transpose {
                         rows.push(col);
@@ -732,7 +732,7 @@ where
             let trimat =
                 TriMatBase::<Vec<usize>, Vec<F>>::from_triplets((n, n), rows, cols, values);
             let csr_mat: CsMat<F> = trimat.to_csr();
-            return MatRepr::from_csrmat(csr_mat);
+            MatRepr::from_csrmat(csr_mat)
         }
     } // end of match
 } // end of compute_1_minus_beta_mat

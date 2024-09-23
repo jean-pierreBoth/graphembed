@@ -105,11 +105,11 @@ impl StableDecomposition {
         let size = self.block_start.len();
         //
         if blocknum >= size {
-            return Err(());
+            Err(())
         } else if blocknum == size - 1 {
-            return Ok(self.s.len() - self.block_start[blocknum]);
+            Ok(self.s.len() - self.block_start[blocknum])
         } else {
-            return Ok(self.block_start[blocknum + 1] - self.block_start[blocknum]);
+            Ok(self.block_start[blocknum + 1] - self.block_start[blocknum])
         }
         //
     } // end of get_nbpoints_in_block
@@ -133,7 +133,7 @@ impl StableDecomposition {
     } // end of get_densest_block
 
     /// get the list of blocks of a given vector of nodes
-    pub fn get_blocks(&self, nodelist: &Vec<usize>) -> Vec<usize> {
+    pub fn get_blocks(&self, nodelist: &[usize]) -> Vec<usize> {
         nodelist
             .iter()
             .map(|n| self.get_densest_block(*n).unwrap())
@@ -142,7 +142,7 @@ impl StableDecomposition {
 
     /// returns the number of blocks of the decomposition
     pub fn get_nb_blocks(&self) -> usize {
-        if self.index.len() > 0 {
+        if !self.index.is_empty() {
             1 + self.s[self.index[self.index.len() - 1]] as usize
         } else {
             0usize
@@ -198,10 +198,8 @@ impl StableDecomposition {
         } else {
             self.index.len()
         };
-        let total_degree = (start..end)
-            .into_iter()
-            .fold(0, |acc, p| acc + self.degrees[p]);
-        return Ok(total_degree as usize);
+        let total_degree = (start..end).fold(0, |acc, p| acc + self.degrees[p]);
+        Ok(total_degree as usize)
     } // end of get_block_degree
 
     /// dump in json format StableDecomposition structure
@@ -213,7 +211,7 @@ impl StableDecomposition {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&filepath);
+            .open(filepath);
         if fileres.is_err() {
             log::error!(
                 "StableDecomposition dump : dump could not open file {:?}",
@@ -227,7 +225,7 @@ impl StableDecomposition {
         }
         //
         let mut writer = BufWriter::new(fileres.unwrap());
-        let _ = to_writer(&mut writer, &self).unwrap();
+        to_writer(&mut writer, &self).unwrap();
         //
         Ok(())
     } // end of dump_json
@@ -239,7 +237,7 @@ impl StableDecomposition {
             filepath
         );
         //
-        let fileres = OpenOptions::new().read(true).open(&filepath);
+        let fileres = OpenOptions::new().read(true).open(filepath);
         if fileres.is_err() {
             log::error!(
                 "StableDecomposition::reload_json : reload could not open file {:?}",
