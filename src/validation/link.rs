@@ -1,7 +1,7 @@
 //! a simple link prediction to test Embeddeding
 //!
 //! We implement precision measure as described in :  
-//!       - Link Prediction in complex Networks : A survey.  
+//! - Link Prediction in complex Networks : A survey.  
 //!            Lü, Zhou. Physica 2011.  
 //!
 //! The scoring function for similarity is based upon the distance relative to the Embedded being tested
@@ -11,7 +11,7 @@
 //! For a symetric graph edge i->j and j->i are deleted/kept together and for an asymetric graph they are treated independantly.
 //! It is possible to treat edge deletion for a symetric graph as in the asymetric. See [crate::embed]
 //!
-//! The methods [estimate_centric_auc()] give also a variation of a node centric quality assessment (See also [estimate_vcmpr()])
+//! The methods [estimate_centric_auc()] give also a variation of a node centric quality assessment. See also [estimate_vcmpr()]
 
 /// We first implement precision measure as described in
 ///       - Link Prediction in complex Networks : A survey
@@ -218,7 +218,7 @@ where
     //
     // filter
     let (trimat, deleted_edges) = filter_csmat(csmat, delete_proba, symetric, rng);
-    log::debug!(
+    log::info!(
         "\n\n one_precision_iteration , symtetric : {}, nb_deleted edges : {}",
         symetric,
         deleted_edges.len()
@@ -284,7 +284,7 @@ where
     // Now we have 2 questions:
     // - how many edges are recovered from the deleted in the more probable edges.
     // - how many edges are true original edges in the more probable edges.
-
+    log::debug!("one_precision_iteration computing precision/recall");
     let mut nb_recall = 0_usize;
     let mut nb_precision = 0_usize;
     for (_i, (nodes, _)) in h_edges.iter().enumerate().take(testsize) {
@@ -318,10 +318,13 @@ where
 ///
 /// Precision estimation is a costly operation as it requires computing the whole (nbnode, nbnode) matrix similarity
 /// between embedded nodes and sorting them to compare with the deleted edges. So precision uses a comparison of each deleted edge
-/// with most probables inexistant edges.  
+/// with most probables inexistant edges. Above a few thousands it becomes impractical.
 ///
 /// AUC instead samples, for each deleted edge, a random inexistant edge from the original graph and compute its probability in the embedded graph
 /// count number of times the deleted edge is more probable than the deleted.
+///
+/// Other alternatives are [estimate_centric_auc()] or [estimate_vcmpr()]
+
 ///
 pub fn estimate_precision<F, G, E>(
     csmat: &CsMatI<F, usize>,
@@ -334,6 +337,14 @@ where
     F: Default + Copy + Sync,
     E: EmbeddedT<G> + std::marker::Sync,
 {
+    //
+    log::info!("============================================");
+    log::info!(
+        "in estimate_precision (standard precision and recall ), symetric mode : {:?}, nbiter : {}",
+        symetric,
+        nbiter
+    );
+    log::info!("===========================================");
     //
     log::debug!(
         "in estimate_precision delete_proba : {:.3e},  symetric : {}",
@@ -580,17 +591,15 @@ where
 
 //
 //
-/// This function is inspired by the paper:  
-/// Link prediction using low-dimensional node embeddings:The measurement problem (2024)
-/// See [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121)
+/// This function is an implementation of the paper:  
+/// Link prediction using low-dimensional node embeddings:The measurement problem PNAS (2024).  
+/// See [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121).
+/// Some comments on the paper can be found at [linkauc](https://github.com/jean-pierreBoth/linkauc)
 ///
-/// It implements the paper's version and a variation, the motivation of which is to avoid null contribution of nodes
-/// when there is no edge deleted incident to this node.
-///
-/// See also [estimate_centric_auc()] which implements a centric Auc which is more in the scale of global Auc but can also
-/// reveal some risks related to be overconfident with Global Auc.
-/// A discussion on link prediction can be found at TODO:
-#[doc(hidden)]
+/// The method implies a sort of all predicted edges around sampled nodes so it comes at a cost in large ( >= 100_000 nodes) graphs.
+//
+/// See also the function [estimate_centric_auc()] which implements a centric Auc and avoid the sorting cost.
+
 pub fn estimate_vcmpr<F, G, E>(
     csmat: &CsMatI<F, usize>,
     _nbiter: usize,
@@ -603,8 +612,9 @@ pub fn estimate_vcmpr<F, G, E>(
     G: std::fmt::Debug,
     E: EmbeddedT<G> + std::marker::Sync,
 {
+    log::info!("\n=================================");
     log::info!("\n in estimate_vcmpr, symetric mode : {:?}", symetric);
-    log::info!("===================");
+    log::info!("==================================\n");
     //
     let cpu_start = ProcessTime::now();
     let sys_start = SystemTime::now();
@@ -719,7 +729,7 @@ pub fn estimate_vcmpr<F, G, E>(
             // we know we have a potential edge
             k += 1;
             if deleted_edges.contains(&(i, neighbours_i[j].0)) {
-                log::debug!(
+                log::trace!(
                     " node {}, degree : {}, edge rank : {}, neighbour : {},, dist : {:.3e}",
                     i,
                     degrees[i],
@@ -736,7 +746,7 @@ pub fn estimate_vcmpr<F, G, E>(
                 }
             }
         } // end loop on all potential edges
-        log::debug!(
+        log::trace!(
             "node {}, nb found edge deleted : {}, deleted : {}",
             i,
             nb_found,
@@ -748,10 +758,10 @@ pub fn estimate_vcmpr<F, G, E>(
         // if there is no deleted edge, how can this node contribute to anything??
         if nb_deleted > 0 {
             precision = nb_found as f64 / nb_deleted.min(nb_edges_check) as f64;
-            log::debug!("inserting in histogram : {:.3e}", precision);
+            log::trace!("inserting in histogram : {:.3e}", precision);
             histogram.write().unwrap().insert(precision);
         } else {
-            precision = -1.; // here we depart from paper which returns 0.
+            precision = -1.;
         }
         //
         precision
@@ -786,7 +796,7 @@ pub fn estimate_vcmpr<F, G, E>(
     if count > 0 {
         let nbslot = 40;
         println!("\n\n vcmpr quantiles");
-        println!("quantile       vcmpr(ours)");
+        println!("quantile       vcmpr");
         for i in 0..=nbslot {
             let q = i as f64 / nbslot as f64;
             println!(
@@ -824,10 +834,10 @@ pub fn estimate_vcmpr<F, G, E>(
 //
 #[cfg_attr(doc, katexit::katexit)]
 ///
-/// This function is inspired by the paper:  
+/// This function is inspired by the paper:    
 /// Link prediction using low-dimensional node embeddings:The measurement problem (2024)
-/// See [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121)
-/// It tries to remedy to certain interpretation difficulties related to the paper discussed here: [linkauc](https://github.com/jean-pierreBoth/Linkauc)
+/// See [vcmpr](https://www.pnas.org/doi/10.1073/pnas.2312527121).  
+/// It tries to remedy to certain interpretation difficulties related of the paper and discussed here: [linkauc](https://github.com/jean-pierreBoth/Linkauc)
 ///
 /// 1. Method
 ///
@@ -843,8 +853,8 @@ pub fn estimate_vcmpr<F, G, E>(
 ///
 /// - We sort in increasing order all nodes distances to $n$ in the embedding (dot product for Hope or Jaccard for sketching)
 /// - We parse this array, noting $j$  the current position in the parsing loop.
-///   If j corresponds to a true (train) edge we increment the counter $k$ of true edges encountered up to j
-///   If j corresponds to a deleted (test) neighbour edge: the question we must answer is :  
+///   - If j corresponds to a true (train) edge we increment the counter $k$ of true edges encountered up to j
+///   - If j corresponds to a deleted (test) neighbour edge, the question we must answer is :  
 ///     what is the probability that it has a smaller distance to our reference node $n$ than a random edge?    
 ///   As the array is sorted, the response is just the number of indexes greater than j that do not correspond to a true edge so it is
 ///     $$ (nbnodes - j -(d  - de - k))/ (nbnodes -1 - d  + de) $$
@@ -871,9 +881,9 @@ pub fn estimate_centric_auc<F, G, E>(
     G: std::fmt::Debug,
     E: EmbeddedT<G> + std::marker::Sync,
 {
-    log::info!("===================================================");
-    log::info!("in estimate_centric_auc symetric mode: {:?}\n\n", symetric);
-    log::info!("===================================================");
+    log::info!("====================================================");
+    log::info!("in estimate_centric_auc symetric mode: {:?}", symetric);
+    log::info!("===================================================\n");
     //
     let cpu_start = ProcessTime::now();
     let sys_start = SystemTime::now();
@@ -999,7 +1009,7 @@ pub fn estimate_centric_auc<F, G, E>(
             }
             // we know we have a potential edge
             if deleted_edges.contains(&(i, neighbours_i[j].0)) {
-                log::debug!(
+                log::trace!(
                     " node {}, degree : {}, edge rank : {}, neighbour : {},, dist : {:.3e}",
                     i,
                     degrees[i],
@@ -1011,7 +1021,7 @@ pub fn estimate_centric_auc<F, G, E>(
                 found_ranks.push(nb_nodes - j - (degrees[i] - nb_deleted - nb_found_true));
             }
         } // end loop on all potential edges
-        log::debug!(
+        log::trace!(
             "found edge deleted for node : {}, deleted : {}",
             i,
             found_ranks.len()
@@ -1022,7 +1032,7 @@ pub fn estimate_centric_auc<F, G, E>(
             e_auc = *m as f64 / nb_potential_edges as f64;
         }
         //
-        log::debug!("node : {}, degree : {}, auc : {:.3e}", i, degrees[i], e_auc);
+        log::trace!("node : {}, degree : {}, auc : {:.3e}", i, degrees[i], e_auc);
         //
         Some(e_auc)
     };

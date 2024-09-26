@@ -73,6 +73,7 @@ impl NodeSketch {
             params.get_nb_iter(),
             params.get_decay_weight()
         );
+        log::info!("=======================================================");
         let mut sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         let mut previous_sketches = Vec::<RowSketch>::with_capacity(csrmat.rows());
         for _ in 0..csrmat.rows() {

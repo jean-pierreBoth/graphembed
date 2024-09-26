@@ -50,24 +50,12 @@
 //! - --centric  
 //!     This flag is optional and asks for one pass of centric AUC computation after standard AUC link prediction (See [graphembed::validation::link::estimate_centric_auc()])
 //!
-//!     flaSpecify we want the also the deletion of the reverse edge of of each deleted edge. See note downward.
-//!
-//!     It suffices to add the command : **validation --nbpass nbpass --skip fraction** before and instead  the "embedding" command name.
-//!     Defining nbpass as the number of step asked for in the validation and skip the fraction of edges kept out of the train dataset.
-//!     We get for example:
-//!   
-//!    embed --csv "p2p-Gnutella08.txt" --symetric "true" validation --nbpass 10 --skip 0.1 sketching --decay 0.1  --dim 300 --nbiter 3 **--symetric**
-//!
-//! **Note: The symetric flag at end of the preceding command is specific to the validation mode.
-//!     In validation it can treat a symetric graph in a symetric or asymetric mode. The flag is required to enforce the symetric deletion of edges. If absent the embedding (and edge deletion deletion) will
-//!     be done in asymetric mode.  
-//!      This inconvenience makes possible to treat a symetric graph as asymetric and gives a way to assess asymetry effects**.
 //!
 //!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation [--centric] --nbpass 10 --skip 0.1 hope  precision --epsil 0.2 --maxrank 200  --blockiter 3
 //!
 //!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation [--centric] --nbpass 10 --skip 0.1 hope  rank --targetrank 100  --nbiter 10
 //!
-//!     embed --csv wiki-Vote.txt --symetric false validation [--centric] --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2 --symetric false
+//!     embed --csv wiki-Vote.txt --symetric false validation [--centric] --nbpass 20 --skip 0.15 sketching --decay 0.25 --dim 500 --nbiter 2
 //!
 //! The module can be launched (and it is recommended) by preceding the command by setting the variable RUST_LOG to info (normal information) or debug (to get related info)
 //! as for example :  *RUST_LOG=graphembed=debug embed ....*
@@ -90,24 +78,12 @@ use graphembed::io;
 const _DATADIR: &str = "/home/jpboth/Data/Graph";
 
 #[doc(hidden)]
-fn parse_sketching(matches: &ArgMatches) -> Result<NodeSketchParams, anyhow::Error> {
+fn parse_sketching(
+    matches: &ArgMatches,
+    symetric: bool,
+) -> Result<NodeSketchParams, anyhow::Error> {
     log::debug!("in parse_sketching");
-    // check for potential symetric argument
-    let symetric_flag: bool = matches.contains_id("symetric");
-    let symetric: bool;
     //
-    if symetric_flag {
-        symetric = *matches
-            .get_one::<bool>("symetric")
-            .expect("expecting true or false");
-        log::info!(
-            "got symetric directive graph in sketching, symetric : {}",
-            symetric
-        );
-    } else {
-        log::info!("using default : expecting symetric graph in sketching");
-        symetric = true;
-    }
     let dimension = *matches
         .get_one::<usize>("dimension")
         .expect("dim value required");
@@ -117,7 +93,7 @@ fn parse_sketching(matches: &ArgMatches) -> Result<NodeSketchParams, anyhow::Err
     let nb_iter = *matches
         .get_one::<usize>("nbiter")
         .expect("nb_iter value required");
-    //
+    // we get symetry from upper args
     let sketch_params = NodeSketchParams {
         sketch_size: dimension,
         decay,
@@ -214,7 +190,10 @@ struct ValidationCmd {
 
 // parsing of valdation command
 #[doc(hidden)]
-fn parse_validation_cmd(matches: &ArgMatches) -> Result<ValidationCmd, anyhow::Error> {
+fn parse_validation_cmd(
+    matches: &ArgMatches,
+    symetric: bool,
+) -> Result<ValidationCmd, anyhow::Error> {
     //
     log::debug!("in parse_validation_cmd");
     // for now only link prediction is implemented
@@ -233,10 +212,9 @@ fn parse_validation_cmd(matches: &ArgMatches) -> Result<ValidationCmd, anyhow::E
         log::info!("no centric pass on link prediction");
     }
     //
-    let symetric = true; // default is symetric, we do not have here the global io parameter
     let validation_params = ValidationParams::new(delete_proba, nbpass, symetric, centric);
     //
-    let embedding_cmd_res = parse_embedding_cmd(matches);
+    let embedding_cmd_res = parse_embedding_cmd(matches, symetric);
 
     if embedding_cmd_res.is_ok() {
         // for validation we do not need ouput
@@ -256,6 +234,7 @@ fn parse_validation_cmd(matches: &ArgMatches) -> Result<ValidationCmd, anyhow::E
 #[doc(hidden)]
 fn parse_embedding_cmd(
     matches: &ArgMatches,
+    symetric_graph: bool,
 ) -> Result<(EmbeddingParams, io::output::Output), anyhow::Error> {
     log::debug!("in parse_embedding_cmd");
     //
@@ -282,7 +261,7 @@ fn parse_embedding_cmd(
             }
         }
         Some(("sketching", sub_m)) => {
-            if let Ok(params) = parse_sketching(sub_m) {
+            if let Ok(params) = parse_sketching(sub_m, symetric_graph) {
                 Ok((EmbeddingParams::from(params), output_params))
             } else {
                 log::error!("parse_sketching failed");
@@ -365,13 +344,6 @@ pub fn main() {
         );
     // the sketch embedding command
     let sketch_cmd = Command::new("sketching")
-        .arg(
-            Arg::new("symetric")
-                .required(false)
-                .long("symetric")
-                .value_parser(clap::value_parser!(bool))
-                .action(clap::ArgAction::SetTrue),
-        )
         .arg(
             Arg::new("dimension")
                 .required(true)
@@ -485,7 +457,7 @@ pub fn main() {
     match matches.subcommand() {
         Some(("validation", sub_m)) => {
             log::debug!("got validation command");
-            let res = parse_validation_cmd(sub_m);
+            let res = parse_validation_cmd(sub_m, symetric_graph);
             match res {
                 Ok(cmd) => {
                     validation_params = Some(cmd.validation_params);
@@ -503,7 +475,7 @@ pub fn main() {
 
         Some(("embedding", sub_m)) => {
             log::debug!("got embedding command");
-            let res = parse_embedding_cmd(sub_m);
+            let res = parse_embedding_cmd(sub_m, symetric_graph);
             match res {
                 Ok((embedding_params, embed_ouput_params)) => {
                     embedding_parameters = Some(embedding_params);
@@ -524,7 +496,7 @@ pub fn main() {
 
     if let Some(validation_m) = matches.subcommand_matches("validation") {
         log::debug!("subcommand_matches got validation");
-        let res = parse_validation_cmd(validation_m);
+        let res = parse_validation_cmd(validation_m, symetric_graph);
         match res {
             Ok(cmd) => {
                 validation_params = Some(cmd.validation_params);
@@ -552,7 +524,7 @@ pub fn main() {
         embedding_parameters.as_ref()
     );
     //
-    let path = std::path::Path::new(&fname);
+    let path = std::path::Path::new(fname);
     if !path.exists() {
         log::error!("file do not exist : {:?}", fname);
         println!("file do not exist : {:?}", fname);
@@ -574,7 +546,7 @@ pub fn main() {
     let res = csv_to_trimat_delimiters::<f64>(path, !symetric_graph);
     if res.is_err() {
         log::error!("error : {:?}", res.as_ref().err());
-        log::error!("embedder failed in csv_to_trimat, reading {:?}", &path);
+        log::error!("embedder failed in csv_to_trimat, reading {:?}", path);
         std::process::exit(1);
     }
     let (trimat, node_index) = res.unwrap();
@@ -612,7 +584,7 @@ pub fn main() {
             } else {
                 let mut params = validation_params.unwrap();
                 if !symetric_graph {
-                    log::info!("setting asymetric flag for validation");
+                    log::info!("asymetric graph, setting asymetric flag for validation");
                     params = ValidationParams::new(
                         params.get_delete_fraction(),
                         params.get_nbpass(),
@@ -638,6 +610,17 @@ pub fn main() {
                 );
                 if params.do_centric() {
                     if do_vcmpr {
+                        /* To costly
+                        // if vcmpr is asked we produce also standard precision and recall for comparison
+                        link::estimate_precision(
+                            &trimat.to_csr(),
+                            params.get_nbpass(),
+                            params.get_delete_fraction(),
+                            symetric_graph,
+                            &f,
+                        );
+                        */
+                        //
                         link::estimate_vcmpr(
                             &trimat.to_csr(),
                             params.get_nbpass(),
@@ -662,15 +645,7 @@ pub fn main() {
         EmbeddingMode::NodeSketch => {
             log::info!("embedding mode : Sketching");
             let sketching_params = embedding_parameters.sketching.unwrap();
-            // check coherence with symetry of graph, symetric graph can run in asymetric mode as reading csv we symetrize, the inverse not possible
-            if !symetric_graph && sketching_params.is_symetric() {
-                log::info!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
-                println!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
-                std::process::exit(1);
-            } else if symetric_graph && !sketching_params.is_symetric() {
-                log::info!("doing asymetric embedding for symetric graph");
-            }
-            log::debug!(" sketching embedding parameters : {:?}", sketching_params);
+            log::info!(" sketching embedding parameters : {:?}", sketching_params);
             if validation_params.is_none() {
                 log::debug!("running embedding without validation");
                 let sketching_symetry = sketching_params.is_symetric();
@@ -723,11 +698,6 @@ pub fn main() {
                 );
                 log::debug!("sketching parameters : {:?}", sketching_params);
                 let sketching_symetry = sketching_params.is_symetric();
-                if !symetric_graph && sketching_params.is_symetric() {
-                    log::info!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
-                    println!("asymetric graph requires asymetric embedding, use --symetry false in sketching command");
-                    std::process::exit(1);
-                }
                 // we are sure to have a coherent symetry arguments
                 if !sketching_symetry {
                     log::info!("doing validaton runs for nodesketchasym embedding");
@@ -763,10 +733,21 @@ pub fn main() {
                     );
                     // we compare with VCMPR
                     if validation_params.do_centric() {
+                        log::info!("doing precision estimation normal and centric modes ");
                         if do_vcmpr {
+                            /* To costly:
+                            if vcmpr is asked we produce also standard precision and recall for comparison
+                            link::estimate_precision(
+                                &trimat.to_csr(),
+                                2,
+                                validation_params.get_delete_fraction(),
+                                symetric_graph,
+                                &f,
+                            );
+                            */
                             link::estimate_vcmpr(
                                 &trimat.to_csr(),
-                                validation_params.get_nbpass(),
+                                2,
                                 10,
                                 validation_params.get_delete_fraction(),
                                 symetric_graph,

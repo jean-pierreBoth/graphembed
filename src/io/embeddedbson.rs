@@ -41,7 +41,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 // for serilaizatio, desreialization
-use bson::{bson, Bson, DeserializerOptions, Document};
+use bson::{bson, Bson, Document};
 use serde::{Deserialize, Serialize};
 
 use indexmap::IndexSet;
@@ -351,8 +351,8 @@ where
             return Err(anyhow!("could not get record for key {:?}", key));
         }
         // check key
-        let options = DeserializerOptions::builder().human_readable(false).build();
-        let data_1d_res = bson::from_bson_with_options(res.unwrap().clone(), options);
+        //        let options = DeserializerOptions::builder().human_readable(false).build();
+        let data_1d_res = bson::from_bson(res.unwrap().clone());
         if data_1d_res.is_err() {
             log::info!(
                 "\t bson decoding error for node {i}, key : {key}, err : {:?}",
@@ -392,9 +392,8 @@ where
                 log::error!("could get record for key {:?}", key);
                 return Err(anyhow!("could get record for key {:?}", key));
             }
-            let options = DeserializerOptions::builder().human_readable(false).build();
-            let data_1d: Vec<F> =
-                bson::from_bson_with_options(res.unwrap().clone(), options).unwrap();
+            //            let options = DeserializerOptions::builder().human_readable(false).build();
+            let data_1d: Vec<F> = bson::from_bson(res.unwrap().clone()).unwrap();
             let res = in_array.push_row(ArrayView1::from(data_1d.as_slice()));
             if res.is_err() {
                 return Err(anyhow!("could not insert IN array vector {:?}", i));

@@ -159,7 +159,7 @@ The general syntax is :
 
 - embedding and validation:
  
-        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 --symetric
+        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5
 
 For an asymetric graph we get 
 
