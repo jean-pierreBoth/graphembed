@@ -32,10 +32,10 @@ num = { version = "0.4" }
 num-traits = { version = "0.2" }
 
 # linear algebra stuff
-ndarray = { version = "0.15", features = ["rayon", "serde"] }
-ndarray-linalg = { version = "0.16", default-features = false }
+ndarray = { version = "=0.15.6", features = ["rayon", "serde"] }
+ndarray-linalg = { version = "=0.16.0", default-features = false }
 lapacke = { version = "0.5" }
-sprs = { version = "0.11" }
+sprs = { version = "=0.11.0" }
 
 # io
 
@@ -70,9 +70,9 @@ hdrhistogram = { version = "7.5" }
 quantiles = { version = "0.7" }
 
 #hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
-hnsw_rs = { version = "0.3" }
+hnsw_rs = { version = "0.3.1" }
 
-annembed = { version = "0.1", default = false }
+annembed = { version = "=0.1.1", default = false }
 #annembed = {git= "https://github.com/jean-pierreBoth/annembed"}
 #annembed ={ path = "../annembed", default = false}
 
@@ -97,7 +97,7 @@ katexit = { version = "0.1" }
 #
 #default = ["annembed/intel-mkl-static", "ndarray-linalg/intel-mkl-static"]
 
-default = ["openblas-system", "simdeez_f"]
+#default = ["openblas-system", "simdeez_f"]
 
 # simd choice. stdsimd requires nightly compiler
 stdsimd = ["hnsw_rs/stdsimd"]
