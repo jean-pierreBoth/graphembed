@@ -610,7 +610,6 @@ pub fn main() {
                 );
                 if params.do_centric() {
                     if do_vcmpr {
-                        /* To costly
                         // if vcmpr is asked we produce also standard precision and recall for comparison
                         link::estimate_precision(
                             &trimat.to_csr(),
@@ -619,8 +618,7 @@ pub fn main() {
                             symetric_graph,
                             &f,
                         );
-                        */
-                        //
+                        
                         link::estimate_vcmpr(
                             &trimat.to_csr(),
                             params.get_nbpass(),
@@ -735,8 +733,8 @@ pub fn main() {
                     if validation_params.do_centric() {
                         log::info!("doing precision estimation normal and centric modes ");
                         if do_vcmpr {
-                            /* To costly:
-                            if vcmpr is asked we produce also standard precision and recall for comparison
+                            
+                            //if vcmpr is asked we produce also standard precision and recall for comparison
                             link::estimate_precision(
                                 &trimat.to_csr(),
                                 2,
@@ -744,7 +742,6 @@ pub fn main() {
                                 symetric_graph,
                                 &f,
                             );
-                            */
                             link::estimate_vcmpr(
                                 &trimat.to_csr(),
                                 2,
