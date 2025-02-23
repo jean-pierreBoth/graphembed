@@ -290,6 +290,7 @@ pub fn main() {
     // the hope command
     //
     let hope_cmd = Command::new("hope")
+        .about("Asymmetric Transitivity Preserving Graph Embedding")
         .subcommand_required(false)
         .arg_required_else_help(true)
         .subcommand(
@@ -344,6 +345,7 @@ pub fn main() {
         );
     // the sketch embedding command
     let sketch_cmd = Command::new("sketching")
+        .about("Highly-Efficient Graph Embeddings via Recursive Sketching")
         .arg(
             Arg::new("dimension")
                 .required(true)
@@ -372,6 +374,7 @@ pub fn main() {
 
     // validation must have one embedding subcommand
     let validation_cmd = Command::new("validation")
+        .about("Graph Embedding with Accuracy Benchmark")
         .subcommand_required(true)
         .arg(
             Arg::new("nbpass")
@@ -400,6 +403,7 @@ pub fn main() {
 
     // the embedding command does just the embedding
     let embedding_command = Command::new("embedding")
+        .about("Graph Embedding")
         .arg(
             Arg::new("output")
                 .long("output")
@@ -415,7 +419,8 @@ pub fn main() {
     // Now the command line
     // ===================
     //
-    let matches = Command::new("embed")
+    let matches = Command::new("graphembed")
+        .about("Efficient and Robust Graph Embedding via High-Order Proximity Preservation or Recursive Sketching")
         .arg_required_else_help(true)
         .arg(
             Arg::new("csvfile")
