@@ -63,29 +63,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "anndists"
+name = "annembed"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4747593401c8d692fb589ac2a208a27ef968b95f9392af837728933348fc199c"
-dependencies = [
- "anyhow",
- "cfg-if 1.0.0",
- "cpu-time",
- "env_logger 0.10.2",
- "lazy_static",
- "log",
- "num-traits",
- "num_cpus",
- "rand",
- "rayon",
- "simdeez",
-]
-
-[[package]]
-name = "annembed"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdebeb6bc121147ea6785947cc30e0250d536c3a0d1bda424c2fe42baba15e6c"
+checksum = "33fb764ad379ef31395730634ae9af74d82a7e39f80f62b87a574c16151731cf"
 dependencies = [
  "anyhow",
  "bincode",
@@ -96,8 +77,8 @@ dependencies = [
  "csv",
  "env_logger 0.11.6",
  "hdrhistogram",
- "hnsw_rs 0.2.1",
- "indexmap 1.9.3",
+ "hnsw_rs",
+ "indexmap",
  "indxvec",
  "katexit",
  "lazy_static",
@@ -318,7 +299,7 @@ dependencies = [
  "base64 0.13.1",
  "bitvec",
  "hex",
- "indexmap 2.7.1",
+ "indexmap",
  "js-sys",
  "once_cell",
  "rand",
@@ -929,8 +910,8 @@ dependencies = [
  "csv",
  "env_logger 0.10.2",
  "hdrhistogram",
- "hnsw_rs 0.3.1",
- "indexmap 2.7.1",
+ "hnsw_rs",
+ "indexmap",
  "indxvec",
  "katexit",
  "lapacke",
@@ -954,12 +935,6 @@ dependencies = [
  "serde_json",
  "sprs",
 ]
-
-[[package]]
-name = "hashbrown"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
@@ -1038,31 +1013,6 @@ dependencies = [
  "serde",
  "simdeez",
  "skiplist",
-]
-
-[[package]]
-name = "hnsw_rs"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87e59cf4d04a56c67454ad104938ae4c785bc5db7ac17d27b93e3cb5a9abe6a5"
-dependencies = [
- "anndists",
- "anyhow",
- "bincode",
- "cfg-if 1.0.0",
- "cpu-time",
- "env_logger 0.10.2",
- "hashbrown 0.14.5",
- "indexmap 2.7.1",
- "lazy_static",
- "log",
- "mmap-rs",
- "num-traits",
- "num_cpus",
- "parking_lot",
- "rand",
- "rayon",
- "serde",
 ]
 
 [[package]]
@@ -1237,16 +1187,6 @@ checksum = "daca1df1c957320b2cf139ac61e7bd64fed304c5040df000a745aa1de3b4ef71"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
-]
-
-[[package]]
-name = "indexmap"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
-dependencies = [
- "autocfg",
- "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -1886,7 +1826,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
 dependencies = [
  "fixedbitset",
- "indexmap 2.7.1",
+ "indexmap",
 ]
 
 [[package]]
@@ -1926,7 +1866,7 @@ dependencies = [
  "env_logger 0.10.2",
  "fnv",
  "fxhash",
- "indexmap 2.7.1",
+ "indexmap",
  "katexit",
  "lazy_static",
  "log",
@@ -2313,7 +2253,7 @@ version = "1.0.139"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44f86c3acccc9c65b153fe1b85a3be07fe5515274ec9f0653b4a0875731c72a6"
 dependencies = [
- "indexmap 2.7.1",
+ "indexmap",
  "itoa",
  "memchr",
  "ryu",
@@ -2694,7 +2634,7 @@ version = "0.22.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17b4795ff5edd201c7cd6dca065ae59972ce77d1b80fa0a84d94950ece7d1474"
 dependencies = [
- "indexmap 2.7.1",
+ "indexmap",
  "serde",
  "serde_spanned",
  "toml_datetime",
