@@ -74,8 +74,6 @@ use sprs::TriMatI;
 
 use graphembed::io;
 
-/// variable to be used to run tests
-const _DATADIR: &str = "/home/jpboth/Data/Graph";
 
 #[doc(hidden)]
 fn parse_sketching(
@@ -282,7 +280,7 @@ pub fn main() {
     // TODO: to put in clap ? just for now select at compile time
     let do_vcmpr = true;
     //
-    println!("initializing default logger from environment ...");
+    println!("Initializing default logger from environment ...\n");
     env_logger::Builder::from_default_env().init();
     log::info!("logger initialized from default environment");
     //
@@ -345,7 +343,7 @@ pub fn main() {
         );
     // the sketch embedding command
     let sketch_cmd = Command::new("sketching")
-        .about("Highly-Efficient Graph Embeddings via Recursive Sketching")
+        .about("Highly-Efficient Graph/Network Embeddings via Recursive Sketching")
         .arg(
             Arg::new("dimension")
                 .required(true)
@@ -374,7 +372,7 @@ pub fn main() {
 
     // validation must have one embedding subcommand
     let validation_cmd = Command::new("validation")
-        .about("Graph Embedding with Accuracy Benchmark")
+        .about("Graph/Network Embedding with Accuracy Benchmark")
         .subcommand_required(true)
         .arg(
             Arg::new("nbpass")
@@ -403,7 +401,7 @@ pub fn main() {
 
     // the embedding command does just the embedding
     let embedding_command = Command::new("embedding")
-        .about("Graph Embedding")
+        .about("Graph/Network Embedding")
         .arg(
             Arg::new("output")
                 .long("output")
@@ -420,7 +418,7 @@ pub fn main() {
     // ===================
     //
     let matches = Command::new("graphembed")
-        .about("Efficient and Robust Graph Embedding via High-Order Proximity Preservation or Recursive Sketching")
+        .about("Efficient and Robust Graph/Network Embedding via High-Order Proximity Preservation or Recursive Sketching")
         .arg_required_else_help(true)
         .arg(
             Arg::new("csvfile")
