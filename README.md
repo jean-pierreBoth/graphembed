@@ -174,7 +174,11 @@ For an asymetric graph we get
 ```bash
 pip install graphembed_rs
 
-### or you can build from source after installing maturin
+### or you can build from source (Linux) after installing maturin
+git clone https://gitlab.com/Jianshu_Zhao/graphembed
+cd graphembed
+pip install maturin
+### note: for macOS, you need to change the line "features = ["pyo3/extension-module", "intel-mkl-static", "simdeez_f"]" in pyporject.toml to "features = ["pyo3/extension-module","openblas-system","stdsimd"]"
 maturin develop --release
 ```
 ```python
