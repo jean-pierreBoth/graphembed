@@ -137,7 +137,7 @@ The choice of one feature is mandatory to provide required linear algebra librar
 - On Intel the simdeez_f feature can be used. On other cpus the stdsimd feature can be chosen but it requires compiler >= 1.79
 
 ### Usage
-
+## Rust
 The embed module can be generated with the standard : cargo doc --no-deps --bin embed.  
 
 - The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
@@ -169,6 +169,20 @@ For an asymetric graph we get
     More details can be found in docs of the embed module. Use cargo doc --no-dep --bin embed (and cargo doc --no-dep) as usual.
 
 - Use the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.
+
+## Python (>=3.8)
+```bash
+pip install graphembed_rs
+
+### or you can build from source after installing maturin
+maturin develop --release
+```
+```python
+import graphembed as ge
+help(ge)
+ge.embed_hope_rank("BlogCatalog.txt", target_rank=128, nbiter=4)
+
+```
 
 ## License
 

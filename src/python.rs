@@ -1,4 +1,5 @@
 //! Python bindings for graphembed  (pyo3 0.21 tested)
+#![cfg(feature = "python")]
 
 use std::path::Path;
 
