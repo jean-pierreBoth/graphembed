@@ -1,42 +1,18 @@
-[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/graphembed/README.html)
-![](https://anaconda.org/bioconda/graphembed/badges/license.svg)
-![](https://anaconda.org/bioconda/graphembed/badges/version.svg)
-![](https://anaconda.org/bioconda/graphembed/badges/latest_release_relative_date.svg)
-![](https://anaconda.org/bioconda/graphembed/badges/platforms.svg)
-[![install with conda](https://anaconda.org/bioconda/graphembed/badges/downloads.svg)](https://anaconda.org/bioconda/graphembed)
+# Graphembed
+
+This crate provides ,as a library and an executable,embedding of directed or undirected graphs with positively weighted edges.
 
 
-# GraphEmbed: Efficient and Robust Network Embedding via High-Order Proximity Preservation or Recursive Sketching
+  - For simple graphs, without data attached to nodes/labels, there are 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
 
-This crate provides an executable and a library for embedding of directed or undirected graphs with positively weighted edges. We engineered and optimized current network embedding algorithms for large-scale network embedding, especially biological network. This crate was developed by [Jianshu Zhao](https://gitlab.com/Jianshu_Zhao) and Jean-Pierre Both [jpboth](https://gitlab.com/jpboth).
+  - To complement the embeddings we provide also core decomposition of graphs (see the module **structure**). We give try to analyze how Orkut communities are preserved through an embedding. (See Notebooks directory).
 
-
-  - For simple graphs, without data attached to nodes, there are 2 modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
-
-## Quick Install
-
-### Pre-built binaries on Linux
-```bash
-wget https://gitlab.com/-/project/64961144/uploads/ea72ca007e9e4899e0c830e708f52939/graphembed_Linux_x86-64_v0.1.4.zip
-unzip graphembed_Linux_x86-64_v0.1.4.zip
-chmod a+x ./graphembed
-./graphembed -h
-```
-
-### Bioconda on Linux
-```bash
-conda install -c conda-forge -c bioconda graphembed
-```
-
-### Homebrew on MacOS
-```bash
-brew tap jianshu93/graphembed
-brew update
-brew install graphembed
-
-```
+  - The module **gkernel** is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
+    The algorithm is based on an extension of the hashing strategy used in the module **nodesketch**.  
+    In the undirected case, this module also computes a global embedding vector for the whole graph. **It is still in an early version**.
 
 ## Methods
+
 ### The embedding algorithms used in this crate are based on the following papers
 
 - **nodesketch**
@@ -69,11 +45,28 @@ Source node are related to left singular vectors and target nodes to the right o
 The similarity measure is the dot product, so it is not a norm.  
 The svd is approximated by randomization as described in Halko-Tropp 2011 as implemented in the [annembed crate](https://crates.io/crates/annembed).
 
+### The core decomposition algorithms
+
+- **Density-friendly decomposition**
+
+*Large Scale decomposition via convex programming  2017*  
+    M.Danisch T.H Hubert Chan and M.Sozio
+
+The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation* and the comments on the embedding of the *Orkut* graph where we can use the community data provided with the graph to analyze the behaviour of embedded edge lengths.  
+
+In particular it is shown that :
+  - embedding of edges internal to a community are consistently smaller than embedded edges crossing a block frontier. 
+  - The transition probabilities of edge from one block to another are similar (low kullback divergence) in the original graph and in the embedded graph.
+ 
+  See results in [orkut.md](./orkut.md) and examples directory together with a small Rust notebook in directory [Notebooks](./Notebooks/orkutrs.ipynb)
+
 ## Validation
 
 Validation of embeddings is assessed via standard Auc with random deletion of edges. See documentation in the *link* module and *embed* binary.
 We give also a variation based on centric quality assessment as explained at [cauc](http://github.com/jean-pierreBoth/linkauc)
 ## Some data sets
+
+### Without labels
 
 Small datasets are given in the Data subdirectory (with 7z compression) to run tests.  
 Larger datasets can be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
@@ -127,11 +120,13 @@ A preliminary of node centric quality estimation is provided in the validation m
 - The munmun_twitter_social graph shows that treating a directed graph as an undirected graph give significantly different results in terms of link prediction AUC.
 
 
+
+
 ## Generalized Svd
 
 An implementation of Generalized Svd comes as a by-product in module [gsvd](./src/atp/gsvd.rs).
 
-## Detailed Installation and Usage
+## Installation and Usage
 
 ### Installation
 
@@ -154,21 +149,21 @@ so to the required dimension to get a valid embedding in $R^{n}$.
 - The *embed* module takes embedding and possibly validation commands (link prediction task) in one directive.  
 The general syntax is :
 
-    graphembed file_description [validation_command --validation_arguments] sketching mode  --embedding_arguments  
+    embed file_description [validation_command --validation_arguments] sketching mode  --embedding_arguments  
     for example:  
 
   For a symetric graph we get:
 
 - just embedding:
-        graphembed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt --symetric  sketching --decay 0.2  --dim 200 --nbiter 
+        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt --symetric  sketching --decay 0.2  --dim 200 --nbiter 
 
 - embedding and validation:
  
-        graphembed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5
+        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5
 
 For an asymetric graph we get 
 
-       graphembed --csv ./Data/Graphs/asymetric.csv  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 
+       embed --csv ./Data/Graphs/asymetric.csv  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 
 
 
     More details can be found in docs of the embed module. Use cargo doc --no-dep --bin embed (and cargo doc --no-dep) as usual.
