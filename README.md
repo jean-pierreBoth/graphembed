@@ -178,6 +178,8 @@ pip install graphembed_rs
 maturin develop --release
 ```
 ```python
+import os
+os.environ["RUST_LOG"] = "graphembed=info"
 import graphembed as ge
 help(ge)
 ge.embed_hope_rank("BlogCatalog.txt", target_rank=128, nbiter=4)
