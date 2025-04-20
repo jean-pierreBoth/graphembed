@@ -1,6 +1,6 @@
 //! example of density decompositon for Orkut graph [orkut](https://snap.stanford.edu/data/com-Orkut.html)
 //! 
-//! The graph is undirected with 3072441 nodes and 117 185 083 edges, medium size
+//! The graph is undirected with 3072441 nodes and 117 185 083 edges
 //!
 //!
 //! The purpose of this example executable is to test coherence of orkut embedding.  
