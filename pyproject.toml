@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "graphembed"
+version = "0.1.0"
+description = "Python bindings for the high‑performance Rust graph/network embedding library graphembed"
+authors = [{ name = "Jianshu Zhao" }]
+license = { text = "MIT OR Apache-2.0" }
+readme = "README.md"
+requires-python = ">=3.8"
+
+[tool.maturin]
+features = ["pyo3/extension-module", "openblas-system", "stdsimd"]
+

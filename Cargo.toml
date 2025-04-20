@@ -1,7 +1,7 @@
 [package]
 name = "graphembed"
 version = "0.0.8"
-authors = ["jeanpierre.both@gmail.com"]
+authors = ["jeanpierre.both@gmail.com","jianshuzhao@yahoo.com"]
 repository = "https://github.com/jean-pierreBoth/graphembed"
 keywords = ["graph", "embedding", "hash"]
 license = "MIT OR Apache-2.0"
@@ -11,11 +11,12 @@ edition = "2021"
 
 
 [lib]
-
-path = "src/lib.rs"
+name="graphembed"
+path="src/lib.rs"
+crate-type = ["rlib", "cdylib"]
 
 [[bin]]
-name = "embed"
+name = "graphembed"
 path = "src/bin/embed.rs"
 
 
@@ -32,10 +33,10 @@ num = { version = "0.4" }
 num-traits = { version = "0.2" }
 
 # linear algebra stuff
-ndarray = { version = "0.15", features = ["rayon", "serde"] }
-ndarray-linalg = { version = "0.16", default-features = false }
+ndarray = { version = "=0.15.6", features = ["rayon", "serde"] }
+ndarray-linalg = { version = "=0.16.0", default-features = false }
 lapacke = { version = "0.5" }
-sprs = { version = "0.11" }
+sprs = { version = "=0.11.0" }
 
 # io
 
@@ -70,10 +71,10 @@ hdrhistogram = { version = "7.5" }
 quantiles = { version = "0.7" }
 
 #hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
-hnsw_rs = { version = "0.3" }
+hnsw_rs = { version = "0.2.1" }
 
-annembed = { version = "0.1", default = false }
-#annembed = {git= "https://github.com/jean-pierreBoth/annembed"}
+annembed = { version = "=0.1.2", default = false }
+
 #annembed ={ path = "../annembed", default = false}
 
 #  
@@ -90,15 +91,15 @@ anyhow = { version = "1.0.58" }
 # for documentation
 katexit = { version = "0.1" }
 
-
+pyo3 = { version = "0.24.1", optional = true }
 [features]
 
 # can be change to 
 #
-#default = ["annembed/intel-mkl-static", "ndarray-linalg/intel-mkl-static"]
+##default = ["hnsw_rs/simdeez_f", "ndarray/blas", "annembed/intel-mkl-static", "ndarray-linalg/intel-mkl-static"]
 
-default = ["openblas-system", "simdeez_f"]
-
+#default = ["openblas-system", "simdeez_f"]
+python = ["pyo3/extension-module"]
 # simd choice. stdsimd requires nightly compiler
 stdsimd = ["hnsw_rs/stdsimd"]
 simdeez_f = ["hnsw_rs/simdeez_f"]
