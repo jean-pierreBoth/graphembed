@@ -324,7 +324,7 @@ fn estimate_vcmpr_sketching(
 /* ----------------------------------------------------------------------- */
 
 #[pymodule]
-fn graphembed(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn graphembed_rs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _ = env_logger::try_init(); // ignore “already initialised”
 
     /* Embedding */

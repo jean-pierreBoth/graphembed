@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "graphembed_rs"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python bindings for the high‑performance Rust graph/network embedding library graphembed"
 authors = [{ name = "Jianshu Zhao" }]
 license = { text = "MIT OR Apache-2.0" }
@@ -12,5 +12,6 @@ readme = "README.md"
 requires-python = ">=3.8"
 
 [tool.maturin]
-features = ["pyo3/extension-module", "intel-mkl-static", "simdeez_f"]
+module-name = "graphembed_rs"
+features = ["python", "intel-mkl-static", "simdeez_f"]
 
