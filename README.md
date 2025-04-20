@@ -182,7 +182,15 @@ import os
 os.environ["RUST_LOG"] = "graphembed=info"
 import graphembed as ge
 help(ge)
+### HOPE
 ge.embed_hope_rank("BlogCatalog.txt", target_rank=128, nbiter=4)
+
+### Sketching
+### sketching only
+ge.embed_sketching("BlogCatalog.txt", decay=0.3, dim=128, nbiter=5, symetric=True, output="embedding_output")
+### validate accuracy
+auc_scores = ge.validate_sketching("BlogCatalog.txt",decay=0.3, dim=128, nbiter=3, nbpass=1, skip_frac=0.2,symetric=True, centric=True)
+print("Standard AUC per pass:", auc_scores)
 
 ```
 
