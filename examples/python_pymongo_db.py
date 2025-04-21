@@ -1,5 +1,7 @@
 import numpy as np
 from pathlib import Path
+### install pymongo with pip install pymongo
+# -- pymongo is a BSON decoder, not a BSON encoder --
 from bson import decode_file_iter
 
 
