@@ -178,8 +178,10 @@ pip install graphembed_rs
 git clone https://gitlab.com/Jianshu_Zhao/graphembed
 cd graphembed
 pip install maturin
-### note: for macOS, you need to change the line "features = ["pyo3/extension-module", "intel-mkl-static", "simdeez_f"]" in pyporject.toml to "features = ["pyo3/extension-module","openblas-system","stdsimd"]"
+### note: for macOS, you need to change the line "features = ["pyo3/extension-module", "intel-mkl-static", "simdeez_f"]" in pyporject.toml to "features = ["pyo3/extension-module","openblas-system","stdsimd"]", you also need to Install OpenBLAS and add to system library path via Homebrew
 maturin develop --release
+### get some data
+wget https://gitlab.com/-/project/64961144/uploads/4e341383d62d86d1dd66e668e91b2c07/BlogCatalog.txt
 ```
 ```python
 import os
