@@ -27,9 +27,9 @@ use std::time::SystemTime;
 use num_traits::float::*;
 //use num_traits::cast::FromPrimitive;
 
-use ndarray::Array2;
-
 pub use super::gsvd::{GSvd, GSvdOptParams, GSvdResult};
+use lax::Lapack;
+use ndarray::Array2;
 
 // this module provides svdapproximation tools à la Hlako-Tropp
 use annembed::tools::svdapprox::*;
@@ -56,7 +56,7 @@ use annembed::tools::svdapprox::*;
 /// Most often the matrix representation will be CSR.
 /// The approximation mode can be either a given precision and maximum rank target or with given target rank
 ///
-pub struct GSvdApprox<F: Scalar> {
+pub struct GSvdApprox<F: Lapack> {
     /// first matrix we want to approximate range of
     mat1: MatRepr<F>,
     /// second matrix
@@ -73,7 +73,6 @@ where
         + Sync
         + Float
         + Lapack
-        + Scalar
         + ndarray::ScalarOperand
         + sprs::MulAcc
         + for<'r> std::ops::MulAssign<&'r F>
@@ -152,14 +151,14 @@ where
             MatMode::FULL(mat) => approx1_res.t().dot(mat),
             MatMode::CSR(mat) => {
                 log::trace!("direct_svd got csr matrix");
-                transpose_dense_mult_csr(&approx1_res, mat)
+                transpose_dense_mult_csr(&approx1_res, &mat)
             }
         };
         let mut b = match self.mat2.get_data() {
             MatMode::FULL(mat) => approx2_res.t().dot(mat),
             MatMode::CSR(mat) => {
                 log::trace!("direct_svd got csr matrix");
-                transpose_dense_mult_csr(&approx2_res, mat)
+                transpose_dense_mult_csr(&approx2_res, &mat)
             }
         };
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n

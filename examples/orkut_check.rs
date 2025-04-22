@@ -1,5 +1,5 @@
 //! example of density decompositon for Orkut graph [orkut](https://snap.stanford.edu/data/com-Orkut.html)
-//! 
+//!
 //! The graph is undirected with 3072441 nodes and 117 185 083 edges
 //!
 //!
@@ -310,7 +310,7 @@ pub fn main() {
     // we reload the hnsw dumped by example orkut_hnsw
     //
     let path = Path::new(DUMP_DIR);
-    let reloader = HnswIo::new(path.to_path_buf(), String::from("orkuthnsw"));
+    let reloader = HnswIo::new(path, "orkuthnsw");
     let mydist = DistPtr::<usize, f64>::new(jaccard_distance::<usize>);
 
     let hnsw_loaded = reloader.load_hnsw_with_dist(mydist);

@@ -283,7 +283,7 @@ pub fn read_maileu_data(
 #[cfg(test)]
 mod tests {
 
-    const MAILEU_DIR: &str = "/home/jpboth/Data/Graphs/Mail-EU";
+    const MAILEU_DIR: &str = "/home/jpboth/Data/Graphs/Email-Eu";
 
     use super::*;
 

@@ -11,6 +11,7 @@
 //use std::fmt::{Debug};
 
 use anyhow::anyhow;
+use lax::Lapack;
 use log::*;
 
 use std::collections::HashSet;
@@ -407,7 +408,6 @@ pub fn csv_to_csrmat<F>(
 where
     F: FromStr
         + Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
@@ -443,7 +443,6 @@ pub fn csv_to_csrmat_delimiters<F>(
 where
     F: FromStr
         + Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
@@ -504,7 +503,6 @@ pub fn csv_to_trimat<F>(
 where
     F: FromStr
         + Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
@@ -784,7 +782,6 @@ pub fn csv_to_trimat_delimiters<F: Float + FromStr>(
 where
     F: FromStr
         + Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc

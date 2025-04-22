@@ -4,7 +4,7 @@ use anyhow::anyhow;
 
 use hdrhistogram::Histogram;
 use indexmap::set::IndexSet;
-use rand::distributions::{Uniform, WeightedIndex};
+use rand::distr::{weighted::WeightedIndex, Uniform};
 use sprs::CsMatI;
 use std::collections::HashMap;
 
@@ -158,7 +158,7 @@ where
         .map(|d| (d.degree_in() + d.degree_out()) as f32)
         .collect();
     //
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     let distribution = WeightedIndex::new(&weights).unwrap();
     let mut nb_try = 0;
     let mut nb_sampled = 0;
@@ -191,8 +191,8 @@ where
     let nb_nodes = csmat.rows();
     assert!(nb_nodes <= i32::MAX as usize);
     //
-    let uniform = Uniform::<f64>::new(0., 1.);
-    let mut rng = thread_rng();
+    let uniform = Uniform::<f64>::new(0., 1.).unwrap();
+    let mut rng = rand::rng();
     //
     let fraction = nb_sample as f64 / nb_nodes as f64;
     let sampled_nodes: Vec<usize> = (0..nb_nodes)

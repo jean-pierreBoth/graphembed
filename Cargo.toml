@@ -24,7 +24,7 @@ path = "src/bin/embed.rs"
 # default is version spec is ^ meaning can update up to max non null version number
 # cargo doc --no-deps avoid dependencies doc generation
 #
-petgraph = { version = "0.6" }
+petgraph = { version = "0.7.1" }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
@@ -33,10 +33,11 @@ num = { version = "0.4" }
 num-traits = { version = "0.2" }
 
 # linear algebra stuff
-ndarray = { version = "=0.15.6", features = ["rayon", "serde"] }
-ndarray-linalg = { version = "=0.16.0", default-features = false }
+ndarray = { version = "0.16", features = ["rayon", "serde"] }
+# ndarray-linalg = { version = "0.17", default-features = false }
+lax = { version = "0.17" }
 lapacke = { version = "0.5" }
-sprs = { version = "=0.11.0" }
+sprs = { version = "0.11" }
 
 # io
 
@@ -60,22 +61,23 @@ probminhash = { version = "0.1" }
 #probminhash = {path = "../probminhash"}
 
 ## rand utils
-rand = { version = "0.8" }
-rand_xoshiro = { version = "0.6" }
-rand_distr = { version = "0.4" }
+rand = { version = "0.9" }
+rand_xoshiro = { version = "0.7" }
+rand_distr = { version = "0.5" }
 
 ## sorting, indexing
-ordered-float = { version = "4.2" }
+ordered-float = { version = "5.0" }
 indxvec = { version = "1.9" }
 hdrhistogram = { version = "7.5" }
 quantiles = { version = "0.7" }
 
-#hnsw_rs = {path = "../hnswlib-rs", features = ["simdeez_f"]}
-hnsw_rs = { version = "0.3.1" }
+# hnsw_rs = { path = "../hnswlib-rs", features = ["simdeez_f"] }
+hnsw_rs = { version = "0.3" }
 
-annembed = { version = "=0.1.2", default = false }
-
-#annembed ={ path = "../annembed", default = false}
+# annembed = { git = "https://gitlab.com/jpboth/annembed" }
+# annembed = { version = "0.1.4" }
+annembed = { git = "https://github.com/jean-pierreBoth/annembed" }
+# annembed = { path = "../annembed" }
 
 #  
 lazy_static = { version = "1.5" }
@@ -84,7 +86,7 @@ lazy_static = { version = "1.5" }
 # decreasing order of log for release build (release_max_level_)  .. idem
 #log = { version = "0.4", features = ["max_level_trace", "release_max_level_debug"] }
 log = { version = "0.4" }
-env_logger = { version = "0.10" }
+env_logger = { version = "0.11" }
 
 # hack to avoid interaction bug with intel-mkl
 anyhow = { version = "1.0.58" }
@@ -96,9 +98,9 @@ pyo3 = { version = "0.24.1", optional = true }
 
 # can be change to 
 #
-##default = ["hnsw_rs/simdeez_f", "ndarray/blas", "annembed/intel-mkl-static", "ndarray-linalg/intel-mkl-static"]
+#default = ["annembed/intel-mkl-static", "lax/intel-mkl-static"]
 
-#default = ["openblas-system", "simdeez_f"]
+##default = ["openblas-system", "simdeez_f"]
 python = ["pyo3/extension-module"]
 # simd choice. stdsimd requires nightly compiler
 stdsimd = ["hnsw_rs/stdsimd"]
@@ -106,18 +108,18 @@ simdeez_f = ["hnsw_rs/simdeez_f"]
 
 intel-mkl-static = [
     "ndarray/blas",
-    "ndarray-linalg/intel-mkl-static",
+    "lax/intel-mkl-static",
     "annembed/intel-mkl-static",
 ]
 
 openblas-static = [
     "ndarray/blas",
-    "ndarray-linalg/openblas-static",
+    "lax/openblas-static",
     "annembed/openblas-static",
 ]
 
 openblas-system = [
     "ndarray/blas",
-    "ndarray-linalg/openblas-system",
+    "lax/openblas-system",
     "annembed/openblas-system",
 ]
