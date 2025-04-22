@@ -1392,7 +1392,7 @@ mod tests {
 
     use crate::embed::gkernel::exio::{maileu::*, ppisapiens::*};
 
-    const MAILEU_DIR: &str = "/home/jpboth/Data/Graphs/Mail-EU";
+    const MAILEU_DIR: &str = "/home/jpboth/Data/Graphs/Email-Eu";
     const PPI_DIR: &str = "/home/jpboth/Data/Graphs/PPI";
 
     fn log_init_test() {

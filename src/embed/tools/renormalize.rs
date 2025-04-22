@@ -5,6 +5,7 @@
 use anyhow::anyhow;
 
 use cpu_time::ProcessTime;
+use lax::Lapack;
 use std::time::SystemTime;
 
 use num_traits::float::Float;
@@ -18,9 +19,11 @@ use annembed::tools::svdapprox::*;
 pub fn csr_row_normalization<F>(csr_mat: &mut CsMat<F>)
 where
     F: Float
-        + Scalar
-        + Lapack
+        + std::ops::AddAssign
+        + std::ops::DivAssign
+        + std::fmt::Display
         + ndarray::ScalarOperand
+        + Lapack
         + sprs::MulAcc
         + for<'r> std::ops::MulAssign<&'r F>,
 {
@@ -65,7 +68,7 @@ where
 pub fn dense_row_normalization<F>(mat: &mut Array2<F>)
 where
     F: Float
-        + Scalar
+        + std::ops::DivAssign
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
@@ -96,8 +99,7 @@ where
 pub fn matrepr_row_normalization<F>(mat: &mut MatRepr<F>)
 where
     F: Float
-        + Scalar
-        + Lapack
+        + lax::Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
         + for<'r> std::ops::MulAssign<&'r F>
@@ -120,11 +122,11 @@ where
 pub fn adamic_adar_normalization_full<F>(mat: &mut Array2<F>) -> Result<(), anyhow::Error>
 where
     F: Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
         + for<'r> std::ops::MulAssign<&'r F>
+        + std::ops::AddAssign
         + Default,
 {
     let (nb_row, nb_col) = mat.dim();
@@ -151,7 +153,7 @@ where
     let mut adamat = mat.clone().to_owned();
     for i in 0..nb_row {
         adamat.row_mut(i).map_inplace(|x| {
-            *x *= diagonal[i];
+            *x *= &diagonal[i];
         });
     }
     // compute mat * (adamat) = mat * (diagonal * mat)
@@ -164,9 +166,10 @@ where
 pub fn adamic_adar_normalization_csmat<F>(mat: &mut CsMat<F>) -> Result<(), anyhow::Error>
 where
     F: Float
-        + Scalar
-        + Lapack
         + ndarray::ScalarOperand
+        + std::ops::AddAssign
+        + std::ops::DivAssign
+        + Lapack
         + sprs::MulAcc
         + for<'r> std::ops::MulAssign<&'r F>
         + Default
@@ -225,9 +228,8 @@ where
 pub fn matrepr_adamic_adar_normalization<F>(mat: &mut MatRepr<F>)
 where
     F: Float
-        + Scalar
-        + Lapack
         + ndarray::ScalarOperand
+        + lax::Lapack
         + sprs::MulAcc
         + for<'r> std::ops::MulAssign<&'r F>
         + Default

@@ -456,7 +456,7 @@ where
         IsotonicRegression::new(points, Direction::Descending)
     }
 
-    fn new(points: &'a [Point<T>], direction: Direction) -> IsotonicRegression<T> {
+    fn new(points: &'a [Point<T>], direction: Direction) -> IsotonicRegression<'a, T> {
         let point_count: T = points.iter().map(|p| p.weight).sum();
         let mut sum_x: T = T::from(0.0).unwrap();
         let mut sum_y: T = T::from(0.0).unwrap();
@@ -546,7 +546,7 @@ where
         self.points
     }
 
-    pub(crate) fn get_blocks<'b: 'a>(&'b self) -> &RefCell<Vec<BlockPoint<T>>> {
+    pub(crate) fn get_blocks<'b: 'a>(&'b self) -> &'b RefCell<Vec<BlockPoint<'b, T>>> {
         &self.blocks
     }
 

@@ -16,8 +16,8 @@ use std::time::SystemTime;
 use num_traits::cast::FromPrimitive;
 use num_traits::float::*;
 
+use lax::Lapack;
 use ndarray::{s, Array1, Array2, ArrayView, ArrayView1, ArrayView2, Dim, Ix1, Ix2};
-use ndarray_linalg::{Lapack, Scalar};
 use std::any::TypeId;
 
 // #[cfg(feature = "openblas-static")]
@@ -83,7 +83,7 @@ impl GSvdOptParams {
 ///
 /// If mat2 is non-singular the Gsvd gives the following svd
 ///  $$  mat_1  \cdot {mat_2}^{-1} = V_1 \cdot (\Sigma_{1} /\Sigma_{2} ) \cdot V_{2}^{t} $$
-pub struct GSvd<'a, F: Scalar> {
+pub struct GSvd<'a, F: Lapack> {
     /// first matrix we want to approximate range of
     a: &'a mut Array2<F>,
     /// second matrix
@@ -120,7 +120,7 @@ pub struct GSvd<'a, F: Scalar> {
 ///          
 /// If the first matrix is inversible (and so m=n) we have k+l = m = n  
 /// If the second matrix is inversible (and so p=n) we have k=0, l = p = n
-pub struct GSvdResult<F: Float + Scalar> {
+pub struct GSvdResult<F: Float> {
     /// number of row of first matrix
     m: usize,
     /// number of columns of first and second matrix
@@ -152,7 +152,7 @@ pub struct GSvdResult<F: Float + Scalar> {
 
 impl<F> GSvdResult<F>
 where
-    F: Float + Lapack + Scalar + ndarray::ScalarOperand + sprs::MulAcc,
+    F: Float + Lapack + ndarray::ScalarOperand + sprs::MulAcc,
 {
     pub(crate) fn new() -> Self {
         GSvdResult {
@@ -477,7 +477,7 @@ where
 
 pub(crate) fn dump<F>(a: &ArrayView2<F>)
 where
-    F: Float + Lapack + Scalar,
+    F: Float + Lapack,
 {
     for i in 0..a.dim().0 {
         println!();
@@ -489,7 +489,7 @@ where
 
 pub(crate) fn check_orthogonality<F>(u: &Array2<F>) -> Result<(), ()>
 where
-    F: Float + Lapack + Scalar,
+    F: Float + Lapack,
 {
     //
     let epsil = 1.0E-5;
@@ -520,7 +520,7 @@ where
 
 impl<'a, F> GSvd<'a, F>
 where
-    F: Float + Lapack + Scalar + ndarray::ScalarOperand + sprs::MulAcc,
+    F: Float + Lapack + ndarray::ScalarOperand + sprs::MulAcc,
 {
     /// argumnt a corresponds to mat_1, argument b corresponds to mat_2 in [GSvd]
     pub fn new(a: &'a mut Array2<F>, b: &'a mut Array2<F>) -> Self {

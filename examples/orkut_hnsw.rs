@@ -256,9 +256,10 @@ pub fn main() {
     let hnsw = hnsw_res.unwrap();
     // some loggin info
     hnsw.dump_layer_info();
+    let dir = Path::new(".");
     // dump in a file. Must take care of name as tests runs in // !!!
     let fname = String::from("orkuthnsw");
-    let _res = hnsw.file_dump(&fname);
+    let _res = hnsw.file_dump(&dir, &fname);
     //
     log::info!("you can run orkut_check");
 } // end of main

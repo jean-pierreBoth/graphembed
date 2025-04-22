@@ -13,7 +13,7 @@ use anyhow::anyhow;
 
 use ndarray::{Array1, Array2, ArrayView1};
 
-use ndarray_linalg::{Lapack, Scalar};
+use lax::Lapack;
 
 use cpu_time::ProcessTime;
 use std::time::SystemTime;
@@ -35,7 +35,7 @@ use crate::embedding::{EmbeddedAsym, EmbedderT};
 /// Basically it is the opposite of the similarity estimated (and constructed in the Hope matrix)
 pub fn hope_distance<F>(v1: &[F], v2: &[F]) -> f64
 where
-    F: Float + Scalar + Lapack,
+    F: Float + Lapack,
 {
     assert_eq!(v1.len(), v2.len());
     let dist2 = v1
@@ -48,7 +48,7 @@ where
 /// The distance corresponding to hope embedding. In fact it is Cosine
 pub fn hope_distance_cos<F>(v1: &ArrayView1<F>, v2: &ArrayView1<F>) -> f64
 where
-    F: Float + Scalar + Lapack,
+    F: Float + Lapack,
 {
     assert_eq!(v1.len(), v2.len());
     let dist = v1
@@ -133,7 +133,6 @@ pub struct Hope<F> {
 impl<F> Hope<F>
 where
     F: Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
@@ -632,7 +631,6 @@ where
 impl<F> EmbedderT<F> for Hope<F>
 where
     F: Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc
@@ -668,7 +666,6 @@ fn compute_1_minus_beta_mat<F>(mat: &MatRepr<F>, beta: f64, transpose: bool) -> 
 where
     F: Sync
         + Float
-        + Scalar
         + Lapack
         + ndarray::ScalarOperand
         + sprs::MulAcc

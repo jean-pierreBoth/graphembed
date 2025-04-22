@@ -25,7 +25,7 @@ use log::log_enabled;
 use cpu_time::ProcessTime;
 use std::time::SystemTime;
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
@@ -78,7 +78,7 @@ where
         IndexSet::with_capacity((nb_edge as f64 * delete_proba).round() as usize);
 
     //
-    let uniform = Uniform::<f64>::new(0., 1.);
+    let uniform = Uniform::<f64>::new(0., 1.).unwrap();
     let mut rows = Vec::<usize>::with_capacity(nb_nodes);
     let mut cols = Vec::<usize>::with_capacity(nb_nodes);
     let mut values = Vec::<F>::with_capacity(nb_nodes);
@@ -424,8 +424,8 @@ where
     let nb_nodes = csmat.shape().0;
     // as we can have large graph , mostly sparse to sample an inexistent edge we sample until we are outside csmat edges
     log::trace!("nb deleted edges : {:?}", nb_deleted);
-    let del_uniform = Uniform::<usize>::from(0..nb_deleted);
-    let node_random = Uniform::<usize>::from(0..nb_nodes);
+    let del_uniform = Uniform::<usize>::new(0, nb_deleted).unwrap();
+    let node_random = Uniform::<usize>::new(0, nb_nodes).unwrap();
     for _k in 0..nb_sample {
         let del_edge = deleted_edges
             .get_index(del_uniform.sample(&mut rng))
