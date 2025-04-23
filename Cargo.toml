@@ -101,7 +101,7 @@ pyo3 = { version = "0.24.1", optional = true }
 #default = ["annembed/intel-mkl-static", "lax/intel-mkl-static"]
 
 
-default = ["openblas-system", "simdeez_f"]
+#default = ["openblas-system", "simdeez_f"]
 
 
 ##default = ["openblas-system", "simdeez_f"]
