@@ -280,7 +280,7 @@ pub fn main() {
     // TODO: to put in clap ? just for now select at compile time
     let do_vcmpr = true;
     //
-    println!("Initializing default logger from environment ...\n");
+    println!("\n ************** initializing logger *****************\n");
     env_logger::Builder::from_default_env().init();
     log::info!("logger initialized from default environment");
     //
