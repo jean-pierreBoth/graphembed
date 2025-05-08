@@ -1,18 +1,86 @@
-# Graphembed
+[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/graphembed/README.html)
+![](https://anaconda.org/bioconda/graphembed/badges/license.svg)
+![](https://anaconda.org/bioconda/graphembed/badges/version.svg)
+![](https://anaconda.org/bioconda/graphembed/badges/latest_release_relative_date.svg)
+![](https://anaconda.org/bioconda/graphembed/badges/platforms.svg)
+[![install with conda](https://anaconda.org/bioconda/graphembed/badges/downloads.svg)](https://anaconda.org/bioconda/graphembed)
 
-This crate provides ,as a library and an executable,embedding of directed or undirected graphs with positively weighted edges.
+<div align="center">
+  <img width="35%" src ="GraphEmbed_log.jpg">
+</div>
+
+# GraphEmbed: Efficient and Robust Network Embedding via High-Order Proximity Preservation or Recursive Sketching
+
+This crate provides an executable and a library for embedding of directed or undirected graphs with positively weighted edges. We engineered and optimized current network embedding algorithms for large-scale network embedding, especially biological network. This crate was developed by [Jianshu Zhao](https://gitlab.com/Jianshu_Zhao) and Jean-Pierre Both [jpboth](https://gitlab.com/jpboth). We have a copy here in [Github](https://github.com/jianshu93/graphembed)
 
 
-  - For simple graphs, without data attached to nodes/labels, there are 2 (rust) modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
+  - For simple graphs, without data attached to nodes, there are 2 modules **nodesketch** and **atp**. A simple executable with a validation option based on link prediction is also provided.
 
-  - To complement the embeddings we provide also core decomposition of graphs (see the module **structure**). We give try to analyze how Orkut communities are preserved through an embedding. (See Notebooks directory).
+## Quick Install
 
-  - The module **gkernel** is dedicated to graphs with discrete labels attached to nodes/edges. We use the *petgraph* crate for graph description.
-    The algorithm is based on an extension of the hashing strategy used in the module **nodesketch**.  
-    In the undirected case, this module also computes a global embedding vector for the whole graph. **It is still in an early version**.
+### Pre-built binaries on Linux
+```bash
+wget https://gitlab.com/-/project/64961144/uploads/9d7d0b038140cb67c584f01cd6dafac9/graphembed_Linux_x86-64_v0.1.6.zip
+unzip graphembed_Linux_x86-64_v0.1.6.zip
+chmod a+x ./graphembed
+./graphembed -h
+```
+
+### Bioconda on Linux/MacOS
+```bash
+conda install -c conda-forge -c bioconda graphembed
+```
+
+### Homebrew on MacOS
+```bash
+brew tap jianshu93/graphembed
+brew update
+brew install graphembed
+```
+
+
+### In Python (Please install python>=3.9 first)
+```bash
+pip install graphembed_rs
+
+### or you can build from source (Linux) after installing maturin
+git clone https://gitlab.com/Jianshu_Zhao/graphembed
+cd graphembed
+pip install maturin
+### note: for macOS, you need to change the line "features = ["pyo3/extension-module", "intel-mkl-static", "simdeez_f"]" in pyporject.toml to "features = ["pyo3/extension-module","openblas-system","stdsimd"]", you also need to Install OpenBLAS and add to system library path via Homebrew
+maturin develop --release
+
+#### Prepare some data
+wget https://gitlab.com/-/project/64961144/uploads/4e341383d62d86d1dd66e668e91b2c07/BlogCatalog.txt
+```
+
+```python
+import os
+os.environ["RUST_LOG"] = "info"
+import graphembed_rs.graphembed_rs as ge
+import graphembed_rs.load_utils as ge_utils
+help(ge)
+help(ge_utils)
+### HOPE
+ge.embed_hope_rank("BlogCatalog.txt", target_rank=128, nbiter=4,output="embedding_output")
+out_vectors=ge_utils.load_embedding_bson("embedding_output.bson")
+print("OUT embedding shape :", out_vectors.shape)
+print("first OUT vector    :", out_vectors[0])
+
+### Sketching
+### sketching only
+ge.embed_sketching("BlogCatalog.txt", decay=0.3, dim=128, nbiter=5, symetric=True, output="embedding_output")
+out_vectors=ge_utils.load_embedding_bson("embedding_output.bson")
+print("OUT embedding shape :", out_vectors.shape)
+print("first OUT vector    :", out_vectors[0])
+
+
+### validate accuracy
+auc_scores = ge.validate_sketching("BlogCatalog.txt",decay=0.3, dim=128, nbiter=3, nbpass=1, skip_frac=0.2,symetric=True, centric=True)
+print("Standard AUC per pass:", auc_scores)
+```
 
 ## Methods
-
 ### The embedding algorithms used in this crate are based on the following papers
 
 - **nodesketch**
@@ -45,28 +113,11 @@ Source node are related to left singular vectors and target nodes to the right o
 The similarity measure is the dot product, so it is not a norm.  
 The svd is approximated by randomization as described in Halko-Tropp 2011 as implemented in the [annembed crate](https://crates.io/crates/annembed).
 
-### The core decomposition algorithms
-
-- **Density-friendly decomposition**
-
-*Large Scale decomposition via convex programming  2017*  
-    M.Danisch T.H Hubert Chan and M.Sozio
-
-The decomposition of the graph in maximally dense groups of nodes is implemented and used to assess the quality of the embeddings in a structural way. See module *validation* and the comments on the embedding of the *Orkut* graph where we can use the community data provided with the graph to analyze the behaviour of embedded edge lengths.  
-
-In particular it is shown that :
-  - embedding of edges internal to a community are consistently smaller than embedded edges crossing a block frontier. 
-  - The transition probabilities of edge from one block to another are similar (low kullback divergence) in the original graph and in the embedded graph.
- 
-  See results in [orkut.md](./orkut.md) and examples directory together with a small Rust notebook in directory [Notebooks](./Notebooks/orkutrs.ipynb)
-
 ## Validation
 
 Validation of embeddings is assessed via standard Auc with random deletion of edges. See documentation in the *link* module and *embed* binary.
 We give also a variation based on centric quality assessment as explained at [cauc](http://github.com/jean-pierreBoth/linkauc)
 ## Some data sets
-
-### Without labels
 
 Small datasets are given in the Data subdirectory (with 7z compression) to run tests.  
 Larger datasets can be downloaded from the SNAP data collections <https://snap.stanford.edu/data>
@@ -120,13 +171,11 @@ A preliminary of node centric quality estimation is provided in the validation m
 - The munmun_twitter_social graph shows that treating a directed graph as an undirected graph give significantly different results in terms of link prediction AUC.
 
 
-
-
 ## Generalized Svd
 
 An implementation of Generalized Svd comes as a by-product in module [gsvd](./src/atp/gsvd.rs).
 
-## Installation and Usage
+## Detailed Installation and Usage
 
 ### Installation
 
@@ -137,7 +186,7 @@ The choice of one feature is mandatory to provide required linear algebra librar
 - On Intel the simdeez_f feature can be used. On other cpus the stdsimd feature can be chosen but it requires compiler >= 1.79
 
 ### Usage
-## Rust
+
 The embed module can be generated with the standard : cargo doc --no-deps --bin embed.  
 
 - The Hope embedding relying on matrices computations limits the size of the graph to some hundred thousands nodes.
@@ -149,56 +198,26 @@ so to the required dimension to get a valid embedding in $R^{n}$.
 - The *embed* module takes embedding and possibly validation commands (link prediction task) in one directive.  
 The general syntax is :
 
-    embed file_description [validation_command --validation_arguments] sketching mode  --embedding_arguments  
+    graphembed file_description [validation_command --validation_arguments] sketching mode  --embedding_arguments  
     for example:  
 
   For a symetric graph we get:
 
 - just embedding:
-        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt --symetric  sketching --decay 0.2  --dim 200 --nbiter 
+        graphembed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt --symetric  sketching --decay 0.2  --dim 200 --nbiter 
 
 - embedding and validation:
  
-        embed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5
+        graphembed --csv ./Data/Graphs/Orkut/com-orkut.ungraph.txt  --symetric  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5
 
 For an asymetric graph we get 
 
-       embed --csv ./Data/Graphs/asymetric.csv  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 
+       graphembed --csv ./Data/Graphs/asymetric.csv  validation --nbpass 5 --skip 0.15 sketching --decay 0.2  --dim 200 --nbiter 5 
 
 
     More details can be found in docs of the embed module. Use cargo doc --no-dep --bin embed (and cargo doc --no-dep) as usual.
 
 - Use the environment variable RUST_LOG gives access to some information at various level (debug, info, error)  via the **log** and **env_logger** crates.
-
-## Python (>=3.8)
-```bash
-pip install graphembed_rs
-
-### or you can build from source (Linux) after installing maturin
-git clone https://gitlab.com/Jianshu_Zhao/graphembed
-cd graphembed
-pip install maturin
-### note: for macOS, you need to change the line "features = ["pyo3/extension-module", "intel-mkl-static", "simdeez_f"]" in pyporject.toml to "features = ["pyo3/extension-module","openblas-system","stdsimd"]", you also need to Install OpenBLAS and add to system library path via Homebrew
-maturin develop --release
-### get some data
-wget https://gitlab.com/-/project/64961144/uploads/4e341383d62d86d1dd66e668e91b2c07/BlogCatalog.txt
-```
-```python
-import os
-os.environ["RUST_LOG"] = "graphembed=info"
-import graphembed_rs as ge
-help(ge)
-### HOPE
-ge.embed_hope_rank("BlogCatalog.txt", target_rank=128, nbiter=4)
-
-### Sketching
-### sketching only
-ge.embed_sketching("BlogCatalog.txt", decay=0.3, dim=128, nbiter=5, symetric=True, output="embedding_output")
-### validate accuracy
-auc_scores = ge.validate_sketching("BlogCatalog.txt",decay=0.3, dim=128, nbiter=3, nbpass=1, skip_frac=0.2,symetric=True, centric=True)
-print("Standard AUC per pass:", auc_scores)
-
-```
 
 ## License
 

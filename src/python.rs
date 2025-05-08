@@ -152,7 +152,7 @@ fn embed_sketching(
 /* ----------------------------------------------------------------------- */
 
 #[pyfunction]
-#[pyo3(signature = (csv, target_rank, nbiter, nbpass=10, skip_frac=0.1, symetric=true, centric=false))]
+#[pyo3(signature = (csv, target_rank, nbiter, nbpass=1, skip_frac=0.2, symetric=true, centric=false))]
 fn validate_hope_rank(
     csv: &str,
     target_rank: usize,
@@ -182,7 +182,7 @@ fn validate_hope_rank(
 }
 
 #[pyfunction]
-#[pyo3(signature = (csv, epsil, maxrank, blockiter, nbpass=10, skip_frac=0.1, symetric=true, centric=false))]
+#[pyo3(signature = (csv, epsil, maxrank, blockiter, nbpass=1, skip_frac=0.2, symetric=true, centric=false))]
 fn validate_hope_precision(
     csv: &str,
     epsil: f64,
@@ -213,7 +213,7 @@ fn validate_hope_precision(
 }
 
 #[pyfunction]
-#[pyo3(signature = (csv, decay, dim, nbiter, nbpass=10, skip_frac=0.1, symetric=true, centric=false))]
+#[pyo3(signature = (csv, decay, dim, nbiter, nbpass=1, skip_frac=0.2, symetric=true, centric=false))]
 fn validate_sketching(
     csv: &str,
     decay: f64,
@@ -257,13 +257,13 @@ fn validate_sketching(
 /* ----------------------------  VCMPR  ----------------------------------- */
 
 #[pyfunction]
-#[pyo3(signature = (csv, target_rank, nbiter, nbpass=2, topk=10, skip_frac=0.1, symetric=true))]
+#[pyo3(signature = (csv, target_rank, nbiter, nbpass=1, nb_edges=10, skip_frac=0.2, symetric=true))]
 fn estimate_vcmpr_hope_rank(
     csv: &str,
     target_rank: usize,
     nbiter: usize,
     nbpass: usize,
-    topk: usize,
+    nb_edges: usize,
     skip_frac: f64,
     symetric: bool,
 ) -> PyResult<()> {
@@ -278,19 +278,19 @@ fn estimate_vcmpr_hope_rank(
         let mut h = Hope::new(params, t);
         h.embed().unwrap()
     };
-    link::estimate_vcmpr(&csr, nbpass, topk, skip_frac, symetric, &f);
+    link::estimate_vcmpr(&csr, nbpass, nb_edges, skip_frac, symetric, &f);
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (csv, decay, dim, nbiter, nbpass=2, topk=10, skip_frac=0.1, symetric=true))]
+#[pyo3(signature = (csv, decay, dim, nbiter, nbpass=1, nb_edges=10, skip_frac=0.1, symetric=true))]
 fn estimate_vcmpr_sketching(
     csv: &str,
     decay: f64,
     dim: usize,
     nbiter: usize,
     nbpass: usize,
-    topk: usize,
+    nb_edges: usize,
     skip_frac: f64,
     symetric: bool,
 ) -> PyResult<()> {
@@ -308,13 +308,13 @@ fn estimate_vcmpr_sketching(
             let mut ns = NodeSketch::new(params, t);
             ns.embed().unwrap()
         };
-        link::estimate_vcmpr(&csr, nbpass, topk, skip_frac, symetric, &f);
+        link::estimate_vcmpr(&csr, nbpass, nb_edges, skip_frac, symetric, &f);
     } else {
         let f = move |t: TriMatI<f64, usize>| {
             let mut ns = NodeSketchAsym::new(params, t);
             ns.embed().unwrap()
         };
-        link::estimate_vcmpr(&csr, nbpass, topk, skip_frac, symetric, &f);
+        link::estimate_vcmpr(&csr, nbpass, nb_edges, skip_frac, symetric, &f);
     }
     Ok(())
 }
