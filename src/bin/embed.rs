@@ -74,8 +74,6 @@ use sprs::TriMatI;
 
 use graphembed::io;
 
-/// variable to be used to run tests
-const _DATADIR: &str = "/home/jpboth/Data/Graph";
 
 #[doc(hidden)]
 fn parse_sketching(
@@ -282,7 +280,7 @@ pub fn main() {
     // TODO: to put in clap ? just for now select at compile time
     let do_vcmpr = true;
     //
-    println!("initializing default logger from environment ...");
+    println!("\n ************** initializing logger *****************\n");
     env_logger::Builder::from_default_env().init();
     log::info!("logger initialized from default environment");
     //
@@ -290,6 +288,7 @@ pub fn main() {
     // the hope command
     //
     let hope_cmd = Command::new("hope")
+        .about("Asymmetric Transitivity Preserving Graph Embedding")
         .subcommand_required(false)
         .arg_required_else_help(true)
         .subcommand(
@@ -344,6 +343,7 @@ pub fn main() {
         );
     // the sketch embedding command
     let sketch_cmd = Command::new("sketching")
+        .about("Highly-Efficient Graph/Network Embeddings via Recursive Sketching")
         .arg(
             Arg::new("dimension")
                 .required(true)
@@ -372,6 +372,7 @@ pub fn main() {
 
     // validation must have one embedding subcommand
     let validation_cmd = Command::new("validation")
+        .about("Graph/Network Embedding with Accuracy Benchmark")
         .subcommand_required(true)
         .arg(
             Arg::new("nbpass")
@@ -400,6 +401,7 @@ pub fn main() {
 
     // the embedding command does just the embedding
     let embedding_command = Command::new("embedding")
+        .about("Graph/Network Embedding")
         .arg(
             Arg::new("output")
                 .long("output")
@@ -415,7 +417,8 @@ pub fn main() {
     // Now the command line
     // ===================
     //
-    let matches = Command::new("embed")
+    let matches = Command::new("graphembed")
+        .about("Efficient and Robust Graph/Network Embedding via High-Order Proximity Preservation or Recursive Sketching")
         .arg_required_else_help(true)
         .arg(
             Arg::new("csvfile")
@@ -610,8 +613,8 @@ pub fn main() {
                 );
                 if params.do_centric() {
                     if do_vcmpr {
-                        /* To costly
                         // if vcmpr is asked we produce also standard precision and recall for comparison
+                        /*
                         link::estimate_precision(
                             &trimat.to_csr(),
                             params.get_nbpass(),
@@ -620,7 +623,6 @@ pub fn main() {
                             &f,
                         );
                         */
-                        //
                         link::estimate_vcmpr(
                             &trimat.to_csr(),
                             params.get_nbpass(),
@@ -735,8 +737,8 @@ pub fn main() {
                     if validation_params.do_centric() {
                         log::info!("doing precision estimation normal and centric modes ");
                         if do_vcmpr {
-                            /* To costly:
-                            if vcmpr is asked we produce also standard precision and recall for comparison
+                            /*
+                            //if vcmpr is asked we produce also standard precision and recall for comparison
                             link::estimate_precision(
                                 &trimat.to_csr(),
                                 2,
