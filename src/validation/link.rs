@@ -2,7 +2,7 @@
 //!
 //! We implement precision measure as described in :  
 //! - Link Prediction in complex Networks : A survey.  
-//!            Lü, Zhou. Physica 2011.  
+//!   Lü, Zhou. Physica 2011.  
 //!
 //! The scoring function for similarity is based upon the distance relative to the Embedded being tested
 //! Jaccard for nodesketch and L2 for Atp
@@ -12,6 +12,8 @@
 //! It is possible to treat edge deletion for a symetric graph as in the asymetric. See [crate::embed]
 //!
 //! The methods [estimate_centric_auc()] give also a variation of a node centric quality assessment. See also [estimate_vcmpr()]
+
+#![allow(clippy::needless_range_loop)]
 
 /// We first implement precision measure as described in
 ///       - Link Prediction in complex Networks : A survey
@@ -26,8 +28,8 @@ use cpu_time::ProcessTime;
 use std::time::SystemTime;
 
 use rand::distr::{Distribution, Uniform};
-use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
+use rand_xoshiro::rand_core::SeedableRng;
 
 use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
@@ -175,7 +177,7 @@ where
             assert!(degrees[col].d_in > 0 || degrees[col].d_out > 0);
         }
     } // end while
-      //
+    //
     assert_eq!(rows.len(), cols.len());
     assert_eq!(cols.len(), values.len());
     //
@@ -226,7 +228,7 @@ where
     // need to store trimat index before move to embedding
     let mut trimat_set = HashSet::<(usize, usize)>::with_capacity(trimat.nnz());
     for triplet in trimat.triplet_iter() {
-        trimat_set.insert((triplet.1 .0, triplet.1 .1));
+        trimat_set.insert((triplet.1.0, triplet.1.1));
     }
     // We construct the list of edges not in reduced graph
     let nb_nodes = csmat.shape().0;
@@ -324,7 +326,6 @@ where
 /// count number of times the deleted edge is more probable than the deleted.
 ///
 /// Other alternatives are [estimate_centric_auc()] or [estimate_vcmpr()]
-
 ///
 pub fn estimate_precision<F, G, E>(
     csmat: &CsMatI<F, usize>,
@@ -412,7 +413,7 @@ where
     // need to store trimat index before move to embedding
     let mut trimat_set = HashSet::<(usize, usize)>::with_capacity(trimat.nnz());
     for triplet in trimat.triplet_iter() {
-        trimat_set.insert((triplet.1 .0, triplet.1 .1));
+        trimat_set.insert((triplet.1.0, triplet.1.1));
     }
     //
     // embedder (passed as a closure)
@@ -599,7 +600,6 @@ where
 /// The method implies a sort of all predicted edges around sampled nodes so it comes at a cost in large ( >= 100_000 nodes) graphs.
 //
 /// See also the function [estimate_centric_auc()] which implements a centric Auc and avoid the sorting cost.
-
 pub fn estimate_vcmpr<F, G, E>(
     csmat: &CsMatI<F, usize>,
     _nbiter: usize,
@@ -646,7 +646,7 @@ pub fn estimate_vcmpr<F, G, E>(
     // need to store trimat index before move to embedding
     let mut trimat_set = HashSet::<(usize, usize)>::with_capacity(trimat.nnz());
     for triplet in trimat.triplet_iter() {
-        trimat_set.insert((triplet.1 .0, triplet.1 .1));
+        trimat_set.insert((triplet.1.0, triplet.1.1));
     }
     log::debug!(
         "trimat_set size : {} nb deleted edges : {}",
@@ -855,15 +855,15 @@ pub fn estimate_vcmpr<F, G, E>(
 /// - We parse this array, noting $j$  the current position in the parsing loop.
 ///   - If j corresponds to a true (train) edge we increment the counter $k$ of true edges encountered up to j
 ///   - If j corresponds to a deleted (test) neighbour edge, the question we must answer is :  
-///     what is the probability that it has a smaller distance to our reference node $n$ than a random edge?    
-///   As the array is sorted, the response is just the number of indexes greater than j that do not correspond to a true edge so it is
+///     what is the probability that it has a smaller distance to our reference node $n$ than a random edge?      
+///     As the array is sorted, the response is just the number of indexes greater than j that do not correspond to a true edge so it is
 ///     $$ (nbnodes - j -(d  - de - k))/ (nbnodes -1 - d  + de) $$
-///   this fraction is linearly decreasing as j increases.    
-///   If $j=nbnodes$ and we have a deleted edge then this edge is the last we get $k = d - de$ and this last edge contributes 0.
-///   Averging over k we get the centric auc of n and finally averaging over 2000 nodes $n$ we get an estimate of centric auc over the graph.
+///     this fraction is linearly decreasing as j increases.    
+///     If $j=nbnodes$ and we have a deleted edge then this edge is the last we get $k = d - de$ and this last edge contributes 0.
+///     Averging over k we get the centric auc of n and finally averaging over 2000 nodes $n$ we get an estimate of centric auc over the graph.
 ///
 /// 2. Outputs:
-///     The function outputs:
+///    The function outputs:
 /// -  mean centric auc and standard deviation
 /// -  degrees quantiles
 /// -  centric auc quantiles to check for high variations dependind on points.
@@ -927,7 +927,7 @@ pub fn estimate_centric_auc<F, G, E>(
     // need to store trimat index before move to embedding
     let mut trimat_set = HashSet::<(usize, usize)>::with_capacity(trimat.nnz());
     for triplet in trimat.triplet_iter() {
-        trimat_set.insert((triplet.1 .0, triplet.1 .1));
+        trimat_set.insert((triplet.1.0, triplet.1.1));
     }
     log::debug!(
         "trimat_set size : {} nb deleted edges : {}",

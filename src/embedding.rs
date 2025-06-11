@@ -14,8 +14,8 @@
 //!
 //! We have 2 Embedded modes.
 //! - Hope is described by the paper :
-//!     *Asymetric Transitivity Preserving Graph Embedded 2016*
-//!     M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
+//!   *Asymetric Transitivity Preserving Graph Embedded 2016*
+//!   M. Ou, P Cui, J. Pei, Z. Zhang and W. Zhu.
 //!
 //! - Nodesketch is described in the paper <https://dl.acm.org/doi/10.1145/3292500.3330951>
 //!
@@ -236,14 +236,18 @@ impl<F> EmbeddedT<F> for EmbeddedAsym<F> {
         );
         distances.push(dist_t);
         if !distances.is_empty() {
-            let dist = distances.iter().sum::<f64>() / distances.len() as f64;
-            dist
+            distances.iter().sum::<f64>() / distances.len() as f64
         } else {
             match &self.degrees {
                 // if we have degrees we dump info
                 Some(degrees) => {
-                    log::error!("cannot get distance between node rank1 : {} degree = {:?}, node rank2 : {}, degree = {:?}", node_rank1, degrees[node_rank1], 
-                                        node_rank2, degrees[node_rank2]);
+                    log::error!(
+                        "cannot get distance between node rank1 : {} degree = {:?}, node rank2 : {}, degree = {:?}",
+                        node_rank1,
+                        degrees[node_rank1],
+                        node_rank2,
+                        degrees[node_rank2]
+                    );
                 }
                 None => {
                     log::error!(
@@ -270,11 +274,11 @@ impl<F> EmbeddedT<F> for EmbeddedAsym<F> {
         match tag {
             OUT => {
                 // returns embedding vector corresponding to node as a source or beginning of edge
-                return self.source.row(node_rank);
+                self.source.row(node_rank)
             }
             IN => {
                 // returns embedding vector corresponding to node as a target or end of edge
-                return self.target.row(node_rank);
+                self.target.row(node_rank)
             }
             _ => {
                 log::error!(" for asymetric embedding tag in get_embedded_node must be 0 or 1");
@@ -308,11 +312,11 @@ pub trait EmbedderT<F> {
 /// - F the embedded vectors contains values of type F (mostmy f32, f64, usize ...)
 ///
 /// - NodeId is the type representing nodes (most often an usize). It must
-///     implement Hash and Eq to be indexed.
+///   implement Hash and Eq to be indexed.
 ///
 /// - nodeindexation : an IndexSet storing Node identifier (as in datafile) and associating it to a rank in Array representing embedded nodes
-///                      given a node id we get its rank in Array using IndexSet::get_index_of
-///                      given a rank we get original node id by using IndexSet::get_index.
+///   given a node id we get its rank in Array using IndexSet::get_index_of
+///   given a rank we get original node id by using IndexSet::get_index.
 ///
 /// - embbeded : the embedded data of type EmbeddedData. At present time Embedded\<F\> or EmbeddedAsym\<F\>
 pub struct Embedding<F, NodeId: std::hash::Hash + std::cmp::Eq, EmbeddedData: EmbeddedT<F>> {

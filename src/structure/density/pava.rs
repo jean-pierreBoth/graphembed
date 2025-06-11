@@ -1,6 +1,9 @@
 //!
 //! Adapted from pav_regression crate (See crates.io) with some added functionality
 //! (see comments in source file)
+//!
+
+#![allow(clippy::needless_range_loop)]
 
 // This file is modified from the crate pav_regression
 // Added following modifications:
@@ -237,11 +240,10 @@ where
     // return true if self is consistently ordrered with other, means self < other in ascending self > other in descending
     fn is_ordered(&self, other: &BlockPoint<T>) -> bool {
         assert_eq!(self.direction, other.direction);
-        let ordered = match self.direction {
+        match self.direction {
             Direction::Ascending => self.centroid.y < other.centroid.y,
             Direction::Descending => self.centroid.y > other.centroid.y,
-        };
-        ordered
+        }
     } // end of is_ordered
 
     /// debug utility,
@@ -275,7 +277,7 @@ where
 
     /// get an iterator over points in block
     pub fn get_point_iter(&'a self) -> PointIterator<'a, T> {
-        return PointIterator::new(self, self.index);
+        PointIterator::new(self, self.index)
     }
 } // end of impl BlockPoint
 
@@ -311,7 +313,7 @@ where
     pub fn new(block: &'a BlockPoint<'a, T>, index: &'a [usize]) -> Self {
         PointIterator {
             block: *block,
-            index: index,
+            index,
             pt_index: block.get_first_index(),
         }
     }
@@ -474,8 +476,8 @@ where
         log::debug!("initializing IsotonicRegression");
         IsotonicRegression {
             direction,
-            points: points,
-            index: index,
+            points,
+            index,
             blocks: RefCell::new(blocks),
             centroid_point: Point::new(sum_x / point_count, sum_y / point_count),
         }
@@ -503,18 +505,18 @@ where
     {
         //
         log::debug!("interpolate nb blocks = {}", self.blocks.borrow().len());
-        if self.blocks.borrow().len() == 0 {
+        if self.blocks.borrow().is_empty() {
             log::info!("uninitialized regression, running do_isotonic");
             let _res = self.do_isotonic();
         }
         let blocks = self.blocks.borrow();
         //
         if blocks.len() == 1 {
-            return blocks[0].centroid.y;
+            blocks[0].centroid.y
         } else {
             let pos =
                 blocks.binary_search_by_key(&OrderedFloat(at_x), |p| OrderedFloat(p.centroid.x));
-            return match pos {
+            match pos {
                 Ok(ix) => blocks[ix].centroid.y,
                 Err(ix) => {
                     if ix < 1 {
@@ -537,7 +539,7 @@ where
                         )
                     }
                 }
-            };
+            }
         }
     }
 
@@ -574,7 +576,7 @@ where
             log::info!("no points to do regression");
             return Err(anyhow!("no points to do regression"));
         }
-        if self.blocks.borrow().len() != 0 {
+        if !self.blocks.borrow().is_empty() {
             return Err(anyhow!("regression already done!"));
         }
         //
@@ -644,7 +646,7 @@ where
                 }
             }
         } // end of for on blocks
-          //
+        //
         log::info!("\n after final merge nb blocks = {}", iso_blocks.len());
         // transfer to raw blocks
         let final_blocks: Vec<BlockPoint<T>> =

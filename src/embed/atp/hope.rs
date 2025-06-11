@@ -171,14 +171,7 @@ where
     /// returns the quotients of eigenvalues.
     /// The relative precision of the embedding can be appreciated by the quantity quotient[quotient.len()-1]/quotient\[0\]
     pub fn get_quotient_eigenvalues(&self) -> Option<&Array1<F>> {
-        match &self.sigma_q {
-            Some(sigma) => {
-                return Some(sigma);
-            }
-            _ => {
-                return None;
-            }
-        }
+        self.sigma_q.as_ref()
     } // end of get_quotient_eigenvalues
 
     // Noting A the adjacency matrix we constitute the couple (M_g, M_l ) = (I - β A, β A).
@@ -186,7 +179,7 @@ where
     // In fact we go to the Gsvd with the pair (transpose(β A), transpose(I - β A))
     // as we search a representation of inverse(I - β P) * (β A)
     /// - factor helps defining the extent to which the neighbourhood of a node is taken into account when using the katz index matrix.
-    ///     factor must be between 0. and 1.
+    ///   factor must be between 0. and 1.
     fn make_katz_problem(
         &self,
         factor: f64,
@@ -432,13 +425,11 @@ where
             let last = sigma_q.last();
             if s1[i] > F::zero() {
                 let new_val = IndexedValue::<F>(i, s2[i] / s1[i]);
-                if last.is_some() {
-                    if new_val.1 >= last.unwrap().1 {
-                        sort_needed = true;
-                        log::error!(
-                            "non decreasing quotient of eigen values, must implement permutation"
-                        );
-                    }
+                if last.is_some() && new_val.1 >= last.unwrap().1 {
+                    sort_needed = true;
+                    log::error!(
+                        "non decreasing quotient of eigen values, must implement permutation"
+                    );
                 }
                 sigma_q.push(new_val);
                 log::debug!("i {} , s2/s1[i] {}", i, new_val.1);
@@ -571,8 +562,7 @@ where
                     ));
                 }
                 let gsvd_res = gsvd_res.unwrap();
-                let embedding = self.embed_from_gsvd_result(&gsvd_res);
-                embedding
+                self.embed_from_gsvd_result(&gsvd_res)
             }
             HopeMode::RPR => {
                 let embedding = match use_gsvd_for_rpr {
@@ -583,19 +573,19 @@ where
                         );
                         let gsvd_res = gsvd_pb.unwrap().do_approx_gsvd();
                         if gsvd_res.is_err() {
-                            return Err(anyhow!("compute_embedded : RPR mode, call GSvdApprox.do_approx_gsvd failed"));
+                            return Err(anyhow!(
+                                "compute_embedded : RPR mode, call GSvdApprox.do_approx_gsvd failed"
+                            ));
                         }
                         let gsvd_res = gsvd_res.unwrap();
-                        let embedding = self.embed_from_gsvd_result(&gsvd_res);
-                        embedding
+                        self.embed_from_gsvd_result(&gsvd_res)
                     }
                     false => {
                         log::debug!("trying RPR with simple svd");
-                        let embedding = self.embed_rpr_simple(
+                        self.embed_rpr_simple(
                             self.params.get_decay_weight(),
                             self.params.get_range_mode(),
-                        );
-                        embedding
+                        )
                     }
                 };
                 embedding
@@ -610,8 +600,7 @@ where
                     ));
                 }
                 let svd_res = svd_res.unwrap();
-                let embedding = self.embed_ada_from_svd_result(&svd_res);
-                embedding
+                self.embed_ada_from_svd_result(&svd_res)
             }
         }; // znd of match
         let sys_t: f64 = sys_start.elapsed().unwrap().as_millis() as f64 / 1000.;
@@ -621,7 +610,7 @@ where
             cpu_start.elapsed().as_secs()
         );
         //
-        return embedding;
+        embedding
     } // end of compute_embedded
 } // end of impl Hope
 
@@ -645,12 +634,8 @@ where
     fn embed(&mut self) -> Result<EmbeddedAsym<F>, anyhow::Error> {
         let res = self.compute_embedded();
         match res {
-            Ok(embeded) => {
-                return Ok(embeded);
-            }
-            Err(err) => {
-                return Err(err);
-            }
+            Ok(embeded) => Ok(embeded),
+            Err(err) => Err(err),
         }
     } // end of embed
 } // end of impl<F> EmbedderT<F>
@@ -685,9 +670,9 @@ where
             let mut new_mat = ndarray::Array2::<F>::eye(nbrow);
             new_mat.scaled_add(-F::from_f64(beta).unwrap(), mat); // BLAS axpy
             if transpose {
-                return MatRepr::from_array2(new_mat.t().to_owned());
+                MatRepr::from_array2(new_mat.t().to_owned())
             } else {
-                return MatRepr::from_array2(new_mat);
+                MatRepr::from_array2(new_mat)
             }
         }
         //

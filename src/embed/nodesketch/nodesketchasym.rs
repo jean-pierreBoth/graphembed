@@ -213,7 +213,7 @@ impl NodeSketchAsym {
             // new neighbourhood for current iteration
             self.treat_row_and_col(&row);
         } // end of for on row
-          // transfer sketches into previous in sketches
+        // transfer sketches into previous in sketches
         for i in 0..self.get_nb_nodes() {
             let mut row_write = self.previous_sketches_in[i].write();
             for j in 0..self.get_sketch_size() {
@@ -297,8 +297,13 @@ impl NodeSketchAsym {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to
                     Some(val) => {
                         *val += weight * *neighbour.1;
-                        log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
-                                    neighbour.0 , *n, weight * *neighbour.1, *val);
+                        log::trace!(
+                            "{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}",
+                            neighbour.0,
+                            *n,
+                            weight * *neighbour.1,
+                            *val
+                        );
                     }
                     None => {
                         log::trace!(
@@ -312,8 +317,8 @@ impl NodeSketchAsym {
                 };
             }
         } // end of while on previous sketches out
-          // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
-          // as we possibly got more.
+        // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
+        // as we possibly got more.
         let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), *row);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
@@ -370,8 +375,13 @@ impl NodeSketchAsym {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to
                     Some(val) => {
                         *val += weight * *neighbour.1;
-                        log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
-                                neighbour.0 , *n, weight * *neighbour.1, *val);
+                        log::trace!(
+                            "{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}",
+                            neighbour.0,
+                            *n,
+                            weight * *neighbour.1,
+                            *val
+                        );
                     }
                     None => {
                         log::trace!(
@@ -385,8 +395,8 @@ impl NodeSketchAsym {
                 };
             }
         } // end of while on previous sketches out
-          // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
-          // as we possibly got more.
+        // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
+        // as we possibly got more.
         let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), *row);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
@@ -454,12 +464,8 @@ impl EmbedderT<usize> for NodeSketchAsym {
     fn embed(&mut self) -> Result<EmbeddedAsym<usize>, anyhow::Error> {
         let res = self.compute_embedded();
         match res {
-            Ok(embeded) => {
-                return Ok(embeded);
-            }
-            Err(err) => {
-                return Err(err);
-            }
+            Ok(embeded) => Ok(embeded),
+            Err(err) => Err(err),
         }
     } // end of embed
 } // end of impl<f64> EmbedderT<f64>

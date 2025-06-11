@@ -6,20 +6,20 @@
 //! 1. A header structure with key "header". The structure is described below see struct [Header](EmbeddedBsonHeader)
 //! - a version index
 //! - base type name essentially f32,f64 or usize encoded as a String. key is type_name.  
-//!     **Beware that as bson requires usize to be encoded as i64, an independant implementation of a reload
-//!     will need to parse as i64 in the Nodesketch embedding which uses usize vectors. (See sources)**
+//!   **Beware that as bson requires usize to be encoded as i64, an independant implementation of a reload
+//!   will need to parse as i64 in the Nodesketch embedding which uses usize vectors. (See sources)**
 //! - symetric or asymetric flag
 //! - dimension of vectors
 //! - number of vectors
 //!
 //! 2. The embedded arrays, one or two depending on asymetry
 //!     - loop on number of vectors
-//!         each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN (1)
-//!         so the first vector of embedding has key "0,0" , the second "1,0"
+//!       each vector has a key corresponding to its index and a tag corresponding to OUT (0) or IN (1)
+//!       so the first vector of embedding has key "0,0" , the second "1,0"
 //!     - if embedding is asymetric the first loop gives outgoing (or source) representation of node
-//!         and there is another loop giving ingoing or target) representation of node with key made by IN encoding
-//!         so first vector of the second group of embedded vectors corresponding to nodes as target has key
-//!         "0,1" the second vector has key "1,1"
+//!       and there is another loop giving ingoing or target) representation of node with key made by IN encoding
+//!       so first vector of the second group of embedded vectors corresponding to nodes as target has key
+//!       "0,1" the second vector has key "1,1"
 //!
 //! 3. The nodeindexation can also be encoded in a subdocument associated to key *"indexation"*.
 //!    The dump of nodeindexation is not mandatory as it can be retrieved by loading the original graph again.  
@@ -41,7 +41,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 // for serilaizatio, desreialization
-use bson::{bson, Bson, Document};
+use bson::{Bson, Document, bson};
 use serde::{Deserialize, Serialize};
 
 use indexmap::IndexSet;
@@ -97,7 +97,11 @@ where
     log::info!("entering bson_dump");
     //
     let path = Path::new(output.get_output_name());
-    let fileres = OpenOptions::new().write(true).create(true).open(path);
+    let fileres = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path);
     let file = if fileres.is_ok() {
         fileres.unwrap()
     } else {
@@ -192,7 +196,7 @@ where
         }
         log::debug!("\t NodeIndexation bson encoded");
     } // end dump indexation
-      //
+    //
     log::info!("bson dump in file {} finished", path.display());
     //
     Ok(())
@@ -205,7 +209,7 @@ where
 pub fn get_bson_header(fname: &String) -> Result<EmbeddedBsonHeader, anyhow::Error> {
     let path = Path::new(fname);
     log::info!("get_bson_header: trying to open file : {:?}", path);
-    let fileres = OpenOptions::new().read(true).open(&path);
+    let fileres = OpenOptions::new().read(true).open(path);
     let file;
     if fileres.is_ok() {
         file = fileres.unwrap();
@@ -271,7 +275,7 @@ impl<F, NodeId> EmbeddedBsonReload<F, NodeId> {
 /// reloads embedded data from a previous bson dump and returns a EmbeddedBsonReload structure.  
 /// The structure  Embedded or EmbeddedAsym can be reconstituted from it (or with a graph reload to get nodeindexation)
 ///
-pub fn bson_load<'a, F, NodeId, EmbeddedData>(
+pub fn bson_load<F, NodeId, EmbeddedData>(
     fname: &str,
 ) -> Result<EmbeddedBsonReload<F, NodeId>, anyhow::Error>
 where
@@ -308,7 +312,7 @@ where
     }
     log::debug!("\t found header key");
     let bson_header = res.unwrap().clone(); // TODO avoid clone ?
-                                            // now decode our fields
+    // now decode our fields
     let header: EmbeddedBsonHeader = bson::from_bson(bson_header).unwrap();
     log::info!("header : {:?}", header);
     if header.version != 1 {
@@ -412,7 +416,7 @@ where
             path.display(),
             res.err()
         );
-        return Ok(EmbeddedBsonReload::new(out_array, in_array_opt, None));
+        Ok(EmbeddedBsonReload::new(out_array, in_array_opt, None))
     } else {
         log::info!("\t found document , node indexation");
         let bson_indexation = res.unwrap();
@@ -435,11 +439,11 @@ where
             node_indexation.insert(node_id);
         }
         assert_eq!(node_indexation.len(), nb_data);
-        return Ok(EmbeddedBsonReload::new(
+        Ok(EmbeddedBsonReload::new(
             out_array,
             in_array_opt,
             Some(node_indexation),
-        ));
+        ))
     } // end case we have indexation in bson file
 } // end of bson_load
 
@@ -467,8 +471,13 @@ where
         let vec_e = embedded_data.get_embedded_node(i, OUT);
         for j in 0..embedded_data.get_dimension() {
             if vec_e[j] != out_reloaded[[i, j]] {
-                log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
-                        vec_e[j], out_reloaded[[i,j]]);
+                log::error!(
+                    " reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}",
+                    i,
+                    j,
+                    vec_e[j],
+                    out_reloaded[[i, j]]
+                );
             }
         }
     }
@@ -480,14 +489,19 @@ where
             let vec_e = embedded_data.get_embedded_node(i, IN);
             for j in 0..embedded_data.get_dimension() {
                 if vec_e[j] != in_reloaded[[i, j]] {
-                    log::error!(" reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}", i,j, 
-                            vec_e[j], in_reloaded[[i,j]]);
+                    log::error!(
+                        " reloaded differ from embedded at vector rank : {}, dim j : {}, embedded : {}, reloaded : {}",
+                        i,
+                        j,
+                        vec_e[j],
+                        in_reloaded[[i, j]]
+                    );
                     return Ok(false);
                 }
             }
         }
     } // end check IN in asymetric case
-      // check equality of node indexation
+    // check equality of node indexation
     if reloaded.get_node_indexation().is_some() {
         log::debug!("checking node indeation");
         let loaded_indexation = reloaded.get_node_indexation().unwrap();
@@ -497,7 +511,12 @@ where
             let indexed = node_indexation.get_index(i).unwrap();
             let reload_indexed = loaded_indexation.get_index(i).unwrap();
             if indexed != reload_indexed {
-                log::error!("chech equality of node indexation failed at slot i : {} , node_indexation : {}, reloaded {}", i, indexed.to_string(), reload_indexed.to_string());
+                log::error!(
+                    "chech equality of node indexation failed at slot i : {} , node_indexation : {}, reloaded {}",
+                    i,
+                    indexed.to_string(),
+                    reload_indexed.to_string()
+                );
                 return Ok(false);
             }
         }

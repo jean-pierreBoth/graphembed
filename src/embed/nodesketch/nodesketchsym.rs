@@ -3,6 +3,8 @@
 //! An asymetric implementation is provided in [nodesketchasym](super::nodesketchasym)
 //!
 
+#![allow(clippy::needless_range_loop)]
+
 #[allow(unused)]
 use anyhow::anyhow;
 
@@ -52,7 +54,7 @@ pub struct NodeSketch {
     csrmat: CsMatI<f64, usize>,
     /// The vector storing node sketch along iterations, length is nbnodes, each RowSketch is a vecotr of sketch_size
     sketches: Vec<RowSketch>,
-    ///
+    //
     previous_sketches: Vec<RowSketch>,
 } // end of struct NodeSketch
 
@@ -208,7 +210,7 @@ impl NodeSketch {
                 self.dump_row_iteration(row);
             }
         } // end of for on row
-          // transfer sketches into previous sketches
+        // transfer sketches into previous sketches
         for i in 0..self.get_nb_nodes() {
             let mut row_write = self.previous_sketches[i].write();
             for j in 0..self.get_sketch_size() {
@@ -251,7 +253,7 @@ impl NodeSketch {
             // neighbour.0 is a neighbour of row, it is brought with the weight connection from row to neighbour
             match v_k.get_mut(&neighbour.0) {
                 Some(val) => {
-                    *val = *val + *neighbour.1;
+                    *val += *neighbour.1;
                     log::trace!(
                         "{} augmenting weight in v_k for neighbour {},  new weight {:.3e}",
                         neighbour.0,
@@ -275,9 +277,14 @@ impl NodeSketch {
                 match v_k.get_mut(n) {
                     // neighbour sketch contribute with weight neighbour.1 * decay / sketch_size to
                     Some(val) => {
-                        *val = *val + weight * *neighbour.1;
-                        log::trace!("{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}", 
-                                        neighbour.0 , *n, weight * *neighbour.1, *val);
+                        *val += weight * *neighbour.1;
+                        log::trace!(
+                            "{} sketch augmenting node {} weight in v_k with decayed edge weight {:.3e} new weight {:.3e}",
+                            neighbour.0,
+                            *n,
+                            weight * *neighbour.1,
+                            *val
+                        );
                     }
                     None => {
                         log::trace!(
@@ -291,9 +298,9 @@ impl NodeSketch {
                 };
             }
         } // end of while
-          // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
-          // We initialize with row itself, so that if we have an isolated node, signature is just itself. So all isolated nodes will be at
-          // maximal distance of one another!
+        // once we have a new list of (nodes, weight) we sketch it to fill the row of new sketches and to compact list of neighbours
+        // We initialize with row itself, so that if we have an isolated node, signature is just itself. So all isolated nodes will be at
+        // maximal distance of one another!
         let mut probminhash3a = ProbMinHash3a::<usize, AHasher>::new(self.get_sketch_size(), *row);
         probminhash3a.hash_weigthed_hashmap(&v_k);
         let sketch = Array1::from_vec(probminhash3a.get_signature().clone());
@@ -307,17 +314,9 @@ impl NodeSketch {
 
 impl EmbedderT<usize> for NodeSketch {
     type Output = Embedded<usize>;
-    ///
+    //
     fn embed(&mut self) -> Result<Embedded<usize>, anyhow::Error> {
-        let res = self.compute_embedded();
-        match res {
-            Ok(embeded) => {
-                return Ok(embeded);
-            }
-            Err(err) => {
-                return Err(err);
-            }
-        }
+        self.compute_embedded()
     } // end of embed
 } // end of impl<usize> EmbedderT<usize>
 

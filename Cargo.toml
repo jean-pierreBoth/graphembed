@@ -7,7 +7,7 @@ keywords = ["graph", "embedding", "hash"]
 license = "MIT OR Apache-2.0"
 description = "graph embedding"
 documentation = "https://docs.rs/graphembed"
-edition = "2021"
+edition = "2024"
 
 
 [lib]
@@ -23,7 +23,7 @@ path = "src/bin/embed.rs"
 # default is version spec is ^ meaning can update up to max non null version number
 # cargo doc --no-deps avoid dependencies doc generation
 #
-petgraph = { version = "0.7.1" }
+petgraph = { version = "0.8" }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
@@ -54,7 +54,7 @@ cpu-time = { version = "1.0" }
 clap = { version = "4.5" }
 
 ##
-indexmap = { version = "2.2" }
+indexmap = { version = "2.9" }
 ahash = { version = "0.8" }
 probminhash = { version = "0.1" }
 #probminhash = {path = "../probminhash"}
@@ -88,7 +88,7 @@ log = { version = "0.4" }
 env_logger = { version = "0.11" }
 
 # hack to avoid interaction bug with intel-mkl
-anyhow = { version = "1.0.58" }
+anyhow = { version = "1.0" }
 # for documentation
 katexit = { version = "0.1" }
 

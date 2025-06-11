@@ -31,8 +31,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::to_writer;
 
-use petgraph::graph::Graph;
 use petgraph::Undirected;
+use petgraph::graph::Graph;
 
 use hdrhistogram::Histogram;
 
@@ -292,7 +292,11 @@ impl BlockCheck {
             .map(|q| (q, histo.value_at_quantile(q) as f64 / scale as f64))
             .collect::<Vec<(f64, f64)>>();
         for q in &quant_res {
-            log::info!(" kl_divergence quantiles ratio between block transition law at proba {:.3e} = {:.3e}", q.0, q.1);
+            log::info!(
+                " kl_divergence quantiles ratio between block transition law at proba {:.3e} = {:.3e}",
+                q.0,
+                q.1
+            );
         }
         quant_res
     } // end of get_kl_divergence_histogram
@@ -419,7 +423,7 @@ fn compare_block_density(
             block_counts[neighbour_blocknum] += 1.0 / (block_size_out as f32);
         }
     } // end of loop on node
-      // renormalize
+    // renormalize
     if nb_dist_in > 0 {
         mean_dist_in /= nb_dist_in as f32;
     }
@@ -446,7 +450,7 @@ fn compare_block_density(
         divergence
     );
     //
-    let diststat = BlockStat::new(
+    BlockStat::new(
         blocnum,
         nb_dist_in + nb_dist_out,
         global_density,
@@ -455,9 +459,7 @@ fn compare_block_density(
         min_dist_in_block,
         block_counts,
         divergence,
-    );
-    //
-    diststat
+    )
 } // end of compare_block_density
 
 // computes kl divergence between 2 row of block transition. Array are normalized to 1.
