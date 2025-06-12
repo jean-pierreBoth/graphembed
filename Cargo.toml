@@ -74,8 +74,8 @@ quantiles = { version = "0.7" }
 hnsw_rs = { version = "0.3" }
 
 # annembed = { git = "https://gitlab.com/jpboth/annembed" }
-# annembed = { version = "0.1.4" }
-annembed = { git = "https://github.com/jean-pierreBoth/annembed" }
+annembed = { version = "0.1.5" }
+# annembed = { git = "https://github.com/jean-pierreBoth/annembed" }
 # annembed = { path = "../annembed" }
 
 #  
