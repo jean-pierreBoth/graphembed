@@ -37,7 +37,7 @@ ndarray = { version = "0.16", features = ["rayon", "serde"] }
 # ndarray-linalg = { version = "0.17", default-features = false }
 lax = { version = "0.17" }
 lapacke = { version = "0.5" }
-sprs = { version = "0.11" }
+sprs = { version = "0.11.3" }
 
 # io
 
