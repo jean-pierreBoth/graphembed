@@ -10,7 +10,7 @@ use cpu_time::ProcessTime;
 ///
 use std::time::SystemTime;
 
-use num_traits::{float::*, FromPrimitive};
+use num_traits::{FromPrimitive, float::*};
 
 // synchronization primitive
 use parking_lot::RwLock;
@@ -22,11 +22,11 @@ use hdrhistogram::Histogram;
 use ndarray::Array2;
 
 use petgraph::graph::{EdgeReference, Graph, NodeIndex};
-use petgraph::{visit::*, Undirected};
+use petgraph::{Undirected, visit::*};
 
 // to get sorting with index as result
 //
-use super::pava::{get_point_blocnum, IsotonicRegression, Point, PointBlockLocator};
+use super::pava::{IsotonicRegression, Point, PointBlockLocator, get_point_blocnum};
 use super::stable::StableDecomposition;
 
 /// describes weight of each node of an edge.
@@ -150,14 +150,14 @@ where
             if r_source < r_target {
                 delta_i.0 = alpha_i.edge.weight().to_f32().unwrap(); // andd delta_i.1 = 0.;
                 alpha_i.wsplit.0 = (1. - gamma) * alpha_i.wsplit.0 + gamma * delta_i.0;
-                alpha_i.wsplit.1 = (1. - gamma) * alpha_i.wsplit.1;
+                alpha_i.wsplit.1 *= 1. - gamma;
                 if asynchronuous {
                     *r[source.index()].write() += (delta_i.0 - alpha_i.wsplit.0) * gamma;
                     *r[target.index()].write() += (0. - alpha_i.wsplit.1) * gamma;
                 }
             } else if r_target < r_source {
                 delta_i.1 = alpha_i.edge.weight().to_f32().unwrap(); // and delta_i.0 = 0.
-                alpha_i.wsplit.0 = (1. - gamma) * alpha_i.wsplit.0;
+                alpha_i.wsplit.0 *= 1. - gamma;
                 alpha_i.wsplit.1 = (1. - gamma) * alpha_i.wsplit.1 + gamma * delta_i.1;
                 if asynchronuous {
                     *r[source.index()].write() += (0. - alpha_i.wsplit.0) * gamma;
@@ -166,14 +166,14 @@ where
             }
             // else e do nothing!
         }); // end of // computation of
-            // now we recompute r
+        // now we recompute r
         if !asynchronuous {
             r_from_alpha(&r, &alpha);
         }
     } // end of // loop on edges
-      // We do not need locks any more, simplify
+    // We do not need locks any more, simplify
     let r_s: Vec<F> = r.iter().map(|v| F::from(*v.read()).unwrap()).collect();
-    let alpha_s: Vec<EdgeSplit<'a, F>> = alpha.iter().map(|a| a.read().clone()).collect();
+    let alpha_s: Vec<EdgeSplit<'a, F>> = alpha.iter().map(|a| *a.read()).collect();
     //
     log::info!(
         "frank_wolfe (fn get_alpha_r) sys time(s) {:.2e} cpu time(s) {:.2e}",
@@ -181,7 +181,7 @@ where
         cpu_start.elapsed().as_secs()
     );
     //
-    return AlphaR::new(r_s, alpha_s);
+    AlphaR::new(r_s, alpha_s)
 } // end of get_alpha_r
 
 /// returns the dgree of a node
@@ -198,7 +198,7 @@ pub fn get_degree_undirected<N, F>(
 } // end of get_degree_undirected
 
 /// check stability of a given vertex block with respect to alfar (algo 2 of Danisch paper)
-fn check_stability<'a, F: Float + std::fmt::Debug, N>(
+fn check_stability<'a, F, N>(
     graph: &'a Graph<N, F, Undirected>,
     alphar: &'a AlphaR<'a, F>,
     iso_regression: &'a IsotonicRegression<F>,
@@ -254,7 +254,7 @@ where
                 // TODO >= or ==
                 let neighbour_block = pointblocklocator.get_point_block_num(neighbor_u).unwrap();
                 block_transition[(numbloc, neighbour_block)] += 1.;
-                if neighbour_block >= numbloc + 1 {
+                if neighbour_block > numbloc {
                     // then we get edge corresponding to (pt , neighbor), modify alfa. Cannot fail
                     let edge = graph.edge_endpoints(edge_idx).unwrap();
                     // we must check for order. We have the same order of of the 2-uple in wsplit and in edge
@@ -273,11 +273,11 @@ where
                     }
                 }
             } // end while on neighbours
-              // affect degree for this node
+            // affect degree for this node
             assert_eq!(degrees[pt_idx.index()], 0); // consistency check...
             degrees[pt_idx.index()] = degree;
         } // end while on point in blocks
-          // we must check that r is greater on block than outside
+        // we must check that r is greater on block than outside
         let mut min_in_block = F::max_value();
         let mut max_not_in_block = F::zero();
         (0..r_test.len()).for_each(|i| {
@@ -326,7 +326,7 @@ where
             }
         }
     } // end of loop on initial_blocks
-      //
+    //
     log::info!(
         "\n check stability sys time(s) {:.2e} cpu time(s) {:.2e}",
         sys_start.elapsed().unwrap().as_secs(),
@@ -418,8 +418,8 @@ where
         };
         y[node_max] += *esplit.edge.weight();
     } // end of for i
-      // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition
-      // as -r increases , y decreases. We begin algo by densest blocks!
+    // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition
+    // as -r increases , y decreases. We begin algo by densest blocks!
     let points: Vec<Point<F>> = (0..r.len()).map(|i| Point::new(-r[i], y[i])).collect();
     let iso_regression = IsotonicRegression::new_descending(&points);
     let res_regr = iso_regression.do_isotonic();
@@ -533,8 +533,8 @@ mod tests {
             };
             y[node_max] += *alpha[i].edge.weight();
         } // end of for i
-          // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition
-          // as -r increases , y decreases. We begin algo by densest blocks!
+        // go to PAVA algorithm , the decomposition of y in blocks makes a tentative decomposition
+        // as -r increases , y decreases. We begin algo by densest blocks!
         let points: Vec<Point<f64>> = (0..r.len())
             .into_iter()
             .map(|i| Point::new(-r[i], y[i]))

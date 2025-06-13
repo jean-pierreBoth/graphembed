@@ -3,14 +3,14 @@
 //! The main arguments are
 //!  - --csv filename
 //!  - --symetric "true"  if present specifies the graph is symetric. In this case the csv file describes a symetric (half of the edges in csv) or asymetric graph.  
-//!     If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
-//!     Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric (--symetric "false").
-//!     Then graph is deduced only from the read edges.  
-//!     **In this case for the validation parameters by sketching (which can do validation in symetric or asymetric mode) the flag --symetric is required to get deletion of both edges i->j and j->i**
+//!    If the file is declared symetric, each edge(a,b) is completed upon reading by the edge (b,a).  
+//!    Sometimes a symetric graph is fully described in the csv file, then declare the file as asymetric (--symetric "false").
+//!    Then graph is deduced only from the read edges.  
+//!    **In this case for the validation parameters by sketching (which can do validation in symetric or asymetric mode) the flag --symetric is required to get deletion of both edges i->j and j->i**
 //!     
 //!  - --output or -o filename  
-//!     This dumps the embedding in a bson file named filename.bson. See module [bson].  
-//!     By default an embedding is written in the file **embedding.bson**.
+//!    This dumps the embedding in a bson file named filename.bson. See module [bson].  
+//!    By default an embedding is written in the file **embedding.bson**.
 //!
 //!  - a subcommand embedding for a simple embedding or validation for loop with AUC computation for the link prediction task
 //!
@@ -23,7 +23,7 @@
 //! - Hope embedding can run in 2 approximations mode with a precision mode or a rank target approximation of the similatity matrix
 //!
 //! - The sketching by default is adapted to the symetry declared for the csv file. It is possible to run with NodeSketchAsym on a symetric file
-//!     to see the impact on validation for example.
+//!   to see the impact on validation for example.
 //!
 //! example usage:
 //!
@@ -43,12 +43,12 @@
 //!
 //!  The validation command has 2 parameters and 2 possible flaga:
 //! - --nbpass  
-//!     It determines the number of validation pass to be done.  
+//!   It determines the number of validation pass to be done.  
 //! - --skip  
-//!     It determines the number of edges to delete in the validation pass. Recall that the real number of discarded edges
-//!     can be smaller as we must not make isolated points.
+//!   It determines the number of edges to delete in the validation pass. Recall that the real number of discarded edges
+//!   can be smaller as we must not make isolated points.
 //! - --centric  
-//!     This flag is optional and asks for one pass of centric AUC computation after standard AUC link prediction (See [graphembed::validation::link::estimate_centric_auc()])
+//!   This flag is optional and asks for one pass of centric AUC computation after standard AUC link prediction (See [graphembed::validation::link::estimate_centric_auc()])
 //!
 //!
 //!     embed --csv "p2p-Gnutella08.txt" --symetric "true" validation [--centric] --nbpass 10 --skip 0.1 hope  precision --epsil 0.2 --maxrank 200  --blockiter 3
@@ -517,7 +517,9 @@ pub fn main() {
     // embedding directive without validation and no dump is most probably an error
     if embedding_parameters.is_some() && validation_params.is_none() {
         if output_params.is_none() {
-            log::error!("embedding asked without validation and no output given to dump the embedding ..., are you sure");
+            log::error!(
+                "embedding asked without validation and no output given to dump the embedding ..., are you sure"
+            );
             std::process::exit(1);
         }
     }

@@ -8,7 +8,7 @@
 //!
 //! If the graph is weighted the third field of each line is the weight.
 
-//use std::fmt::{Debug};
+#![allow(clippy::needless_range_loop)]
 
 use anyhow::anyhow;
 use lax::Lapack;
@@ -71,7 +71,7 @@ pub(crate) fn get_header_size(filepath: &Path) -> anyhow::Result<usize> {
             nb_header_lines += 1;
             loop {
                 file.read_exact(&mut c)?;
-                if c[0] == '\n' as u8 {
+                if c[0] == b'\n' {
                     break;
                 }
             }
@@ -139,7 +139,7 @@ where
     let mut c = [0];
     loop {
         file.read_exact(&mut c)?;
-        if c[0] == '\n' as u8 {
+        if c[0] == b'\n' {
             nb_skipped += 1;
         }
         if nb_skipped == nb_headers_line {
@@ -171,24 +171,25 @@ where
             nb_fields = record.len();
             log::info!("nb fields = {}", nb_fields);
             if nb_fields != 2 {
-                log::error!("unweighted_csv_to_graphmap got nb_fileds different from 2, check the delimitor , got {:?} as delimitor ", delim as char);
+                log::error!(
+                    "unweighted_csv_to_graphmap got nb_fileds different from 2, check the delimitor , got {:?} as delimitor ",
+                    delim as char
+                );
                 return Err(anyhow!(
                     "found only one field in record, check the delimitor , got {:?} as delimitor ",
                     delim as char
                 ));
             }
-        } else {
-            if record.len() != nb_fields {
-                println!(
-                    "non constant number of fields at record {} first record has {}",
-                    nb_record, nb_fields
-                );
-                return Err(anyhow!(
-                    "non constant number of fields at record {} first record has {}",
-                    nb_record,
-                    nb_fields
-                ));
-            }
+        } else if record.len() != nb_fields {
+            println!(
+                "non constant number of fields at record {} first record has {}",
+                nb_record, nb_fields
+            );
+            return Err(anyhow!(
+                "non constant number of fields at record {} first record has {}",
+                nb_record,
+                nb_fields
+            ));
         }
         //
         // we have 2 fields
@@ -243,7 +244,7 @@ where
 {
     //
     // first get number of header lines
-    let nb_headers_line = get_header_size(&filepath)?;
+    let nb_headers_line = get_header_size(filepath)?;
     log::info!(
         "weighted_csv_to_graphmap , got header nb lines {}",
         nb_headers_line
@@ -272,7 +273,7 @@ where
     let mut c = [0];
     loop {
         file.read_exact(&mut c)?;
-        if c[0] == '\n' as u8 {
+        if c[0] == b'\n' {
             nb_skipped += 1;
         }
         if nb_skipped == nb_headers_line {
@@ -305,7 +306,10 @@ where
             nb_fields = record.len();
             log::info!("nb fields = {}", nb_fields);
             if nb_fields < 2 {
-                log::error!("csv::weighted_csv_to_graphmap : got nb_fileds different from 2, check the delimitor , got {:?} as delimitor ", delim as char);
+                log::error!(
+                    "csv::weighted_csv_to_graphmap : got nb_fileds different from 2, check the delimitor , got {:?} as delimitor ",
+                    delim as char
+                );
                 return Err(anyhow!(
                     "found only one field in record, check the delimitor , got {:?} as delimitor ",
                     delim as char
@@ -317,7 +321,11 @@ where
                     "non constant number of fields at record {} first record has {}",
                     nb_record, nb_fields
                 );
-                return Err(anyhow!("csv::weighted_csv_to_graphmap : non constant number of fields at record {} first record has {}",nb_record,  nb_fields));
+                return Err(anyhow!(
+                    "csv::weighted_csv_to_graphmap : non constant number of fields at record {} first record has {}",
+                    nb_record,
+                    nb_fields
+                ));
             }
         }
         //
@@ -424,9 +432,9 @@ where
             csrmat.rows(),
             csrmat.cols()
         );
-        return Ok((MatRepr::from_csrmat(csrmat), res_csv.unwrap().1));
+        Ok((MatRepr::from_csrmat(csrmat), res_csv.unwrap().1))
     } else {
-        return Err(res_csv.unwrap_err());
+        Err(res_csv.unwrap_err())
     }
 } // end of csv_to_csrmat
 
@@ -484,7 +492,7 @@ where
         std::process::exit(1);
     };
     //
-    return res;
+    res
 } // end of csv_to_csrmat_delimiters
 
 /// Loads a directed/undirected  weighted/unweighted graph in csv format into a TriMatI representation.  
@@ -704,7 +712,12 @@ where
             if !hset.insert((node2, node1)) {
                 nb_potential_asymetry += 1;
                 if nb_potential_asymetry <= nb_warnings {
-                    log::error!("undirected mode 2-uple ({:?}, {:?}) symetric edge already present, record {}", node_id2, node_id1, nb_record);
+                    log::error!(
+                        "undirected mode 2-uple ({:?}, {:?}) symetric edge already present, record {}",
+                        node_id2,
+                        node_id1,
+                        nb_record
+                    );
                     log::error!("last edge inserted : {:?}", last_edge_inserted);
                     log::error!("record read : {:?}", record);
                 }
@@ -720,7 +733,7 @@ where
             log::info!(" node1 {:?}, node2 {:?}", node1, node2);
         }
     } // end of for result
-      //
+    //
     assert_eq!(rows.len(), cols.len());
     let trimat =
         TriMatI::<F, usize>::from_triplets((nodeindex.len(), nodeindex.len()), rows, cols, values);
@@ -775,7 +788,7 @@ where
 /// This function tests for the following delimiters [b'\t', b',', b' '] in the csv file.
 /// For a symetric graph the routine expects only half of the edges are in the csv file and symterize the matrix.  
 /// For an asymetric graph directed must be set to true.
-pub fn csv_to_trimat_delimiters<F: Float + FromStr>(
+pub fn csv_to_trimat_delimiters<F>(
     filepath: &Path,
     directed: bool,
 ) -> anyhow::Result<(TriMatI<F, usize>, NodeIndexation<usize>)>
@@ -799,14 +812,14 @@ where
         log::debug!(
             "embedder trying reading {:?} with  delimiter {:?}",
             &filepath,
-            delim as char
+            delim
         );
         res = csv_to_trimat::<F>(filepath, directed, delim as u8);
         if res.is_err() {
             log::error!(
                 "embedder failed in csv_to_trimat_delimiters, reading {:?}, trying delimiter {:?} ",
                 &filepath,
-                delim as char
+                delim
             );
         } else {
             return res;
@@ -822,7 +835,7 @@ where
         std::process::exit(1);
     };
     //
-    return res;
+    res
 } // end of csv_to_trimat_delimiters
 
 //========================================================================================
@@ -885,8 +898,8 @@ mod tests {
         let nodeset = &trimat_res.as_ref().unwrap().1;
         for _ in 0..5 {
             let triplet = trimat_iter.next().unwrap();
-            let node1 = nodeset.get_index(triplet.1 .0).unwrap();
-            let node2 = nodeset.get_index(triplet.1 .1).unwrap();
+            let node1 = nodeset.get_index(triplet.1.0).unwrap();
+            let node2 = nodeset.get_index(triplet.1.1).unwrap();
             let value = triplet.0;
             log::debug!("node1 {}, node2 {},  value {} ", node1, node2, value);
         }

@@ -40,27 +40,27 @@ impl NodeSketchParams {
             parallel,
         }
     }
-    ///
+    //
     pub fn get_decay_weight(self) -> f64 {
         self.decay
     }
 
-    ///
+    //
     pub fn get_nb_iter(&self) -> usize {
         self.nb_iter
     }
 
-    ///
+    //
     pub fn is_symetric(&self) -> bool {
         self.symetric
     }
 
-    ///
+    //
     pub fn get_parallel(&self) -> bool {
         self.parallel
     }
 
-    ///
+    //
     pub fn get_sketch_size(&self) -> usize {
         self.sketch_size
     }

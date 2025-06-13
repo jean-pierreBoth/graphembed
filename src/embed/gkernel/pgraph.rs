@@ -16,7 +16,7 @@ use probminhash::probminhasher::*;
 /// - For having String as possible labels we need Clone.
 ///
 /// - To hash strings or Vectors with sha2 crate we must be able to associate to labels something statisfying a Vec\<u8\>.  
-///     This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
+///   This is provided by Sig (and is required by Probminhash3sha which do not need copy on items hashed)
 pub trait LabelT: Send + Sync + Eq + Hash + Clone + Default + std::fmt::Debug + sig::Sig {}
 
 impl LabelT for u8 {}

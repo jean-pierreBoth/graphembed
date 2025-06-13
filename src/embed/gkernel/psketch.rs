@@ -9,6 +9,8 @@
 // Tang L., Liu Huan Relational Learning via Latent Social Dimensions 2009
 // Macskassy Provost Classification in networked data 2007
 
+#![allow(clippy::needless_range_loop)]
+
 use anyhow::anyhow;
 // use log::log_enabled;
 
@@ -74,17 +76,17 @@ where
         let ne_sketch: Vec<NElabel<Nlabel, Elabel>>;
         if edge_labels {
             ne_sketch = (0..sketch_size).map(|_| NElabel::default()).collect();
-            return Sketch {
+            Sketch {
                 sketch_size: u32::from_usize(sketch_size).unwrap(),
                 n_sketch: Arc::new(RwLock::new(nsketch)),
                 ne_sketch: Some(Arc::new(RwLock::new(ne_sketch))),
-            };
+            }
         } else {
-            return Sketch {
+            Sketch {
                 sketch_size: u32::from_usize(sketch_size).unwrap(),
                 n_sketch: Arc::new(RwLock::new(nsketch)),
                 ne_sketch: None,
-            };
+            }
         }
     }
 
@@ -223,8 +225,8 @@ where
     //
     pub(crate) fn get_sketch_by_dir(&self, dir: EdgeDir) -> &SketchTransition<Nlabel, Elabel> {
         match dir {
-            EdgeDir::IN => return &self.t_in,
-            EdgeDir::OUT => return &self.t_out,
+            EdgeDir::IN => &self.t_in,
+            EdgeDir::OUT => &self.t_out,
             EdgeDir::INOUT => {
                 std::panic!("should not happen")
             }
@@ -351,7 +353,7 @@ where
         //
         if self.symetric_transition.is_some() {
             // in symetric case there is only one direction
-            return Some(&self.symetric_transition.as_ref().unwrap().get_current()[node]);
+            Some(&self.symetric_transition.as_ref().unwrap().get_current()[node])
         } else if self.asymetric_transition.is_some() {
             match dir {
                 EdgeDir::OUT => {
@@ -402,7 +404,7 @@ where
         //
         if self.symetric_transition.is_some() {
             // in symetric case there is only one direction
-            return Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node]);
+            Some(&self.symetric_transition.as_ref().unwrap().get_previous()[node])
         } else if self.asymetric_transition.is_some() {
             match dir {
                 EdgeDir::OUT => {
@@ -427,7 +429,9 @@ where
                 }
                 _ => {
                     // entering with INOUT implies symetric, hence here we get an error
-                    log::error!("get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode ");
+                    log::error!(
+                        "get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode "
+                    );
                     std::panic!(
                         "get_previous_sketch_node received EdgeDir::INOUT as arg in asymetric mode"
                     );
@@ -567,8 +571,12 @@ where
                 match h_label_n.get_mut(label) {
                     Some(val) => {
                         *val += edge_weight.get_weight() as f64;
-                        log::trace!("{:?} augmenting weight hashed node labels for neighbour {:?},  new weight {:.3e}", 
-                                *ndix, neighbour_idx, *val);
+                        log::trace!(
+                            "{:?} augmenting weight hashed node labels for neighbour {:?},  new weight {:.3e}",
+                            *ndix,
+                            neighbour_idx,
+                            *val
+                        );
                     }
                     None => {
                         // we add edge info in h_label_n
@@ -581,35 +589,49 @@ where
                         h_label_n.insert(label.clone(), edge_weight.get_weight() as f64);
                     }
                 } // end match
-                  // treat transition via of couples of labels (node_label , edge_label)
+                // treat transition via of couples of labels (node_label , edge_label)
                 if edge_label.is_some() {
                     let ne_label = NElabel(label.clone(), edge_label.unwrap().clone());
                     match h_label_ne.get_mut(&ne_label) {
                         Some(val) => {
                             *val += edge_weight.get_weight() as f64;
-                            log::trace!("{:?} augmenting weight hashed node labels for neighbour {:?}, via edge label {:?} ,  new weight {:.3e}", 
-                                *ndix, neighbour_idx, *edge_label.unwrap(), *val);
+                            log::trace!(
+                                "{:?} augmenting weight hashed node labels for neighbour {:?}, via edge label {:?} ,  new weight {:.3e}",
+                                *ndix,
+                                neighbour_idx,
+                                *edge_label.unwrap(),
+                                *val
+                            );
                         }
                         None => {
                             // we add edge info in h_label_n
-                            log::trace!("adding node hashed (node,edge) labels {:?}  n_label : {:?}, e_label : {:?} weight {:.3e}", neighbour_idx, label, 
-                                *edge_label.unwrap(), edge_weight.get_weight());
+                            log::trace!(
+                                "adding node hashed (node,edge) labels {:?}  n_label : {:?}, e_label : {:?} weight {:.3e}",
+                                neighbour_idx,
+                                label,
+                                *edge_label.unwrap(),
+                                edge_weight.get_weight()
+                            );
                             h_label_ne.insert(ne_label, edge_weight.get_weight() as f64);
                         }
                     }
                 }
             } // end of for on nodes labels
-              //
-              // get component due to previous sketch of current neighbour
-              //
-              // we must get node label of neighbour and edge label, first we process nodes labels
+            //
+            // get component due to previous sketch of current neighbour
+            //
+            // we must get node label of neighbour and edge label, first we process nodes labels
             let hop_weight = self.sk_params.get_decay_weight() / self.get_sketch_size() as f64;
             // Problem weight of each label? do we renormalize by number of labels, or the weight of the node
             // will be proportional to the number of its labels??
             let dir = edgedir_from_petgraph_dir(dir);
             let neighbour_sketch = &self.get_previous_sketch_node(neighbour_idx.index(), dir);
             if neighbour_sketch.is_none() {
-                log::error!("process_node_edges_labels cannot get previous sketch for neighbour index : {} , dir : {:?}", neighbour_idx.index(), dir);
+                log::error!(
+                    "process_node_edges_labels cannot get previous sketch for neighbour index : {} , dir : {:?}",
+                    neighbour_idx.index(),
+                    dir
+                );
                 std::panic!();
             }
             // we take previous sketches and we propagate them to our new Nlabel and Elabel hashmap applying hop_weight
@@ -619,8 +641,13 @@ where
                 match h_label_n.get_mut(sketch_n) {
                     Some(val) => {
                         *val += hop_weight * edge_weight.get_weight() as f64;
-                        log::trace!("{} sketch augmenting node {} weight in hashmap with decayed edge weight {:.3e} new weight {:.3e}", 
-                            neighbour_idx.index(), ndix.index() , hop_weight * edge_weight.get_weight() as f64 ,*val);
+                        log::trace!(
+                            "{} sketch augmenting node {} weight in hashmap with decayed edge weight {:.3e} new weight {:.3e}",
+                            neighbour_idx.index(),
+                            ndix.index(),
+                            hop_weight * edge_weight.get_weight() as f64,
+                            *val
+                        );
                     }
                     _ => {
                         log::trace!(
@@ -644,12 +671,21 @@ where
                     match h_label_ne.get_mut(sketch_ne) {
                         Some(val) => {
                             *val += hop_weight * edge_weight.get_weight() as f64;
-                            log::trace!("{:?} augmenting weight in edge hash for neighbour {:?},  new weight {:.3e}", 
-                                    *ndix, neighbour_idx, *val);
+                            log::trace!(
+                                "{:?} augmenting weight in edge hash for neighbour {:?},  new weight {:.3e}",
+                                *ndix,
+                                neighbour_idx,
+                                *val
+                            );
                         }
                         None => {
                             // we add edge info in h_label_e
-                            log::trace!("adding node in hashed edge labels {:?}  label : {:?}, weight {:.3e}", neighbour_idx, edge_label, edge_weight.get_weight());
+                            log::trace!(
+                                "adding node in hashed edge labels {:?}  label : {:?}, weight {:.3e}",
+                                neighbour_idx,
+                                edge_label,
+                                edge_weight.get_weight()
+                            );
                             h_label_ne.insert(
                                 sketch_ne.clone(),
                                 hop_weight * edge_weight.get_weight() as f64,
@@ -659,8 +695,8 @@ where
                 } // end loop on sketch_ne
             }
         } // end of while
-          // We if we have sla and degree is one, it means in fact this node must have null embedding
-          // so we reset labels to Label::default
+        // We if we have sla and degree is one, it means in fact this node must have null embedding
+        // so we reset labels to Label::default
         if degree == 1 && self.is_sla() {
             h_label_n.clear();
         }
@@ -1109,27 +1145,22 @@ where
 
     /// return  data based on Node labels. Each node is represented by a vector of Node labels
     pub fn get_n_embedded_ref(&self) -> Option<&Embedded<Nlabel>> {
-        return self.n_embedded.as_ref();
+        self.n_embedded.as_ref()
     } // end of get_n_embedded
 
     /// Returns a reference on an array with each node is represented by a vector of (Node Label, Edge Label) representing transition around a node
     pub fn get_ne_embedded_ref(&self) -> Option<&Embedded<NElabel<Nlabel, Elabel>>> {
         match &self.ne_embedded {
-            Some(_) => {
-                return self.ne_embedded.as_ref();
-            }
-            None => {
-                return None;
-            }
+            Some(_) => self.ne_embedded.as_ref(),
+            None => None,
         }
     } // end of get_ne_embedded
 
     // This function merges a nodes vector of (Nlabel,Elabel) into a global graph vector of Nlabel, Elabel
     pub fn get_global_embedded_n(self, size: usize) -> Option<Array1<Nlabel>> {
         //
-        if self.n_embedded.is_none() {
-            return None;
-        }
+        self.n_embedded.as_ref()?;
+        //
         let mut hash_label = HashMap::<Nlabel, f64, ahash::RandomState>::default();
         let n_embedded = self.get_n_embedded_ref().unwrap();
         let nbnodes = n_embedded.get_nb_nodes();
@@ -1148,7 +1179,7 @@ where
                 } // end match
             }
         } // end of for i
-          // allocate a probminhash
+        // allocate a probminhash
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(size, Nlabel::default());
         probminhash3asha_n.hash_weigthed_hashmap(&hash_label);
         let global_sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
@@ -1158,9 +1189,8 @@ where
     // This function merges a nodes vector of (Nlabel,Elabel) into a global graph vector of Nlabel, Elabel
     pub fn get_global_embedded_ne(self, size: usize) -> Option<Array1<NElabel<Nlabel, Elabel>>> {
         //
-        if self.ne_embedded.is_none() {
-            return None;
-        }
+        self.ne_embedded.as_ref()?;
+        //
         let mut hash_label = HashMap::<NElabel<Nlabel, Elabel>, f64, ahash::RandomState>::default();
         let ne_embedded = self.get_ne_embedded_ref().unwrap();
         let nbnodes = ne_embedded.get_nb_nodes();
@@ -1179,7 +1209,7 @@ where
                 } // end match
             }
         } // end of for i
-          // allocate a probminhash
+        // allocate a probminhash
         let mut probminhash3asha_ne =
             ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(size, NElabel::default());
         probminhash3asha_ne.hash_weigthed_hashmap(&hash_label);
@@ -1287,18 +1317,14 @@ where
 
     /// return  data based on Node labels. Each node is represented by a vector of Node labels
     pub fn get_n_embedded_ref(&self) -> Option<&EmbeddedAsym<Nlabel>> {
-        return self.n_embbeded.as_ref();
+        self.n_embbeded.as_ref()
     } // end of get_n_embedded
 
     /// Returns a reference on an array with each node is represented by a vector of (Node Label, Edge Label) representing transition around a node
     pub fn get_ne_embedded_ref(&self) -> Option<&EmbeddedAsym<NElabel<Nlabel, Elabel>>> {
         match &self.ne_embedded {
-            Some(_) => {
-                return self.ne_embedded.as_ref();
-            }
-            None => {
-                return None;
-            }
+            Some(_) => self.ne_embedded.as_ref(),
+            None => None,
         }
     } // end of get_ne_embedded
 
@@ -1326,11 +1352,11 @@ where
                 }
             } // end of for i
         } // end of for dir
-          // allocate a probminhash
+        // allocate a probminhash
         let mut probminhash3asha_n = ProbMinHash3aSha::<Nlabel>::new(size, Nlabel::default());
         probminhash3asha_n.hash_weigthed_hashmap(&hash_label);
         let global_sketch_n = Array1::from_vec(probminhash3asha_n.get_signature().clone());
-        return Some(global_sketch_n);
+        Some(global_sketch_n)
     } // end of get_global_embedded_n
 
     // This function merges a nodes vector of Nlabel into a global graph vector of Nlabel
@@ -1361,7 +1387,7 @@ where
                 }
             } // end of for i
         } // end of for dir
-          // allocate a probminhash
+        // allocate a probminhash
         let mut probminhash3asha_ne =
             ProbMinHash3aSha::<NElabel<Nlabel, Elabel>>::new(size, NElabel::default());
         probminhash3asha_ne.hash_weigthed_hashmap(&hash_label);
@@ -1375,10 +1401,8 @@ where
 // convert from petgraph direction coding to our EdgeDir
 fn edgedir_from_petgraph_dir(pdir: petgraph::Direction) -> EdgeDir {
     match pdir {
-        petgraph::Direction::Incoming => {
-            return EdgeDir::IN;
-        }
-        petgraph::Direction::Outgoing => return EdgeDir::OUT,
+        petgraph::Direction::Incoming => EdgeDir::IN,
+        petgraph::Direction::Outgoing => EdgeDir::OUT,
     }
 } // end of edgedir_from_petgraph_dir
 

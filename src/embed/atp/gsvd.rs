@@ -17,11 +17,11 @@ use num_traits::cast::FromPrimitive;
 use num_traits::float::*;
 
 use lax::Lapack;
-use ndarray::{s, Array1, Array2, ArrayView, ArrayView1, ArrayView2, Dim, Ix1, Ix2};
+use ndarray::{Array1, Array2, ArrayView, ArrayView1, ArrayView2, Dim, Ix1, Ix2, s};
 use std::any::TypeId;
 
 // #[cfg(feature = "openblas-static")]
-use lapacke::{dggsvd3, sggsvd3, Layout};
+use lapacke::{Layout, dggsvd3, sggsvd3};
 
 #[derive(Copy, Clone, Debug)]
 /// This structure describes optional parameters used to specify the Gsvd approximation to do by GSvdApprox.  
@@ -104,19 +104,19 @@ pub struct GSvd<'a, F: Lapack> {
 ///  - 2 diagonal matrices $\Sigma_{1}$ and $\Sigma_{1}$  
 ///
 ///  - one non singular matrix X such that:
-///     $$ V_{1}^{t} \cdot mat1 \cdot X = \Sigma_{1}$$  and
-///     $$V_{2}^{t} \cdot mat2 \cdot X = \Sigma_{2} $$
+///    $$ V_{1}^{t} \cdot mat1 \cdot X = \Sigma_{1}$$  and
+///    $$V_{2}^{t} \cdot mat2 \cdot X = \Sigma_{2} $$
 ///
 ///
 /// If mat2 is non-singular the Gsvd gives the following svd
 ///  $$  mat_1  \cdot {mat_2}^{-1} = V_1 \cdot (\Sigma_{1} /\Sigma_{2} ) \cdot V_{2}^{t} $$
 ///
 /// - alpha : decreasing sorted eigenvalues of mat1.  
-///           Eigenvalues are between 1. and 0.
-///           The first k eigenvalues are equal to 1.
+///   Eigenvalues are between 1. and 0.
+///   The first k eigenvalues are equal to 1.
 ///
 /// - beta : increasing eigenvalues of mat2.  
-///          Eigenvalues are between 0. and 1.
+///   Eigenvalues are between 0. and 1.
 ///          
 /// If the first matrix is inversible (and so m=n) we have k+l = m = n  
 /// If the second matrix is inversible (and so p=n) we have k=0, l = p = n
@@ -203,13 +203,13 @@ where
                 .as_ref()
                 .unwrap()
                 .slice(s![self.k..(self.k + self.l)]);
-            return Some(s1_v);
+            Some(s1_v)
         } else {
             log::debug!("atp::gsvd::get_s1 : m-k-l < 0");
             // s1 is alpha[k..m]  and s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(self.m >= self.k);
             let s1_v = self.alpha.as_ref().unwrap().slice(s![self.k..(self.m)]);
-            return Some(s1_v);
+            Some(s1_v)
         }
     } // end of get_s1
 
@@ -225,34 +225,26 @@ where
                 .as_ref()
                 .unwrap()
                 .slice(s![self.k..(self.k + self.l)]);
-            return Some(s2_v);
+            Some(s2_v)
         } else {
             log::debug!("atp::gsvd::get_s2 : m-k-l < 0");
             // s2 is beta[k..m], alpha[m..k+l] == 0 and beta[m..k+l] == 1 and beyond k+l  alpha = beta == 0
             assert!(self.m >= self.k);
             let s2_v = self.beta.as_ref().unwrap().slice(s![self.k..(self.m)]);
-            return Some(s2_v);
+            Some(s2_v)
         }
     } // end of get_s2
 
     /// get alpha.   
     /// see lapack doc <http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html>
     pub fn get_alpha(&self) -> Option<&Array1<F>> {
-        let s = match self.alpha.as_ref() {
-            Some(s) => Some(s),
-            _ => None,
-        };
-        s
+        self.alpha.as_ref()
     } // end of get_alpha
 
     /// get beta.  
     /// see lapack doc <http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_gab6c743f531c1b87922eb811cbc3ef645.html>
     pub fn get_beta(&self) -> Option<&Array1<F>> {
-        let s = match self.beta.as_ref() {
-            Some(s) => Some(s),
-            _ => None,
-        };
-        s
+        self.beta.as_ref()
     } // end of get_beta
 
     // debug utility for small tests
@@ -455,9 +447,7 @@ where
         if self.v1.is_some() {
             let u = self.v1.as_ref().unwrap();
             let res = check_orthogonality::<F>(u);
-            if res.is_err() {
-                return res;
-            }
+            res?;
         }
         if self.v2.is_some() {
             let v = self.v2.as_ref().unwrap();
@@ -466,9 +456,7 @@ where
                 dump::<F>(&v.view());
             }
             let res = check_orthogonality::<F>(v);
-            if res.is_err() {
-                return res;
-            }
+            res?;
         }
         //
         Ok(())
@@ -533,11 +521,11 @@ where
             println!("The two matrices for gsvd must have the same number of columns");
             panic!("Error constructiing Gsvd problem");
         }
-        return GSvd {
+        GSvd {
             a,
             b,
             opt_params: None,
-        };
+        }
     } // end of new
 
     /// return optional paramertes if any
@@ -583,7 +571,7 @@ where
         let _ires: i32;
         let ldu = a_nbrow as i32; // ldu must be greater equal nb rows of A.  as U = (a_nbrow, a_nbrow)
         let ldv = b_dim.0 as i32; // ldv is b_nbcol as V = (b_nbcol, b_nbcol)
-                                  //
+        //
         let ldq: i32 = a_nbcol as i32; // as we do not ask for Q but test test_lapack_array showed we cannot set to 1!
         let mut iwork = Array1::<i32>::zeros(a_nbcol);
         let u: Array2<F>;
@@ -791,7 +779,7 @@ mod tests {
 
     use super::*;
 
-    use ndarray::{array, ArrayBase};
+    use ndarray::{ArrayBase, array};
 
     fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -948,8 +936,8 @@ mod tests {
 
     use rand::Rng;
     use rand_distr::StandardNormal;
-    use rand_xoshiro::rand_core::SeedableRng;
     use rand_xoshiro::Xoshiro256PlusPlus;
+    use rand_xoshiro::rand_core::SeedableRng;
 
     #[test]
     fn test_lapack_gsvd_random() {

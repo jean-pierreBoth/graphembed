@@ -92,12 +92,12 @@ where
             println!("The two matrices for GSvdApprox must have the same number of columns");
             panic!("Error constructiing Gsvd problem");
         }
-        return GSvdApprox {
+        GSvdApprox {
             mat1,
             mat2,
             opt_params,
             target,
-        };
+        }
     } // end of new
 
     /// return optional paramertes if any
@@ -151,14 +151,14 @@ where
             MatMode::FULL(mat) => approx1_res.t().dot(mat),
             MatMode::CSR(mat) => {
                 log::trace!("direct_svd got csr matrix");
-                transpose_dense_mult_csr(&approx1_res, &mat)
+                transpose_dense_mult_csr(&approx1_res, mat)
             }
         };
         let mut b = match self.mat2.get_data() {
             MatMode::FULL(mat) => approx2_res.t().dot(mat),
             MatMode::CSR(mat) => {
                 log::trace!("direct_svd got csr matrix");
-                transpose_dense_mult_csr(&approx2_res, &mat)
+                transpose_dense_mult_csr(&approx2_res, mat)
             }
         };
         // now we must do the standard generalized svd (with Lapack ggsvd3) for m and reduced_n

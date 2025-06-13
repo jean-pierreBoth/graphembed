@@ -1,4 +1,4 @@
-/// a module to load graph examples
+//! a module to load graph examples
 
 pub mod maileu;
 
